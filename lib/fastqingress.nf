@@ -25,7 +25,7 @@ def check_sample_sheet(samples)
     sample_sheet = Channel.fromPath(samples, checkIfExists: true)
     sample_sheet = checkSampleSheet(sample_sheet)
         .splitCsv(header: true)
-        .map { row -> tuple(row.barcode, row.sample_name, row.type) }
+        .map { row -> tuple(row.barcode, row.sample_id, row.type) }
     return sample_sheet
 }
 
@@ -93,7 +93,7 @@ def sanitize_fastq(input_folder, staging)
  * @param input_folder Top level input folder to locate fastq data
  * @param sample_sheet List of tuples mapping barcode to sample name
  *     or a simple string for non-multiplexed data.
- * @return Channel of tuples (path, sample_name)
+ * @return Channel of tuples (path, sample_id)
  */
 def resolve_barcode_structure(input_folder, sample_sheet)
 {
@@ -150,7 +150,7 @@ def resolve_barcode_structure(input_folder, sample_sheet)
  * @param input_folder Top level input folder to locate fastq data
  * @param sample_sheet List of tuples mapping barcode to sample name
  *     or a simple string for non-multiplexed data.
- * @return Channel of tuples (path, sample_name)
+ * @return Channel of tuples (path, sample_id, type)
  */
 def fastq_ingress(input_folder, output_folder, samples, sanitize)
 {
