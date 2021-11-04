@@ -22,7 +22,7 @@ process summariseReads {
     label "pysam"
     cpus 1
     input:
-        tuple path(directory), val(sample_id)
+        tuple path(directory), val(sample_id), val(type)
     output:
         path "${sample_id}.stats"
     shell:

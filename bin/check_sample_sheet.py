@@ -5,15 +5,6 @@ import sys
 
 import pandas as pd
 
-"""
-Example minknow sample sheet
-https://informatics-spec.git.oxfordnanolabs.local/minknow-specification/develop/sample_sheets.html
-flow_cell_id,kit,sample_id,experiment_id,barcode,alias,type
-FA026858,SQK-RBK004,barcoding_run,sequencing_20200522,barcode01,patient_id_5,test_sample
-FA026858,SQK-RBK004,barcoding_run,sequencing_20200522,barcode02,patient_id_6,test_sample
-FA026858,SQK-RBK004,barcoding_run,sequencing_20200522,barcode03,patient_id_7,test_sample
-"""
-
 
 def main():
     """Run entry point."""
