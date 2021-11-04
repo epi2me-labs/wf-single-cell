@@ -25,7 +25,7 @@ def check_sample_sheet(samples)
     sample_sheet = Channel.fromPath(samples, checkIfExists: true)
     sample_sheet = checkSampleSheet(sample_sheet)
         .splitCsv(header: true)
-        .map { row -> tuple(row.barcode, row.sample_name) }
+        .map { row -> tuple(row.barcode, row.sample_name, row.type) }
     return sample_sheet
 }
 
@@ -131,13 +131,13 @@ def resolve_barcode_structure(input_folder, sample_sheet)
             .filter(~/.*barcode[0-9]{1,3}$/)  // up to 192
             .map { path -> tuple(path.baseName, path) }
             .join(sample_sheet)
-            .map { barcode, path, sample -> tuple(path, sample) }
+            .map { barcode, path, sample, type -> tuple(path, sample, type) }
     } else if (not_barcoded) {
         println(" - Found fastq files, assuming single sample")
         sample = (sample_sheet == null) ? "unknown" : sample_sheet
         samples = Channel
             .fromPath(input_folder, type: 'dir', maxDepth:1)
-            .map { path -> tuple(path, sample) }
+            .map { path -> tuple(path, sample, type) }
     }
     return samples
 }
