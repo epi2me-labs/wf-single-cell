@@ -9,3 +9,4 @@ dependencies:
     - aplanat >=0.5.0
     - pysam
     - fastcat
+    - epi2melabs
