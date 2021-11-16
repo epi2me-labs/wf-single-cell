@@ -137,7 +137,7 @@ def resolve_barcode_structure(input_folder, sample_sheet)
         sample = (sample_sheet == null) ? "unknown" : sample_sheet
         samples = Channel
             .fromPath(input_folder, type: 'dir', maxDepth:1)
-            .map { path -> tuple(path, sample, type) }
+            .map { path -> tuple(path, sample, 'test_sample') }
     }
     return samples
 }
