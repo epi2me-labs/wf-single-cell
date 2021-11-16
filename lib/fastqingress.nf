@@ -124,7 +124,7 @@ def resolve_barcode_structure(input_folder, sample_sheet)
             sample_sheet = Channel
                 .fromPath(valid_barcode_dirs)
                 .filter(~/.*barcode[0-9]{1,3}$/)  // up to 192
-                .map { path -> tuple(path.baseName, path.baseName) }
+                .map { path -> tuple(path.baseName, path.baseName, 'test_sample') }
         }
         samples = Channel
             .fromPath(valid_barcode_dirs)
