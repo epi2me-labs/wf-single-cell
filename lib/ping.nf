@@ -11,7 +11,7 @@ process ping {
     """
     ping.py \
         --hostname $hostname \
-        --opsys $opsys \
+        --opsys "$opsys" \
         --session $workflow.sessionId \
         --message $message \
         $disable
