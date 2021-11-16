@@ -13,7 +13,8 @@
 import groovy.json.JsonBuilder
 nextflow.enable.dsl = 2
 
-include { fastq_ingress } from './lib/fastqingress' 
+include { fastq_ingress } from './lib/fastqingress'
+include { ping } from './lib/ping'
 
 
 process summariseReads {
@@ -44,6 +45,7 @@ process getVersions {
     """
 }
 
+
 process getParams {
     label "pysam"
     cpus 1
@@ -57,6 +59,7 @@ process getParams {
     """
 }
 
+
 process makeReport {
     label "pysam"
     input:
@@ -66,10 +69,12 @@ process makeReport {
     output:
         path "wf-template-*.html"
     script:
-        // report naming
         report_name = "wf-template-" + params.report_name + '.html'
     """
-    report.py $report_name --versions versions seqs.txt --params params.json
+    report.py $report_name \
+        --versions versions \
+        seqs.txt \
+        --params params.json
     """
 }
 
@@ -100,14 +105,16 @@ workflow pipeline {
         software_versions = getVersions()
         workflow_params = getParams()
         report = makeReport(summary, software_versions.collect(), workflow_params)
+        ping('finished')
     emit:
         summary.concat(report)
 }
 
+
 // entrypoint workflow
 WorkflowMain.initialise(workflow, params, log)
 workflow {
-
+    ping('started')
     samples = fastq_ingress(
         params.fastq, params.out_dir, params.samples, params.sanitize_fastq)
 
