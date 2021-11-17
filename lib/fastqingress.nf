@@ -25,7 +25,7 @@ def check_sample_sheet(samples)
     sample_sheet = Channel.fromPath(samples, checkIfExists: true)
     sample_sheet = checkSampleSheet(sample_sheet)
         .splitCsv(header: true)
-        .map { row -> tuple(row.barcode, row.sample_name) }
+        .map { row -> tuple(row.barcode, row.sample_id, row.type) }
     return sample_sheet
 }
 
@@ -93,7 +93,7 @@ def sanitize_fastq(input_folder, staging)
  * @param input_folder Top level input folder to locate fastq data
  * @param sample_sheet List of tuples mapping barcode to sample name
  *     or a simple string for non-multiplexed data.
- * @return Channel of tuples (path, sample_name)
+ * @return Channel of tuples (path, sample_id)
  */
 def resolve_barcode_structure(input_folder, sample_sheet)
 {
@@ -124,20 +124,20 @@ def resolve_barcode_structure(input_folder, sample_sheet)
             sample_sheet = Channel
                 .fromPath(valid_barcode_dirs)
                 .filter(~/.*barcode[0-9]{1,3}$/)  // up to 192
-                .map { path -> tuple(path.baseName, path.baseName) }
+                .map { path -> tuple(path.baseName, path.baseName, 'test_sample') }
         }
         samples = Channel
             .fromPath(valid_barcode_dirs)
             .filter(~/.*barcode[0-9]{1,3}$/)  // up to 192
             .map { path -> tuple(path.baseName, path) }
             .join(sample_sheet)
-            .map { barcode, path, sample -> tuple(path, sample) }
+            .map { barcode, path, sample, type -> tuple(path, sample, type) }
     } else if (not_barcoded) {
         println(" - Found fastq files, assuming single sample")
         sample = (sample_sheet == null) ? "unknown" : sample_sheet
         samples = Channel
             .fromPath(input_folder, type: 'dir', maxDepth:1)
-            .map { path -> tuple(path, sample) }
+            .map { path -> tuple(path, sample, 'test_sample') }
     }
     return samples
 }
@@ -150,7 +150,7 @@ def resolve_barcode_structure(input_folder, sample_sheet)
  * @param input_folder Top level input folder to locate fastq data
  * @param sample_sheet List of tuples mapping barcode to sample name
  *     or a simple string for non-multiplexed data.
- * @return Channel of tuples (path, sample_name)
+ * @return Channel of tuples (path, sample_id, type)
  */
 def fastq_ingress(input_folder, output_folder, samples, sanitize)
 {

@@ -23,12 +23,12 @@ process summariseReads {
     label "pysam"
     cpus 1
     input:
-        tuple path(directory), val(sample_name)
+        tuple path(directory), val(sample_id), val(type)
     output:
-        path "${sample_name}.stats"
+        path "${sample_id}.stats"
     shell:
     """
-    fastcat -s ${sample_name} -r ${sample_name}.stats -x ${directory} > /dev/null
+    fastcat -s ${sample_id} -r ${sample_id}.stats -x ${directory} > /dev/null
     """
 }
 

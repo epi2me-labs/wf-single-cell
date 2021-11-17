@@ -5,8 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [unreleased]
-### Added
-- Ping functionality added with workflow examples
+### Changed
+- `sample_name` to `sample_id` throughout to mathc MinKNOW samplesheet
 
 ## [v0.0.7]
 ### Added

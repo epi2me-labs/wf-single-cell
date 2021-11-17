@@ -16,21 +16,21 @@ def main():
     try:
         samples = pd.read_csv(args.sample_sheet, sep=None)
         if 'alias' in samples.columns:
-            if 'sample_name' in samples.columns:
+            if 'sample_id' in samples.columns:
                 sys.stderr.write(
                     "Warning: sample sheet contains both 'alias' and "
-                    'sample_name, using the former.')
-            samples['sample_name'] = samples['alias']
+                    'sample_id, using the former.')
+            samples['sample_id'] = samples['alias']
         if 'barcode' not in samples.columns \
-                or 'sample_name' not in samples.columns:
+                or 'sample_id' not in samples.columns:
             raise IOError()
     except Exception:
         raise IOError(
             "Could not parse sample sheet, it must contain two columns "
-            "named 'barcode' and 'sample_name' or 'alias'.")
+            "named 'barcode' and 'sample_id' or 'alias'.")
     # check duplicates
     dup_bc = samples['barcode'].duplicated()
-    dup_sample = samples['sample_name'].duplicated()
+    dup_sample = samples['sample_id'].duplicated()
     if any(dup_bc) or any(dup_sample):
         raise IOError(
             "Sample sheet contains duplicate values.")
