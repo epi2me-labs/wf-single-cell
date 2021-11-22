@@ -1,7 +1,6 @@
 # Include shared CI
 include:
     - project: "epi2melabs/ci-templates"
-      ref: singularity
       file: "wf-containers.yaml"
 
 variables:
