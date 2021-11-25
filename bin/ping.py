@@ -44,7 +44,7 @@ def main():
 
     meta = None
     if args.meta:
-        with open('data.json') as json_file:
+        with open(args.meta, "r") as json_file:
             meta = json.load(json_file)
 
     if not args.disable:

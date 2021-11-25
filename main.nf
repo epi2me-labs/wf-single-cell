@@ -14,7 +14,7 @@ import groovy.json.JsonBuilder
 nextflow.enable.dsl = 2
 
 include { fastq_ingress } from './lib/fastqingress'
-include { ping } from './lib/ping'
+include { start_ping; end_ping } from './lib/ping'
 
 
 process summariseReads {
@@ -105,19 +105,21 @@ workflow pipeline {
         software_versions = getVersions()
         workflow_params = getParams()
         report = makeReport(summary, software_versions.collect(), workflow_params)
-        ping('finished')
     emit:
-        summary.concat(report)
+        results = summary.concat(report)
+        // TODO: use something more useful as telemetry
+        telemetry = workflow_params
 }
 
 
 // entrypoint workflow
 WorkflowMain.initialise(workflow, params, log)
 workflow {
-    ping('started')
+    start_ping()
     samples = fastq_ingress(
         params.fastq, params.out_dir, params.samples, params.sanitize_fastq)
 
-    results = pipeline(samples)
-    output(results)
+    pipeline(samples)
+    output(pipeline.out.results)
+    end_ping(pipeline.out.telemetry)
 }
