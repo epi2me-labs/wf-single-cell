@@ -4,9 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased]
+## [v0.1.0]
 ### Changed
-- `sample_name` to `sample_id` throughout to mathc MinKNOW samplesheet
+- `sample_name` to `sample_id` throughout to mathc MinKNOW samplesheet.
+### Added
+- Singularity profile include in base config.
+- Numerous other changes that have been lost to the mists of time.
 
 ## [v0.0.7]
 ### Added
