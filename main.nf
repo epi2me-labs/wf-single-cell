@@ -117,7 +117,7 @@ WorkflowMain.initialise(workflow, params, log)
 workflow {
     start_ping()
     samples = fastq_ingress(
-        params.fastq, params.out_dir, params.samples, params.sanitize_fastq)
+        params.fastq, params.out_dir, params.sample, params.sample_sheet, params.sanitize_fastq)
 
     pipeline(samples)
     output(pipeline.out.results)

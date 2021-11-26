@@ -20,9 +20,13 @@
                     "type": "string",
                     "description": "Directory containing fastq input files. May contain fastq files directly or directories name barcodeXX relating to independent samples."
                 },
-                "samples": {
+                "sample": {
                     "type": "string",
-                    "description": "CSV file with columns named `barcode` and `sample_name`. (or simply a sample name for non-multiplexed data)"
+                    "description": "A sample name for non-multiplexed data. Permissible if passing a file or directory of .fastq(.gz)."
+                },
+                "sample_sheet": {
+                    "type": "string",
+                    "description": "CSV file with columns named `barcode`, `sample_name` and `type`. Permissible if passing a directory containing barcodeXX sub-directories."
                 },
                 "sanitize_fastq": {
                     "type": "boolean",
@@ -44,6 +48,11 @@
                     "type": "string",
                     "default": "report",
                     "description": "Output report filename suffix."
+                },
+                "disable_ping": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable to prevent sending a workflow ping."
                 }
             }
         },
