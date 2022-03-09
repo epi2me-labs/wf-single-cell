@@ -21,8 +21,7 @@ def main():
                     "Warning: sample sheet contains both 'alias' and "
                     'sample_id, using the former.')
             samples['sample_id'] = samples['alias']
-        if 'barcode' not in samples.columns \
-                or 'sample_id' not in samples.columns:
+        if not set(['sample_id', 'barcode']).intersection(samples.columns):
             raise IOError()
     except Exception:
         raise IOError(
