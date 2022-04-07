@@ -3,7 +3,7 @@ repos:
     hooks:
       - id: docs_schema
         name: docs_schema
-        entry: parse_docs -p docs -e .md -r intro links -i header quickstart -oj nextflow_schema.json
+        entry: parse_docs -p docs -e .md -s intro links -oj nextflow_schema.json
         language: python
         always_run: true
         pass_filenames: false
@@ -11,7 +11,7 @@ repos:
           - epi2melabs
       - id: docs_readme
         name: docs_readme
-        entry: parse_docs -p docs -e .md -r header intro quickstart links -ot README.md
+        entry: parse_docs -p docs -e .md -s header intro quickstart links -ot README.md
         language: python
         always_run: true
         pass_filenames: false
