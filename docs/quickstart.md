@@ -1,16 +1,3 @@
-# Workflow template
-
-This repository contains a [nextflow](https://www.nextflow.io/) workflow
-template that can be used as the basis for creating new workflows.
-
-> This workflow is not intended to be used by end users.
-
-## Introduction
-
-This section of documentation typically contains an overview of the workflow in terms of motivation
-and bioinformatics methods, listing any key tools or algorithms employed, whilst also describing its
-range of use-cases and what a suitable input dataset should look like.
-
 ## Quickstart
 
 The workflow uses [nextflow](https://www.nextflow.io/) to manage compute and 
@@ -43,8 +30,3 @@ The primary outputs of the workflow include:
 * a simple text file providing a summary of sequencing reads,
 * an HTML report document detailing the primary findings of the workflow.
 
-## Useful links
-
-* [nextflow](https://www.nextflow.io/)
-* [docker](https://www.docker.com/products/docker-desktop)
-* [conda](https://docs.conda.io/en/latest/miniconda.html)
