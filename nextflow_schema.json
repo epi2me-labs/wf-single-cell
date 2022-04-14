@@ -54,7 +54,7 @@
                 },
                 "disable_ping": {
                     "type": "boolean",
-                    "default": false,
+                    "default": "false",
                     "description": "Enable to prevent sending a workflow ping."
                 }
             }
@@ -87,6 +87,12 @@
         }
     ],
     "properties": {
+        "process_label": {
+            "type": "string",
+            "description": "The main process label for template processes to use by default",
+            "hidden": true,
+            "default": "wf-template"
+        },
         "aws_image_prefix": {
             "type": "string",
             "hidden": true
@@ -97,7 +103,7 @@
         },
         "wfversion": {
             "type": "string",
-            "default": "v0.3.3",
+            "default": "v0.1.0",
             "hidden": true
         },
         "monochrome_logs": {

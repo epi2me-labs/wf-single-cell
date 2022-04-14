@@ -1,6 +1,6 @@
 
 process pingMessage {
-    label "pysam"
+    label params.process_label
     cpus 1
     input:
         val message
