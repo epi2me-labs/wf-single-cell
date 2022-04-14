@@ -6,7 +6,7 @@
 // to create a new workflow. Current recommended pratices are:
 //     i) create a simple command-line interface.
 //    ii) include an abstract workflow scope named "pipeline" to be used
-//        in a module fashion.
+//        in a module fashion
 //   iii) a second concreate, but anonymous, workflow scope to be used
 //        as an entry point when using this workflow in isolation.
 
@@ -20,7 +20,7 @@ include { start_ping; end_ping } from './lib/ping'
 process summariseReads {
     // concatenate fastq and fastq.gz in a dir
 
-    label "pysam"
+    label "wftemplate"
     cpus 1
     input:
         tuple path(directory), val(sample_id), val(type)
@@ -34,7 +34,7 @@ process summariseReads {
 
 
 process getVersions {
-    label "pysam"
+    label "wftemplate"
     cpus 1
     output:
         path "versions.txt"
@@ -47,7 +47,7 @@ process getVersions {
 
 
 process getParams {
-    label "pysam"
+    label "wftemplate"
     cpus 1
     output:
         path "params.json"
@@ -61,7 +61,7 @@ process getParams {
 
 
 process makeReport {
-    label "pysam"
+    label "wftemplate"
     input:
         path "seqs.txt"
         path "versions/*"
@@ -84,14 +84,14 @@ process makeReport {
 // decoupling the publish from the process steps.
 process output {
     // publish inputs to output directory
-    label "pysam"
+    label "wftemplate"
     publishDir "${params.out_dir}", mode: 'copy', pattern: "*"
     input:
         path fname
     output:
         path fname
     """
-    echo "Writing output files"
+    echo "Writing output files."
     """
 }
 
