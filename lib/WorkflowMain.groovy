@@ -1,16 +1,20 @@
+// This file is based on the nf-core/tools pipeline-template.
+// Changes to this file must be propagated via wf-template.
 
 class WorkflowMain {
 
     // Citation string for pipeline
     public static String citation(workflow) {
-        return "If you use wf-template for your analysis please cite:\n\n" +
+        return "If you use ${workflow.manifest.name} for your analysis please cite:\n\n" +
             "* The nf-core framework\n" +
             "  https://doi.org/10.1038/s41587-020-0439-x\n\n"
     }
 
     // Print help to screen
     public static String help(workflow, params, log) {
-        def command = "nextflow run epi2me-labs/wf-template --fastq <input folder> -profile docker"
+        String line_sep = ' \\ \n\t'
+        def command_example = params.wf.example_cmd.join(line_sep)
+        def command = 'nextflow run ' + workflow.manifest.name + line_sep + command_example
         def help_string = ''
         help_string += NfcoreSchema.paramsHelp(workflow, params, command)
         help_string += '\n' + citation(workflow) + '\n'
