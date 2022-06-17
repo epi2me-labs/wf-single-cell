@@ -1,8 +1,8 @@
 name: epi2melabs-nf-template-workflow
 channels:
     - epi2melabs
-    - bioconda
     - conda-forge
+    - bioconda
     - defaults
 dependencies:
     - python==3.8.*
