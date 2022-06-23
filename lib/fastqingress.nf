@@ -111,8 +111,8 @@ def sanitize_fastq(input_folder, staging)
  */
 def get_subdirectories(input_directory)
 {
-    barcode_dirs = file("$input_directory/barcode*", type: 'dir', maxdepth: 1)
-    all_dirs = file("$input_directory/*", type: 'dir', maxdepth: 1)
+    barcode_dirs = file(input_directory.resolve("barcode*"), type: 'dir', maxdepth: 1)
+    all_dirs = file(input_directory.resolve("*"), type: 'dir', maxdepth: 1)
     non_barcoded = ( all_dirs + barcode_dirs ) - all_dirs.intersect(barcode_dirs)
     return [barcode_dirs, non_barcoded]
 }
