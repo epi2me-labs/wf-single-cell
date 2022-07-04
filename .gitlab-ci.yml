@@ -3,6 +3,10 @@ include:
     - project: "epi2melabs/ci-templates"
       file: "wf-containers.yaml"
 
+variables:
+    # We'll use the single-file case for these runs
+    NF_WORKFLOW_OPTS: "--fastq test_data/reads.fastq.gz"
+
 
 docker-run:
     # Define a 1D job matrix to inject a variable named MATRIX_NAME into
@@ -58,3 +62,4 @@ docker-run:
         - if: $MATRIX_NAME == "case04-s3"
           variables:
               NF_WORKFLOW_OPTS: "--fastq s3://ont-exd-int-s3-euwst1-epi2me-labs/wf-template/test_data/fastq_ingress/case04"
+
