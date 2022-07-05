@@ -1,3 +1,5 @@
+import ArgumentParser
+
 process handleSingleFile {
     label params.process_label
     cpus 1
@@ -268,29 +270,41 @@ def handle_non_barcoded_dirs(non_barcoded_dirs)
  * @param input Top level input file or folder to locate fastq data.
  * @param sample string to name single sample data.
  * @param sample_sheet Path to sample sheet CSV file.
+ * @param sanitize regularize inputs from EPI2ME platform.
+ * @param output output location, required if sanitize==true
  * @return Channel of tuples (path, sample_id, type)
  */
-def fastq_ingress(input, output_folder, sample, sample_sheet, sanitize)
+def fastq_ingress(Map arguments)
 {
+    def parser = new ArgumentParser(
+        args:["input"],
+        kwargs:["sample":null, "sample_sheet":null, "sanitize":false, "output":null],
+        name:"fastq_ingress")
+    Map margs = parser.parse_args(arguments)
+    
+    if (margs.sanitize && margs.output_folder == null) {
+        throw new Exception("Argument 'output' required if 'sanitize' is true.")
+    }
+
     println("Checking fastq input.")
-    input = file(input);
+    input = file(margs.input)
 
     // Handle file input
     if (input.isFile()) {
         // Assume sample is a string at this point
         println('Single file input detected.')
-        if (sample_sheet) {
+        if (margs.sample_sheet) {
             println('Warning: `--sample_sheet` given but single file input found. Ignoring.')
         }
-        return handle_single_file(input, sample)
+        return handle_single_file(input, margs.sample)
     }
 
     // Handle directory input
     if (input.isDirectory()) {
         // EPI2ME harness 
-        if (sanitize) {
-            staging = file(output_folder).resolve("staging")
-            input = sanitize_fastq(file(input), staging)
+        if (margs.sanitize) {
+            staging = file(margs.output_folder).resolve("staging")
+            input = sanitize_fastq(input, staging)
         }
 
         // Get barcoded and non barcoded subdirectories
@@ -299,13 +313,13 @@ def fastq_ingress(input, output_folder, sample, sample_sheet, sanitize)
         // Case 03: If no subdirectories, handle the single dir
         if (!barcoded && !non_barcoded) {
             println("Single directory input detected.")
-            if (sample_sheet) {
+            if (margs.sample_sheet) {
                 println('Warning: `--sample_sheet` given but single non-barcode directory found. Ignoring.')
             }
-            return handle_flat_dir(input, sample)
+            return handle_flat_dir(input, margs.sample)
         }
 
-        if (sample) {
+        if (margs.sample) {
             println('Warning: `--sample` given but multiple directories found, ignoring.')
         }
 
@@ -314,8 +328,9 @@ def fastq_ingress(input, output_folder, sample, sample_sheet, sanitize)
         barcoded_samples = Channel.empty()
         if (barcoded) {
             println("Barcoded directories detected.")
-            if (sample_sheet) {
-                sample_sheet = get_sample_sheet(sample_sheet)
+            sample_sheet = null
+            if (margs.sample_sheet) {
+                sample_sheet = get_sample_sheet(margs.sample_sheet)
             }
             barcoded_samples = handle_barcoded_dirs(barcoded, sample_sheet)
         }
@@ -323,7 +338,7 @@ def fastq_ingress(input, output_folder, sample, sample_sheet, sanitize)
         non_barcoded_samples = Channel.empty()
         if (non_barcoded) {
             println("Non barcoded directories detected.")
-            if (!barcoded && sample_sheet) {
+            if (!barcoded && margs.sample_sheet) {
                 println('Warning: `--sample_sheet` given but no barcode directories found.')
             }
             non_barcoded_samples = handle_non_barcoded_dirs(non_barcoded)
