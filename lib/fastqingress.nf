@@ -225,9 +225,11 @@ def handle_flat_dir(input_directory, sample_name)
  * @param barcoded_dirs List of barcoded directories (barcodeXX,...)
  * @param sample_sheet List of tuples mapping barcode to sample name
  *     or a simple string for non-multiplexed data.
+ * @param min_barcode Minimum barcode to accept.
+ * @param max_barcode Maximum (inclusive) barcode to accept.
  * @return Channel of tuples (path, sample_id, type)
  */
-def handle_barcoded_dirs(barcoded_dirs, sample_sheet)
+def handle_barcoded_dirs(barcoded_dirs, sample_sheet, min_barcode, max_barcode)
 {
     valid_dirs = get_valid_directories(barcoded_dirs)
     // link sample names to barcode through sample sheet
@@ -235,14 +237,33 @@ def handle_barcoded_dirs(barcoded_dirs, sample_sheet)
         sample_sheet = Channel
             .fromPath(valid_dirs)
             .filter(~/.*barcode[0-9]{1,3}$/)  // up to 192
+            .filter { barcode_in_range(it, min_barcode, max_barcode) }
             .map { path -> tuple(path.baseName, path.baseName, 'test_sample') }
     }
     return Channel
         .fromPath(valid_dirs)
         .filter(~/.*barcode[0-9]{1,3}$/)  // up to 192
+        .filter { barcode_in_range(it, min_barcode, max_barcode) }
         .map { path -> tuple(path.baseName, path) }
         .join(sample_sheet)
         .map { barcode, path, sample, type -> tuple(path, sample, type) }
+}
+
+
+/**
+ * Determine if a barcode path is within a required numeric range
+ *
+ * @param path barcoded directory (barcodeXX).
+ * @param min_barcode Minimum barcode to accept.
+ * @param max_barcode Maximum (inclusive) barcode to accept.
+ */
+def barcode_in_range(path, min_barcode, max_barcode)
+{
+    pattern = ~/barcode(\d+)/
+    matcher = "${path}" =~ pattern
+    value = matcher[0][1].toInteger()
+    valid = ((value >= min_barcode) && (value <= max_barcode))
+    return valid
 }
 
 
@@ -266,19 +287,23 @@ def handle_non_barcoded_dirs(non_barcoded_dirs)
  * Take an input (file or directory) and return a channel of
  * named samples.
  *
- *
  * @param input Top level input file or folder to locate fastq data.
  * @param sample string to name single sample data.
  * @param sample_sheet Path to sample sheet CSV file.
  * @param sanitize regularize inputs from EPI2ME platform.
  * @param output output location, required if sanitize==true
+ * @param min_barcode Minimum barcode to accept.
+ * @param max_barcode Maximum (inclusive) barcode to accept.
+ *
  * @return Channel of tuples (path, sample_id, type)
  */
 def fastq_ingress(Map arguments)
 {
     def parser = new ArgumentParser(
         args:["input"],
-        kwargs:["sample":null, "sample_sheet":null, "sanitize":false, "output":null],
+        kwargs:[
+            "sample":null, "sample_sheet":null, "sanitize":false, "output":null,
+            "min_barcode":0, "max_barcode":Integer.MAX_VALUE],
         name:"fastq_ingress")
     Map margs = parser.parse_args(arguments)
     
@@ -332,7 +357,7 @@ def fastq_ingress(Map arguments)
             if (margs.sample_sheet) {
                 sample_sheet = get_sample_sheet(margs.sample_sheet)
             }
-            barcoded_samples = handle_barcoded_dirs(barcoded, sample_sheet)
+            barcoded_samples = handle_barcoded_dirs(barcoded, sample_sheet, margs.min_barcode, margs.max_barcode)
         }
 
         non_barcoded_samples = Channel.empty()
