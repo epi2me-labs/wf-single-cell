@@ -6,7 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 ### Added
-- GitHub issues template
+- GitHub issues template.
+### Fixed
+- Output argument in Fastqingress homogenised.
 
 ## [v0.2.0]
 ### Added
