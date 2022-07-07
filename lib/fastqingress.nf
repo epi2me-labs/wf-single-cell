@@ -75,7 +75,7 @@ def find_fastq(pattern, maxdepth)
  * @param input_folder Top-level input directory.
  * @param staging Top-level output_directory.
  * @return A File object representating the staging directory created
- *     under output_folder
+ *     under output
  */ 
 def sanitize_fastq(input_folder, staging)
 {
@@ -307,7 +307,7 @@ def fastq_ingress(Map arguments)
         name:"fastq_ingress")
     Map margs = parser.parse_args(arguments)
     
-    if (margs.sanitize && margs.output_folder == null) {
+    if (margs.sanitize && margs.output == null) {
         throw new Exception("Argument 'output' required if 'sanitize' is true.")
     }
 
@@ -328,7 +328,7 @@ def fastq_ingress(Map arguments)
     if (input.isDirectory()) {
         // EPI2ME harness 
         if (margs.sanitize) {
-            staging = file(margs.output_folder).resolve("staging")
+            staging = file(margs.output).resolve("staging")
             input = sanitize_fastq(input, staging)
         }
 
