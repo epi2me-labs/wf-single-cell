@@ -15,6 +15,7 @@
                 "out_dir": {
                     "type": "string",
                     "default": "output",
+                    "format": "directory-path",
                     "description": "Directory for output of all user-facing files."
                 },
                 "fastq": {
