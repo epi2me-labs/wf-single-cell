@@ -1,7 +1,7 @@
 #!/usr/bin/env nextflow
 
 // Developer notes
-// 
+//
 // This template workflow provides a basic structure to copy in order
 // to create a new workflow. Current recommended pratices are:
 //     i) create a simple command-line interface.
@@ -23,12 +23,12 @@ process summariseReads {
     label "wftemplate"
     cpus 1
     input:
-        tuple path(directory), val(sample_id), val(type)
+        tuple path(directory), val(meta)
     output:
-        path "${sample_id}.stats"
+        path "${meta.sample_id}.stats"
     shell:
     """
-    fastcat -s ${sample_id} -r ${sample_id}.stats -x ${directory} > /dev/null
+    fastcat -s ${meta.sample_id} -r ${meta.sample_id}.stats -x ${directory} > /dev/null
     """
 }
 
