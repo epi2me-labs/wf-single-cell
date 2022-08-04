@@ -1,9 +1,9 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema",
     "$id": "https://raw.githubusercontent.com/./master/nextflow_schema.json",
-    "title": "epi2me-labs/wf-template",
+    "title": "epi2me-labs/wf-sockeye",
     "description": "Nextflow workflow template repository.",
-    "url": "https://github.com/epi2me-labs/wf-template",
+    "url": "https://github.com/epi2me-labs/wf-sockeye",
     "type": "object",
     "definitions": {
         "basic_input_output_options": {
@@ -18,19 +18,15 @@
                     "format": "directory-path",
                     "description": "Directory for output of all user-facing files."
                 },
-                "fastq": {
-                    "type": "string",
-                    "format": "path",
-                    "description": "A fastq file or directory containing fastq input files or directories of input files.",
-                    "help_text": "If directories named \\\"barcode*\\\" are found under the `--fastq` directory the data is assumed to be multiplex and each barcode directory will be processed independently. If `.fastq(.gz)` files are found under the `--fastq` directory the sample is assumed to not be multiplexed. In this second case `--samples` should be a simple name rather than a CSV file."
-                },
-                "sample": {
-                    "type": "string",
-                    "description": "A sample name for non-multiplexed data. Permissible if passing a file or directory of .fastq(.gz)."
-                },
                 "sample_sheet": {
                     "type": "string",
-                    "description": "CSV file with columns named `barcode`, `sample_name` and `type`. Permissible if passing a directory containing barcodeXX sub-directories."
+                    "description": "A csv containing colums: run_id,kit_name,kit_version,path",
+                    "format": "file-path"
+                },
+                "ref_genome_dir": {
+                    "type": "string",
+                    "format": "directory-path",
+                    "description": "The path to the reference directory as downloaded from 10x"
                 },
                 "sanitize_fastq": {
                     "type": "boolean",
@@ -39,7 +35,7 @@
                 }
             },
             "required": [
-                "fastq"
+                "SAMPLE_SHEET"
             ]
         },
         "advanced_options": {
@@ -199,7 +195,7 @@
             "type": "string",
             "description": "The main process label for template processes to use by default",
             "hidden": true,
-            "default": "wf-template"
+            "default": "wf-sockeye"
         },
         "aws_image_prefix": {
             "type": "string",
