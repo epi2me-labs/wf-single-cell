@@ -70,8 +70,11 @@ def parse_args():
     )
 
     parser.add_argument(
-        "-a", "--alpha", help="Transpancy of markers [0.7]", type=float, default=0.7
-    )
+        "-a",
+        "--alpha",
+        help="Transpancy of markers [0.7]",
+        type=float,
+        default=0.7)
 
     parser.add_argument(
         "--verbosity",
@@ -172,7 +175,8 @@ def get_expression(args):
     if args.gene:
         # Make sure requested gene is in the matrix
         if args.gene not in df_f.columns:
-            logging.info(f"WARNING: gene {args.gene} not found in expression matrix!")
+            logging.info(
+                f"WARNING: gene {args.gene} not found in expression matrix!")
             fig = plt.figure(figsize=[8, 8])
             fig.add_axes([0.08, 0.08, 0.85, 0.85])
             plt.savefig(args.output)
@@ -182,7 +186,8 @@ def get_expression(args):
         # Make sure at least one mitochondrial gene is in the matrix
         mito_genes = [g for g in df_f.columns if g.startswith("MT-")]
         if len(mito_genes) == 0:
-            logging.info("WARNING: No mitochondrial genes found in expression matrix!")
+            logging.info(
+                "WARNING: No mitochondrial genes found in expression matrix!")
             fig = plt.figure(figsize=[8, 8])
             fig.add_axes([0.08, 0.08, 0.85, 0.85])
             plt.savefig(args.output)

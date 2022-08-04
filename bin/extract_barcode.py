@@ -107,10 +107,18 @@ def parse_args():
     )
 
     parser.add_argument(
-        "-e", "--gap_extend", help="Gap extend penalty [4]", type=int, default=4
-    )
+        "-e",
+        "--gap_extend",
+        help="Gap extend penalty [4]",
+        type=int,
+        default=4)
 
-    parser.add_argument("-m", "--match", help="Match score [5]", type=int, default=5)
+    parser.add_argument(
+        "-m",
+        "--match",
+        help="Match score [5]",
+        type=int,
+        default=5)
 
     parser.add_argument(
         "-x", "--mismatch", help="Mismatch score [-1]", type=int, default=-1
@@ -125,8 +133,11 @@ def parse_args():
     )
 
     parser.add_argument(
-        "-s", "--t_to_n_match", help="Score for T<-->N match [1]", type=int, default=1
-    )
+        "-s",
+        "--t_to_n_match",
+        help="Score for T<-->N match [1]",
+        type=int,
+        default=1)
 
     parser.add_argument(
         "-w",
@@ -171,7 +182,8 @@ def parse_args():
     args = parser.parse_args()
 
     # verify kit selection
-    if (args.kit != "3prime") and (args.kit != "5prime") and (args.kit != "multiome"):
+    if (args.kit != "3prime") and (args.kit !=
+                                   "5prime") and (args.kit != "multiome"):
         raise Exception(
             "Invalid kit name! Specify either 3prime, 5prime or \
         multiome."
@@ -314,7 +326,7 @@ def parse_probe_alignment(p_alignment, adapter1_probe_seq, args):
         # The barcode + UMI sequences in the read correspond to the
         # positions of the aligned Ns in the probe sequence
         barcode = p_alignment.traceback.query[
-            bc_start : (bc_start + args.barcode_length)
+            bc_start: (bc_start + args.barcode_length)
         ]
     else:
         # No Ns in the probe successfully aligned -- we will ignore this read
@@ -374,7 +386,8 @@ def find_feature_qscores(feature, p_alignment, prefix_seq, prefix_qv):
     prefix_seq_feature_start = prefix_seq.find(feature_no_ins)
     prefix_seq_feature_end = prefix_seq_feature_start + len(feature_no_ins)
 
-    # Use these start/end indices to locate the correspoding qscores in prefix_qv
+    # Use these start/end indices to locate the correspoding qscores in
+    # prefix_qv
     feature_qv = prefix_qv[prefix_seq_feature_start:prefix_seq_feature_end]
     feature_qv_ascii = "".join(map(lambda x: chr(x + 33), feature_qv))
 
@@ -402,10 +415,11 @@ def align_adapter(tup):
     parasail_alg = parasail.sw_trace
 
     # Use only the specified suffix length of adapter1
-    adapter1_probe_seq = args.adapter1_seq[-args.adapter1_suff_length :]
+    adapter1_probe_seq = args.adapter1_seq[-args.adapter1_suff_length:]
 
     if (args.kit == "3prime") or (args.kit == "multiome"):
-        # Compile the actual probe sequence of <adapter1_suffix>NNN...NNN<TTTTT....>
+        # Compile the actual probe sequence of
+        # <adapter1_suffix>NNN...NNN<TTTTT....>
         probe_seq = "{a1}{bc}{umi}{pT}".format(
             a1=adapter1_probe_seq,
             bc="N" * args.barcode_length,
@@ -413,7 +427,8 @@ def align_adapter(tup):
             pT="T" * args.polyT_length,
         )
     elif args.kit == "5prime":
-        # Compile the actual probe sequence of <adapter1_suffix>NNN...NNN<TTTCTTATATGGG>
+        # Compile the actual probe sequence of
+        # <adapter1_suffix>NNN...NNN<TTTCTTATATGGG>
         probe_seq = "{a1}{bc}{umi}{tso}".format(
             a1=adapter1_probe_seq,
             bc="N" * args.barcode_length,
@@ -453,7 +468,8 @@ def align_adapter(tup):
 
         # Require minimum read1 edit distance
         if adapter1_ed <= args.max_adapter1_ed:
-            qscores = find_feature_qscores(barcode, p_alignment, prefix_seq, prefix_qv)
+            qscores = find_feature_qscores(
+                barcode, p_alignment, prefix_seq, prefix_qv)
             chrom_barcode_counts[barcode] += 1
 
             # Strip out insertions from alignment to get read barcode sequence
@@ -470,7 +486,8 @@ def align_adapter(tup):
             # print(p_alignment.traceback.query)
             # print()
 
-            # Only write BAM entry in output file if it will have CR and CY tags
+            # Only write BAM entry in output file if it will have CR and CY
+            # tags
             bam_out.write(align)
 
     bam.close()
@@ -495,11 +512,17 @@ def load_superlist(superlist):
     wl = []
     if ext == ".gz":
         with gzip.open(superlist, "rt") as file:
-            for line in tqdm(file, desc=f"Loading barcodes in {fn}", unit=" barcodes"):
+            for line in tqdm(
+                    file,
+                    desc=f"Loading barcodes in {fn}",
+                    unit=" barcodes"):
                 wl.append(line.strip())
     elif ext == ".txt":
         with open(superlist) as file:
-            for line in tqdm(file, desc=f"Loading barcodes in {fn}", unit=" barcodes"):
+            for line in tqdm(
+                    file,
+                    desc=f"Loading barcodes in {fn}",
+                    unit=" barcodes"):
                 wl.append(line.strip())
     wl = set(wl)
     return wl
@@ -518,9 +541,8 @@ def get_bam_info(bam):
     bam = pysam.AlignmentFile(bam, "rb")
     stats = bam.get_index_statistics()
     n_aligns = int(sum([contig.mapped for contig in stats]))
-    chroms = dict(
-        [(contig.contig, contig.mapped) for contig in stats if contig.mapped > 0]
-    )
+    chroms = dict([(contig.contig, contig.mapped)
+                   for contig in stats if contig.mapped > 0])
     bam.close()
     return n_aligns, chroms
 
@@ -549,7 +571,8 @@ def main(args):
     barcode_counts = sum(chrom_barcode_counts, collections.Counter())
 
     # Filter barcode counts against barcode superlist
-    logger.info(f"Writing superlist-filtered barcode counts to {args.output_barcodes}")
+    logger.info(
+        f"Writing superlist-filtered barcode counts to {args.output_barcodes}")
     f_barcode_counts = open(args.output_barcodes, "w")
     barcode_counts_sorted = sorted(
         barcode_counts.items(), key=lambda item: item[1], reverse=True
@@ -559,10 +582,13 @@ def main(args):
             f_barcode_counts.write(f"{barcode}\t{n}\n")
     f_barcode_counts.close()
 
-    logger.info(f"Writing BAM with uncorrected barcode tags to {args.output_bam}")
+    logger.info(
+        f"Writing BAM with uncorrected barcode tags to {args.output_bam}")
     tmp_bam = tempfile.NamedTemporaryFile(
-        prefix="tmp.align.", suffix=".unsorted.bam", dir=args.tempdir, delete=False
-    )
+        prefix="tmp.align.",
+        suffix=".unsorted.bam",
+        dir=args.tempdir,
+        delete=False)
     merge_parameters = ["-f", tmp_bam.name] + list(chrom_bam_fns)
     pysam.merge(*merge_parameters)
 

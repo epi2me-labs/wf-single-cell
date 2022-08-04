@@ -22,8 +22,11 @@ def parse_args():
 
     # Optional arguments
     parser.add_argument(
-        "-o", "--output", help="Output file [umap.tsv]", type=str, default="umap.tsv"
-    )
+        "-o",
+        "--output",
+        help="Output file [umap.tsv]",
+        type=str,
+        default="umap.tsv")
 
     parser.add_argument(
         "-d",
@@ -79,7 +82,8 @@ def main(args):
     # Switch from barcodes as columns to barcodes as rows
     X = df.transpose()
 
-    logger.info(f"Running UMAP: {X.shape[1]} features --> {args.dimensions} dimensions")
+    logger.info(
+        f"Running UMAP: {X.shape[1]} features --> {args.dimensions} dimensions")
     reducer = umap.UMAP(
         n_neighbors=args.n_neighbors,
         min_dist=args.min_dist,

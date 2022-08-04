@@ -84,7 +84,7 @@ def run_subprocess(cmd):
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
-        yield lst[i : i + n]
+        yield lst[i: i + n]
 
 
 def batch_iterator(iterator, batch_size):
@@ -232,7 +232,8 @@ def main(args):
 
         else:
             # There are multiple input FASTQs, so first combine them
-            tmp_combined_fn = os.path.join(args.output_dir, "tmp.combined.fastq")
+            tmp_combined_fn = os.path.join(
+                args.output_dir, "tmp.combined.fastq")
             if ext.split(".")[-1] == "gz":
                 # Combine gzipped FASTQs into a single, non-gzipped FASTQ
                 with open(tmp_combined_fn, "wb") as outfile:

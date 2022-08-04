@@ -107,7 +107,8 @@ def parse_args():
     args = parser.parse_args()
 
     # verify kit selection
-    if (args.kit != "3prime") and (args.kit != "5prime") and (args.kit != "multiome"):
+    if (args.kit != "3prime") and (args.kit !=
+                                   "5prime") and (args.kit != "multiome"):
         raise Exception(
             "Invalid kit name! Specify either 3prime, 5prime or \
         multiome."
@@ -215,7 +216,11 @@ def get_valid_adapter_pair_positions_in_read(read):
     valid_pairs_n = 0
     fl_pairs = []
 
-    def write_valid_pair_dict(read, adapter_1_idx, adapter_2_idx, valid_pairs_n):
+    def write_valid_pair_dict(
+            read,
+            adapter_1_idx,
+            adapter_2_idx,
+            valid_pairs_n):
         read_id = read["query"].iloc[0]
         pair_str = (
             f"{read.iloc[adapter_1_idx]['target']}-{read.iloc[adapter_2_idx]['target']}"
@@ -352,7 +357,9 @@ def parse_vsearch(tmp_vsearch, args):
             start = 0
             end = readlen - 1
             adapter_config = "-".join(list(read["target"].values))
-            if adapter_config in ["adapter2_r-adapter2_f", "adapter2_f-adapter2_r"]:
+            if adapter_config in [
+                "adapter2_r-adapter2_f",
+                    "adapter2_f-adapter2_r"]:
                 lab = "double_adapter2"
             elif adapter_config in ["adapter1_r-adapter1_f", "adapter1_f-adapter1_r"]:
                 lab = "double_adapter1"
@@ -450,12 +457,14 @@ def write_stranded_fastq(tmp_fastq, read_info, args):
                     for subread_id in read_info[read_id].keys():
                         d = read_info[read_id][subread_id]
                         # subread_info = read_info[read_id][subread_id]
-                        subread_seq = str(entry.sequence[d["start"] : d["end"]])
-                        subread_quals = entry.quality[d["start"] : d["end"]]
+                        subread_seq = str(entry.sequence[d["start"]: d["end"]])
+                        subread_quals = entry.quality[d["start"]: d["end"]]
                         if d["orig_strand"] == "-":
-                            rc_config = revcomp_adapter_config(d["adapter_config"])
+                            rc_config = revcomp_adapter_config(
+                                d["adapter_config"])
                             d["adapter_config"] = rc_config
-                            subread_seq = subread_seq[::-1].translate(COMPLEMENT_TRANS)
+                            subread_seq = subread_seq[::- \
+                                1].translate(COMPLEMENT_TRANS)
                             subread_quals = subread_quals[::-1]
                         f_out.write(f"@{subread_id}\n".encode())
                         f_out.write(f"{subread_seq}\n".encode())
@@ -555,9 +564,8 @@ def init_logger(args):
 def write_output_table(tmp_tables, args):
     """ """
     if len(tmp_tables) > 1:
-        pd.concat([pd.read_csv(d, sep="\t") for d in tmp_tables], axis=0).to_csv(
-            args.output_tsv, sep="\t", index=False
-        )
+        pd.concat([pd.read_csv(d, sep="\t") for d in tmp_tables],
+                  axis=0).to_csv(args.output_tsv, sep="\t", index=False)
     else:
         shutil.copy(tmp_tables[0], args.output_tsv)
 
@@ -592,7 +600,8 @@ def write_tmp_fastx_files_for_processing(n_batches, args):
     batch_id = 1
     with pysam.FastxFile(args.fastq, "r") as f_in:
         for i, entry in enumerate(f_in):
-            # Increment batch_id after streaming through <args.batch_size> reads
+            # Increment batch_id after streaming through <args.batch_size>
+            # reads
             if (i > 0) & (i % args.batch_size == 0):
                 batch_id += 1
             f_out = fastq_fs[batch_id]
@@ -624,7 +633,9 @@ def main(args):
 
     fastq_fns = write_tmp_fastx_files_for_processing(n_batches, args)
 
-    logging.info("Processing {} batches of {} reads".format(n_batches, args.batch_size))
+    logging.info(
+        "Processing {} batches of {} reads".format(
+            n_batches, args.batch_size))
     func_args = []
     for batch_id, fn in fastq_fns.items():
         func_args.append((fn, args))

@@ -31,8 +31,9 @@ def parse_args():
     )
 
     parser.add_argument(
-        "whitelist", help="File containing list of expected cell barcodes", type=str
-    )
+        "whitelist",
+        help="File containing list of expected cell barcodes",
+        type=str)
 
     # Optional arguments
     parser.add_argument(
@@ -40,8 +41,10 @@ def parse_args():
     )
 
     parser.add_argument(
-        "-k", help="Kmer size to use for whitelist filtering [5]", type=int, default=5
-    )
+        "-k",
+        help="Kmer size to use for whitelist filtering [5]",
+        type=int,
+        default=5)
 
     parser.add_argument(
         "--output_bam",
@@ -107,10 +110,16 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--barcode_length", help="Cell barcode length [16]", type=int, default=16
-    )
+        "--barcode_length",
+        help="Cell barcode length [16]",
+        type=int,
+        default=16)
 
-    parser.add_argument("--umi_length", help="UMI length [12]", type=int, default=12)
+    parser.add_argument(
+        "--umi_length",
+        help="UMI length [12]",
+        type=int,
+        default=12)
 
     parser.add_argument(
         "-w",
@@ -125,10 +134,18 @@ def parse_args():
     )
 
     parser.add_argument(
-        "-e", "--gap_extend", help="Gap extend penalty [4]", type=int, default=4
-    )
+        "-e",
+        "--gap_extend",
+        help="Gap extend penalty [4]",
+        type=int,
+        default=4)
 
-    parser.add_argument("-m", "--match", help="Match score [5]", type=int, default=5)
+    parser.add_argument(
+        "-m",
+        "--match",
+        help="Match score [5]",
+        type=int,
+        default=5)
 
     parser.add_argument(
         "-x", "--mismatch", help="Mismatch score [-1]", type=int, default=-1
@@ -143,8 +160,11 @@ def parse_args():
     )
 
     parser.add_argument(
-        "-s", "--t_to_n_match", help="Score for T<-->N match [1]", type=int, default=1
-    )
+        "-s",
+        "--t_to_n_match",
+        help="Score for T<-->N match [1]",
+        type=int,
+        default=1)
 
     parser.add_argument(
         "--verbosity",
@@ -157,7 +177,8 @@ def parse_args():
     args = parser.parse_args()
 
     # verify kit selection
-    if (args.kit != "3prime") and (args.kit != "5prime") and (args.kit != "multiome"):
+    if (args.kit != "3prime") and (args.kit !=
+                                   "5prime") and (args.kit != "multiome"):
         raise Exception(
             "Invalid kit name! Specify either 3prime, 5prime or \
         multiome."
@@ -321,7 +342,8 @@ def find_feature_qscores(feature, p_alignment, prefix_seq, prefix_qv):
     prefix_seq_feature_start = prefix_seq.find(feature_no_ins)
     prefix_seq_feature_end = prefix_seq_feature_start + len(feature_no_ins)
 
-    # Use these start/end indices to locate the correspoding qscores in prefix_qv
+    # Use these start/end indices to locate the correspoding qscores in
+    # prefix_qv
     feature_qv = prefix_qv[prefix_seq_feature_start:prefix_seq_feature_end]
     feature_qv_ascii = "".join(map(lambda x: chr(x + 33), feature_qv))
 
@@ -344,7 +366,7 @@ def parse_probe_alignment(p_alignment, align, prefix_seq, prefix_qv):
     # to the UMI sequences bound by the cell barcode and polyT
     idxs = list(find("N", p_alignment.traceback.ref))
     if len(idxs) > 0:
-        umi = p_alignment.traceback.query[min(idxs) : max(idxs) + 1]
+        umi = p_alignment.traceback.query[min(idxs): max(idxs) + 1]
 
         qscores = find_feature_qscores(umi, p_alignment, prefix_seq, prefix_qv)
 
@@ -381,10 +403,11 @@ def get_uncorrected_umi(align, args):
     prefix_qv = align.get_forward_qualities()[: args.window]
 
     # Use only the specified suffix length of adapter1
-    adapter1_probe_seq = args.adapter1_seq[-args.adapter1_suff_length :]
+    adapter1_probe_seq = args.adapter1_seq[-args.adapter1_suff_length:]
 
     if (args.kit == "3prime") or (args.kit == "multiome"):
-        # Compile the actual query sequence of <adapter1_suffix><bc_corr>NNN...N<TTTTT....>
+        # Compile the actual query sequence of
+        # <adapter1_suffix><bc_corr>NNN...N<TTTTT....>
         probe_seq = "{r}{bc}{umi}{pT}".format(
             r=adapter1_probe_seq,
             bc=align.get_tag("CB"),
@@ -392,7 +415,8 @@ def get_uncorrected_umi(align, args):
             pT="T" * args.polyT_length,
         )
     elif args.kit == "5prime":
-        # Compile the actual probe sequence of <adapter1_suffix>NNN...NNN<TTTCTTATATGGG>
+        # Compile the actual probe sequence of
+        # <adapter1_suffix>NNN...NNN<TTTCTTATATGGG>
         probe_seq = "{a1}{bc}{umi}{tso}".format(
             a1=adapter1_probe_seq,
             bc=align.get_tag("CB"),
@@ -466,7 +490,8 @@ def process_bam_records(tup):
     for align in bam.fetch(contig=chrom):
         # Make sure each alignment in this BAM has an uncorrected barcode and
         # barcode QV
-        assert align.has_tag("CR") and align.has_tag("CY"), "CR or CY tags not found"
+        assert align.has_tag("CR") and align.has_tag(
+            "CY"), "CR or CY tags not found"
 
         bc_uncorr = align.get_tag("CR")
 
@@ -486,14 +511,16 @@ def process_bam_records(tup):
                 bc_uncorr, filt_whitelist
             )
 
-            # Check barcode match edit distance and difference to runner-up edit distance
+            # Check barcode match edit distance and difference to runner-up
+            # edit distance
             condition1 = bc_match_ed <= args.max_ed
             condition2 = next_match_diff >= args.min_ed_diff
             if condition1 and condition2:
                 # Add corrected cell barcode = CB:Z
                 align.set_tag("CB", bc_match, value_type="Z")
 
-                # Add corrected barcode to probe sequence to fish out uncorrected UMI
+                # Add corrected barcode to probe sequence to fish out
+                # uncorrected UMI
                 align = get_uncorrected_umi(align, args)
 
             # Only write BAM entry in output file if we've assigned a corrected
@@ -549,11 +576,11 @@ def filter_whitelist_by_kmers(wl, kmers, kmer_to_bc_index):
     :rtype: list
     """
     # collect sets of indices that each kmer points to
-    id_sets = [
-        kmer_to_bc_index[kmer] for kmer in kmers if kmer in kmer_to_bc_index.keys()
-    ]
+    id_sets = [kmer_to_bc_index[kmer]
+               for kmer in kmers if kmer in kmer_to_bc_index.keys()]
 
-    # retain all barcodes that have at least one kmer match with the query barcode
+    # retain all barcodes that have at least one kmer match with the query
+    # barcode
     all_filt_indices = list(set().union(*id_sets))
     filt_wl = [wl[i] for i in all_filt_indices]
     return filt_wl
@@ -574,7 +601,7 @@ def split_seq_into_kmers(seq, k):
 
     kmers = []
     for i in range(0, len(seq) - k + 1):
-        kmer = seq[i : i + k]
+        kmer = seq[i: i + k]
         kmers.append(kmer)
     return kmers
 
@@ -623,9 +650,8 @@ def get_bam_info(bam):
     bam = pysam.AlignmentFile(bam, "rb")
     stats = bam.get_index_statistics()
     n_aligns = int(sum([contig.mapped for contig in stats]))
-    chroms = dict(
-        [(contig.contig, contig.mapped) for contig in stats if contig.mapped > 0]
-    )
+    chroms = dict([(contig.contig, contig.mapped)
+                   for contig in stats if contig.mapped > 0])
     bam.close()
     return n_aligns, chroms
 
@@ -654,12 +680,15 @@ def main(args):
         barcode_counter = sum(barcode_counters, collections.Counter())
 
         tmp_bam = tempfile.NamedTemporaryFile(
-            prefix="tmp.align.", suffix=".unsorted.bam", dir=args.tempdir, delete=False
-        )
+            prefix="tmp.align.",
+            suffix=".unsorted.bam",
+            dir=args.tempdir,
+            delete=False)
         merge_parameters = ["-f", tmp_bam.name] + list(chrom_bam_fns)
         pysam.merge(*merge_parameters)
 
-        pysam.sort("-@", str(args.threads), "-o", args.output_bam, tmp_bam.name)
+        pysam.sort("-@", str(args.threads), "-o",
+                   args.output_bam, tmp_bam.name)
 
         logger.info("Cleaning up temporary files")
         shutil.rmtree(args.tempdir, ignore_errors=True)

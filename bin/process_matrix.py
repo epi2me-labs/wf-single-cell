@@ -102,7 +102,8 @@ def filter_cells(df, args):
     df["mito_total"] = df.loc[:, mito_genes].sum(axis=1)
     df["mito_pct"] = 100 * df["mito_total"] / df["total"]
     n_mito = df[df["mito_pct"] > args.min_genes].shape[0]
-    logger.info(f"Dropping {n_mito} cells with > {args.max_mito}% mitochondrial reads")
+    logger.info(
+        f"Dropping {n_mito} cells with > {args.max_mito}% mitochondrial reads")
     df = df[df["mito_pct"] <= args.max_mito]
 
     df = df.drop(["mito_total", "mito_pct"], axis=1)
@@ -120,7 +121,8 @@ def filter_genes(df, args):
 
     # Remove genes that are present in fewer than <args.min_cells> unique cells
     n_dropped = df[df["n_cells"] < args.min_cells].shape[0]
-    logger.info(f"Dropping {n_dropped} genes observed in < {args.min_cells} cells")
+    logger.info(
+        f"Dropping {n_dropped} genes observed in < {args.min_cells} cells")
     df = df[df["n_cells"] >= args.min_cells]
     df = df.drop(["n_cells"], axis=1)
 

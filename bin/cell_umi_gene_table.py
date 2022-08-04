@@ -93,9 +93,8 @@ def get_bam_info(bam):
     bam = pysam.AlignmentFile(bam, "rb")
     stats = bam.get_index_statistics()
     n_aligns = int(sum([contig.mapped for contig in stats]))
-    chroms = dict(
-        [(contig.contig, contig.mapped) for contig in stats if contig.mapped > 0]
-    )
+    chroms = dict([(contig.contig, contig.mapped)
+                   for contig in stats if contig.mapped > 0])
     bam.close()
     return n_aligns, chroms
 

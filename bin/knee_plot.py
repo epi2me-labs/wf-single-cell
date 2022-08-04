@@ -89,7 +89,8 @@ def parse_args():
     args = parser.parse_args()
     init_logger(args)
 
-    if (args.cell_count is not None) and (args.read_count_threshold is not None):
+    if (args.cell_count is not None) and (
+            args.read_count_threshold is not None):
         raise Exception(
             "Cannot specify BOTH --cell_count and --read_count_threshold. Please pick one method."
         )
@@ -140,9 +141,16 @@ def getKneeDistance(values):
     # We project vecFromFirst by taking the scalar product of the vector with
     # the unit vector that points in the direction of the line (this gives us
     # the length of the projection of vecFromFirst onto the line). If we
-    # multiply the scalar product by the unit vector, we have vecFromFirstParallel
+    # multiply the scalar product by the unit vector, we have
+    # vecFromFirstParallel
 
-    scalarProduct = np.sum(vecFromFirst * npm.repmat(lineVecNorm, nPoints, 1), axis=1)
+    scalarProduct = np.sum(
+        vecFromFirst *
+        npm.repmat(
+            lineVecNorm,
+            nPoints,
+            1),
+        axis=1)
     vecFromFirstParallel = np.outer(scalarProduct, lineVecNorm)
     vecToLine = vecFromFirst - vecFromFirstParallel
 
@@ -156,8 +164,10 @@ def getKneeDistance(values):
 
 
 def getKneeEstimateDensity(
-    cell_barcode_counts, expect_cells=False, cell_number=False, plotfile_prefix=None
-):
+        cell_barcode_counts,
+        expect_cells=False,
+        cell_number=False,
+        plotfile_prefix=None):
     """estimate the number of "true" cell barcodes using a gaussian
     density-based method
     input:
@@ -303,8 +313,9 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
         elif args.knee_method == "density":
             cutoff_ont_bcs, threshold = getKneeEstimateDensity(Counter(ont_bc))
             idxOfBestPoint, countOfBestPoint = min(
-                enumerate(ont_bc_sorted.values()), key=lambda x: abs(x[1] - threshold)
-            )
+                enumerate(
+                    ont_bc_sorted.values()), key=lambda x: abs(
+                    x[1] - threshold))
         else:
             print("Invalid value for --knee_method (distance, density)")
             sys.exit()
@@ -315,7 +326,8 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
         cell_count = min(len(ont_bc_sorted), args.cell_count)
         cutoff_ont_bcs = set(list(ont_bc_sorted.keys())[:cell_count])
         idxOfBestPoint = cell_count
-        logger.info(f"Writing top {cell_count} cells to {args.output_whitelist}")
+        logger.info(
+            f"Writing top {cell_count} cells to {args.output_whitelist}")
     elif args.read_count_threshold is not None:
         cutoff_ont_bcs = set(
             [bc for bc, n in ont_bc_sorted.items() if n >= args.read_count_threshold]
@@ -348,9 +360,19 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
                 conserved_to_plot.append((i, conserved_bc.get(bc)))
         x, y = zip(*conserved_to_plot)
         ax2.scatter(
-            x, y, color="r", alpha=0.6, marker="+", s=15, label="Both ONT + ILMN"
-        )
-        ax2.vlines(idxOfBestPoint, ymin=1, ymax=ymax, linestyle="--", color="k")
+            x,
+            y,
+            color="r",
+            alpha=0.6,
+            marker="+",
+            s=15,
+            label="Both ONT + ILMN")
+        ax2.vlines(
+            idxOfBestPoint,
+            ymin=1,
+            ymax=ymax,
+            linestyle="--",
+            color="k")
         ax2.set_xscale("log")
         ax2.set_yscale("log")
         ax2.set_xlim([1, 100000])
@@ -373,8 +395,19 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
                 if bc in cutoff_ont_bcs:
                     ont_only_bcs.add(bc)
         x, y = zip(*ont_only_to_plot)
-        ax3.scatter(x, y, color="b", label="ONT only (not in ILMN)", alpha=0.1, s=5)
-        ax3.vlines(idxOfBestPoint, ymin=1, ymax=ymax, linestyle="--", color="k")
+        ax3.scatter(
+            x,
+            y,
+            color="b",
+            label="ONT only (not in ILMN)",
+            alpha=0.1,
+            s=5)
+        ax3.vlines(
+            idxOfBestPoint,
+            ymin=1,
+            ymax=ymax,
+            linestyle="--",
+            color="k")
         ax3.set_xscale("log")
         ax3.set_yscale("log")
         ax3.set_xlim([1, 100000])

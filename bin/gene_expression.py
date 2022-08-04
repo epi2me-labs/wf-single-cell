@@ -98,8 +98,7 @@ def read_bam_entries(bam, n_reads):
 
 def populate_matrix(genes, barcodes, umi_sets):
     """ """
-    rows = list(genes)
-    rows.sort()
+    rows = sorted(genes)
 
     cols = list(barcodes)
     cols.sort()
@@ -124,7 +123,8 @@ def process_bam_entries(args):
 
     bam = pysam.AlignmentFile(args.bam, "rb")
 
-    # If input BAM file is empty or there are no gene assignments, raise exception
+    # If input BAM file is empty or there are no gene assignments, raise
+    # exception
     assert n_reads > 0, "WARNING: no alignments detected!"
 
     logger.info(f"Building gene expression matrix from {args.bam}")

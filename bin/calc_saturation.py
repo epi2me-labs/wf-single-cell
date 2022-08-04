@@ -58,7 +58,12 @@ def plot_saturation_curves(res, umi_sat, args):
     fig = plt.figure(figsize=[15, 5])
 
     ax1 = fig.add_subplot(1, 3, 1)
-    ax1.plot(res["reads_pc"], res["genes_pc"], marker=None, color="orange", linewidth=2)
+    ax1.plot(
+        res["reads_pc"],
+        res["genes_pc"],
+        marker=None,
+        color="orange",
+        linewidth=2)
     ax1.set_xlim([0, ax1.get_xlim()[1]])
     ax1.set_ylim([0, ax1.get_ylim()[1]])
     ax1.set_xlabel("Median reads per cell")
@@ -80,7 +85,12 @@ def plot_saturation_curves(res, umi_sat, args):
     ax1.grid()
 
     ax2 = fig.add_subplot(1, 3, 2)
-    ax2.plot(res["reads_pc"], res["umis_pc"], marker=None, color="purple", linewidth=2)
+    ax2.plot(
+        res["reads_pc"],
+        res["umis_pc"],
+        marker=None,
+        color="purple",
+        linewidth=2)
     ax2.set_xlim([0, ax2.get_xlim()[1]])
     ax2.set_ylim([0, ax2.get_ylim()[1]])
     ax2.set_xlabel("Median reads per cell")
@@ -90,7 +100,12 @@ def plot_saturation_curves(res, umi_sat, args):
     ax2.grid()
 
     ax3 = fig.add_subplot(1, 3, 3)
-    ax3.plot(res["reads_pc"], res["umi_sat"], marker=None, color="blue", linewidth=2)
+    ax3.plot(
+        res["reads_pc"],
+        res["umi_sat"],
+        marker=None,
+        color="blue",
+        linewidth=2)
     ax3.axhline(y=res["umi_sat"].max(), color="k", linestyle="--", linewidth=2)
     ax3.set_xlim([0, ax3.get_xlim()[1]])
     ax3.set_ylim([0, 1])

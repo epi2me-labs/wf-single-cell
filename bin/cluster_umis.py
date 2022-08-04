@@ -205,11 +205,16 @@ def group_directional(clusters, adj_list, counts):
 
 
 def cluster(counts_dict, threshold=3):
-    adj_list = get_adj_list_directional(counts_dict.keys(), counts_dict, threshold)
+    adj_list = get_adj_list_directional(
+        counts_dict.keys(), counts_dict, threshold)
     clusters = get_connected_components_adjacency(
         counts_dict.keys(), adj_list, counts_dict
     )
-    final_umis = [list(x) for x in group_directional(clusters, adj_list, counts_dict)]
+    final_umis = [
+        list(x) for x in group_directional(
+            clusters,
+            adj_list,
+            counts_dict)]
     return final_umis
 
 
@@ -263,9 +268,8 @@ def get_bam_info(bam):
     bam = pysam.AlignmentFile(bam, "rb")
     stats = bam.get_index_statistics()
     n_aligns = int(sum([contig.mapped for contig in stats]))
-    chroms = dict(
-        [(contig.contig, contig.mapped) for contig in stats if contig.mapped > 0]
-    )
+    chroms = dict([(contig.contig, contig.mapped)
+                   for contig in stats if contig.mapped > 0])
     bam.close()
     return n_aligns, chroms
 
@@ -304,7 +308,7 @@ def chunks(lst, n):
     Yield successive n-sized chunks from lst.
     """
     for i in range(0, len(lst), n):
-        yield lst[i : i + n]
+        yield lst[i: i + n]
 
 
 def launch_pool(func, func_args, procs=1):
@@ -333,7 +337,8 @@ def launch_pool(func, func_args, procs=1):
 
 
 def run_groupby(df):
-    df["umi_corr"] = df.groupby(["gene_cell"])["umi_uncorr"].transform(correct_umis)
+    df["umi_corr"] = df.groupby(["gene_cell"])[
+        "umi_uncorr"].transform(correct_umis)
     return df
 
 
@@ -403,7 +408,13 @@ def process_bam_records(input_bam, chrom, args):
     if len(results) > 0:
         df = pd.concat(results, axis=0)
     else:
-        df = pd.DataFrame(columns=["read_id", "gene", "bc", "umi_uncorr", "umi_corr"])
+        df = pd.DataFrame(
+            columns=[
+                "read_id",
+                "gene",
+                "bc",
+                "umi_uncorr",
+                "umi_corr"])
 
     # Simplify to a read_id:umi_corr dictionary
     df = df.drop(["bc", "umi_uncorr"], axis=1).set_index("read_id")

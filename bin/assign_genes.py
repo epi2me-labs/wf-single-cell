@@ -100,10 +100,13 @@ def load_gtf(args):
     if df.shape[0] > 0:
         assert bf.is_bedframe(df), "GTF file not loading as a valid dataframe!"
 
-        # Restrict annotations to the gene level and isolate gene name from attributes
+        # Restrict annotations to the gene level and isolate gene name from
+        # attributes
         df = df[df["feature"] == "gene"]
-        df["attribute"] = df["attribute"].str.split(";", expand=True).iloc[:, 3]
-        df["attribute"] = df["attribute"].str.split(" ", expand=True).iloc[:, -1]
+        df["attribute"] = df["attribute"].str.split(
+            ";", expand=True).iloc[:, 3]
+        df["attribute"] = df["attribute"].str.split(
+            " ", expand=True).iloc[:, -1]
         df["attribute"] = df["attribute"].str.replace('"', "")
 
     return df
@@ -199,7 +202,8 @@ def find_largest_overlap(df):
     :rtype: pandas dataFrame
     """
     # Find the indices of the largest overlap for each alignment entry
-    max_ovlp_idx = df.groupby(["index_bed"])["overlap_bp"].idxmax().sort_values().values
+    max_ovlp_idx = df.groupby(["index_bed"])[
+        "overlap_bp"].idxmax().sort_values().values
 
     # Only keep the entry with the largest overlap
     df = df.loc[max_ovlp_idx, :]
