@@ -42,6 +42,113 @@
                 "fastq"
             ]
         },
+        "advanced_options": {
+            "title": "Advanced options",
+            "type": "object",
+            "fa_icon": "fas fa-terminal",
+            "description": "Define more advanced options for tweaking the workflow.",
+            "properties": {
+                "MAX_THREADS": {
+                    "type": "integer",
+                    "description": "Maximum number of threads to use",
+                    "default": 24
+                },
+                "READ_STRUCTURE_BATCH_SIZE": {
+                    "type": "integer",
+                    "description": "?",
+                    "default": 40000
+                },
+                "READ_STRUCTURE_FLAGS": {
+                    "type": "string",
+                    "description": "?",
+                    "default": ""
+                },
+                "BARCODE_ADAPTER1_SUFF_LENGTH": {
+                    "type": "integer",
+                    "description": "?",
+                    "default": 10
+                },
+                "BARCODE_KNEEPLOT_FLAGS": {
+                    "type": "string",
+                    "description": "?",
+                    "default": ""
+                },
+                "BARCODE_MAX_ED": {
+                    "type": "integer",
+                    "description": "maximum edit distance for barcode identification?",
+                    "default": 2
+                },
+                "BARCODE_MIN_ED_DIFF": {
+                    "type": "integer",
+                    "description": "minimum edit distance for barcode identification?",
+                    "default": 2
+                },
+                "GENE_ASSIGNS_MINQV": {
+                    "type": "integer",
+                    "description": "?",
+                    "default": 60
+                },
+                "UMI_GENOMIC_INTERVAL": {
+                    "type": "integer",
+                    "description": "?",
+                    "default": 1000
+                },
+                "UMI_CELL_GENE_MAX_READS": {
+                    "type": "integer",
+                    "description": "?",
+                    "default": 20000
+                },
+                "UMI_CLUSTER_MAX_THREADS": {
+                    "type": "integer",
+                    "description": "Maximum number of threads to use in UMI clustering step",
+                    "default": 8
+                },
+                "MATRIX_MIN_GENES": {
+                    "type": "integer",
+                    "description": "?",
+                    "default": 25
+                },
+                "MATRIX_MIN_CELLS": {
+                    "type": "integer",
+                    "description": "?",
+                    "default": 3
+                },
+                "MATRIX_MAX_MITO": {
+                    "type": "integer",
+                    "description": "?",
+                    "default": 20
+                },
+                "MATRIX_NORM_COUNT": {
+                    "type": "integer",
+                    "description": "?",
+                    "default": 10000
+                },
+                "UMAP_PLOT_GENES": {
+                    "type": "object",
+                    "description": "List of gene symbols to perform UMI clustering on.",
+                    "default": [
+                        "CD19",
+                        "CD24",
+                        "CD27",
+                        "CD38",
+                        "CD79A",
+                        "CD79B",
+                        "PAX5",
+                        "XBP1"
+                    ]
+                },
+                "RESOURCES_MM2_MEM_GB": {
+                    "type": "integer",
+                    "description": "Maximum allowed memory in GB for the minimp2 stage. NOTE: Do we need this for wf-sockeye?",
+                    "default": 50
+                },
+                "RESOURCES_MM2_MAX_THREADS": {
+                    "type": "integer",
+                    "description": "Maximum allowed threads for the minimp2 stage. NOTE: Do we need this for wf-sockeye?",
+                    "default": 12
+                }
+            }
+        },
         "meta_data": {
             "title": "Meta Data",
             "type": "object",
