@@ -10,3 +10,4 @@ dependencies:
     - pysam >=0.17.0
     - fastcat
     - epi2melabs
+    - seqkit

@@ -18,9 +18,23 @@
                     "format": "directory-path",
                     "description": "Directory for output of all user-facing files."
                 },
+                "fastq": {
+                    "type": "string",
+                    "format": "path",
+                    "description": "A fastq file or directory containing fastq input files or directories of input files.",
+                    "help_text": "If directories named \\\"barcode*\\\" are found under the `--fastq` directory the data is assumed to be multiplex and each barcode directory will be processed independently. If `.fastq(.gz)` files are found under the `--fastq` directory the sample is assumed to not be multiplexed. In this second case `--samples` should be a simple name rather than a CSV file."
+                },
+                "sample": {
+                    "type": "string",
+                    "description": "A sample name for non-multiplexed data. Permissible if passing a file or directory of .fastq(.gz)."
+                },
                 "sample_sheet": {
                     "type": "string",
-                    "description": "A csv containing colums: run_id,kit_name,kit_version,path",
+                    "description": "CSV file with columns named `barcode`, `sample_name` and `type`. Permissible if passing a directory containing barcodeXX sub-directories. Barcodes here referes to nanopore sample barcodes"
+                },
+                "single_cell_sample_sheet": {
+                    "type": "string",
+                    "description": "A csv containing colums: sample_nam,kit_name,kit_version,path, sample_name should correspond to a folder of fastq files or the sample_name column in 1sample_shee`",
                     "format": "file-path"
                 },
                 "ref_genome_dir": {

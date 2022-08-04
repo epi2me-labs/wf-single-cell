@@ -15,9 +15,10 @@ nextflow.enable.dsl = 2
 
 include { fastq_ingress } from './lib/fastqingress'
 include { start_ping; end_ping } from './lib/ping'
+include { stranding } from './subworkflows/stranding'
 
 
-process summariseReads {
+process summariseAndCatReads {
     // concatenate fastq and fastq.gz in a dir
 
     label "wftemplate"
@@ -25,10 +26,11 @@ process summariseReads {
     input:
         tuple path(directory), val(meta)
     output:
-        path "${meta.sample_id}.stats"
+        tuple val(meta.sample_id}, path(${meta.sample_id}.stats), emit: stats
+        tuple val(meta.sample_id}, path(${meta.sample_id}.fastq), emit: fastq
     shell:
     """
-    fastcat -s ${meta.sample_id} -r ${meta.sample_id}.stats -x ${directory} > /dev/null
+    fastcat -s ${meta.sample_id} -r ${meta.sample_id}.stats -x ${directory} > ${sample_id}.fastq
     """
 }
 
@@ -58,6 +60,14 @@ process getParams {
     echo '$paramsJSON' > params.json
     """
 }
+
+process stranding {
+    input:
+        tuple val(sample_id), path(reads)
+    output:
+
+}
+
 
 
 process makeReport {
@@ -100,10 +110,18 @@ process output {
 workflow pipeline {
     take:
         reads
+        sc_sample_sheet
+        ref_genome_dir
     main:
         summary = summariseReads(reads)
         software_versions = getVersions()
         workflow_params = getParams()
+        
+        // Sockeye
+        stranding(reads)
+
+
+
         report = makeReport(summary, software_versions.collect(), workflow_params)
     emit:
         results = summary.concat(report)
@@ -116,6 +134,11 @@ workflow pipeline {
 WorkflowMain.initialise(workflow, params, log)
 workflow {
     start_ping()
+
+    sc_sample_sheet = file(params.single_cell_sample_sheet, checkIfExists: true)
+    ref_genome_dir = file(params.ref_genome_dir, checkIfExists: true)
+
+
     samples = fastq_ingress([
         "input":params.fastq,
         "sample":params.sample,
@@ -123,7 +146,7 @@ workflow {
         "sanitize": params.sanitize_fastq,
         "output":params.out_dir])
 
-    pipeline(samples)
+    pipeline(samples, sc_sample_sheet, ref_genome_dir)
     output(pipeline.out.results)
     end_ping(pipeline.out.telemetry)
 }
