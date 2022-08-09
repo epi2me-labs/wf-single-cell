@@ -1,4 +1,4 @@
-name: epi2melabs-nf-template-workflow
+name: wf-sockeye
 channels:
     - epi2melabs
     - conda-forge
@@ -11,3 +11,20 @@ dependencies:
     - fastcat
     - epi2melabs
     - seqkit
+    - biopython
+    - pandas
+    - tqdm
+    - numpy
+    - vsearch==2.15.1
+    - bioframe==0.3.2
+    - samtools==1.14
+    - editdistance
+    - parasail-python==1.2.3
+    - bedtools==2.30.0
+    - matplotlib
+    - scikit-learn
+    - minimap2
+    - htslib==1.14
+    - umap-learn==0.5.2
+
+
