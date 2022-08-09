@@ -121,7 +121,6 @@ process summarize_adapter_table {
 workflow stranding {
     take:
         inputs
-        ref_genome_dir
         sc_sample_sheet
     main:
         d = {it ->

@@ -14,8 +14,8 @@ import groovy.json.JsonBuilder
 nextflow.enable.dsl = 2
 
 include { fastq_ingress } from './lib/fastqingress'
-// include { start_ping; end_ping } from './lib/ping'
 include { stranding } from './subworkflows/stranding'
+include { stranding } from './subworkflows/align'
 
 
 process summariseAndCatReads {
@@ -103,10 +103,6 @@ workflow pipeline {
         sc_sample_sheet
         ref_genome_dir
     main:
-        // summariseAndCatReads(reads)
-        // software_versions = getVersions()
-        // workflow_params = getParams()
-
         inputs = Channel.fromPath(sc_sample_sheet)
                     .splitCsv(header:true)
                     .map { row -> tuple(
@@ -118,8 +114,17 @@ workflow pipeline {
         // Sockeye
         stranding(
             inputs,
-            ref_genome_dir,
             sc_sample_sheet)
+        
+        // 10x reference downloads have known names
+        REF_GENOME_FASTA = params.REF_GENOME_DIR / "fasta/genome.fa"
+        REF_GENES_GTF = params.REF_GENOME_DIR / "genes/genes.gtf"
+        
+        align(
+            stranding.out.STRANDED_FQ,
+            REF_GENOME_FASTA,
+            REF_GENES_GTF
+        )
 }
 
 
@@ -128,15 +133,6 @@ WorkflowMain.initialise(workflow, params, log)
 workflow {
     sc_sample_sheet = file(params.single_cell_sample_sheet, checkIfExists: true)
     ref_genome_dir = file(params.ref_genome_dir, checkIfExists: true)
-
-
-
-    // samples = fastq_ingress([
-    //     "input":params.fastq,
-    //     "sample":params.sample,
-    //     "sample_sheet":params.sample_sheet,
-    //     "sanitize": params.sanitize_fastq,
-    //     "output":params.out_dir])
 
     pipeline(sc_sample_sheet, ref_genome_dir)
 }
