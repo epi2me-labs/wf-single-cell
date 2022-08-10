@@ -163,7 +163,6 @@ workflow stranding {
                 return l
             }))
         
-        call_adapter_scan.out.STRANDED_FQ_CHUNKED.groupTuple().view()
         gather_fastq(call_adapter_scan.out.STRANDED_FQ_CHUNKED.groupTuple())
 
         combine_adapter_tables(call_adapter_scan.out.READ_CONFIG_CHUNKED.groupTuple())

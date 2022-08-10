@@ -16,7 +16,7 @@ process get_chrom_sizes{
         // chrsizes=REF_CHROM_SIZES,
         path 'chr_sizes', emit: REF_CHROM_SIZES
     """
-    "cut -f1,2 $ref_genome_idx | sort -V > chr_sizes"
+    cut -f1,2 $ref_genome_idx | sort -V > chr_sizes
     """
 }
 
@@ -33,18 +33,17 @@ process align_to_ref {
         path REF_GENOME_FASTA
         path REF_CHROM_SIZES
     output:
-        path "${sample_id}_sorted.bam", emit: BAM_SORT
-        path "${sample_id}_sorted.bam.bai", emit: BAM_SORT_BAI
+        tuple val(sample_id), path("*sorted.bam"), emit: BAM_SORT
+        tuple val(sample_id), path("*sorted.bam.bai"), emit: BAM_SORT_BAI
     """
-    minimap2 -ax splice -uf --MD -t 2 \
-      --junc-bed ${ref_genes_bed} \ 
-      --secondary=no \ 
-      ${REF_GENOME_FASTA} ${STRANDED_FQ} > \
-      tmp.sam && \
+     minimap2 -ax splice -uf --MD -t $params.RESOURCES_MM2_MAX_THREADS \
+      --junc-bed ${ref_genes_bed} \
+      --secondary=no \
+      ${REF_GENOME_FASTA} ${STRANDED_FQ} > tmp.sam && \
     samtools view --no-PG tmp.sam \
       -t REF_CHROM_SIZES -o unsort.bam;
-    samtools sort --no-PG ${sample_id}_unsort.bam -o ${sample_id}_sorted.bam;
-    samtools index ${sample_id}_sorted.bam.bai
+    samtools sort --no-PG unsort.bam -o ${sample_id}_sorted.bam;
+    samtools index ${sample_id}_sorted.bam
     """
 }
 
@@ -58,27 +57,6 @@ workflow align {
         REF_GENES_GTF
         ref_genome_idx
     main:
-        d = {it ->
-        /* Harmonize tuples
-        output:
-            tuple val(sample_id), path('*.gff')
-        When there are multiple paths, will emit:
-            [sample_id, [path, path ..]]
-        when there's a single path, this:
-            [sample_id, path]
-        This closure makes both cases:
-            [[sample_id, path][sample_id, path]].
-        */
-            if (it[1].getClass() != java.util.ArrayList){
-                // If only one path, `it` will be [sample_id, path]
-                return [it]
-            }
-            l = [];
-            for (x in it[1]){
-                l.add(tuple(it[0], x))
-            }
-            return l
-        }
         call_paftools(REF_GENES_GTF)
         get_chrom_sizes(ref_genome_idx)
         align_to_ref(
