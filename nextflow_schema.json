@@ -37,6 +37,11 @@
                     "description": "A csv containing colums: sample_nam,kit_name,kit_version,path, sample_name should correspond to a folder of fastq files or the sample_name column in 1sample_shee`",
                     "format": "file-path"
                 },
+                "kit_config": {
+                    "type": "string",
+                    "format": "path",
+                    "description": "10x git config"
+                },
                 "REF_GENOME_DIR": {
                     "type": "string",
                     "format": "directory-path",

@@ -16,6 +16,7 @@ nextflow.enable.dsl = 2
 include { fastq_ingress } from './lib/fastqingress'
 include { stranding } from './subworkflows/stranding'
 include { align } from './subworkflows/align'
+include { process_bams } from './subworkflows/process_bams'
 
 
 process summariseAndCatReads {
@@ -100,9 +101,15 @@ workflow pipeline {
             sc_sample_sheet)
         
         // 10x reference downloads have known names
-        REF_GENOME_FASTA = file("${REF_GENOME_DIR}/fasta/genome.fa")
-        REF_GENES_GTF = file("${REF_GENOME_DIR}/genes/genes.gtf")
-        ref_genome_idx = file("${REF_GENOME_FASTA}.fai")
+        REF_GENOME_FASTA = file("${REF_GENOME_DIR}/fasta/genome.fa", checkIfExists: true)
+        REF_GENES_GTF = file("${REF_GENOME_DIR}/genes/genes.gtf", checkIfExists: true)
+        ref_genome_idx = file("${REF_GENOME_FASTA}.fai", checkIfExists: true)
+        
+        if (params.kit_config){
+            kit_configs = file("${params.kit_config}/kit_configs.csv", checkIfExists: true)
+        }else{
+            kit_configs = file("${projectDir}/kit_configs.csv", checkIfExists: true)
+        }
         
         align(
             stranding.out.STRANDED_FQ,
@@ -110,6 +117,14 @@ workflow pipeline {
             REF_GENES_GTF,
             ref_genome_idx
         )
+
+        process_bams(
+            align.out.BAM_SORT,
+            align.out.BAM_SORT_BAI,
+            sc_sample_sheet,
+            kit_configs
+        )
+
 }
 
 
