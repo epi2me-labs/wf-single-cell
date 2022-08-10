@@ -11,12 +11,12 @@ process call_paftools {
 process get_chrom_sizes{
     input:
         // genome=str(REF_GENOME_FASTA) + ".fai",
-        path REF_GENOME_IDX
+        path ref_genome_idx
     output:
         // chrsizes=REF_CHROM_SIZES,
         path 'chr_sizes', emit: REF_CHROM_SIZES
     """
-    "cut -f1,2 $REF_GENOME_IDX | sort -V > chr_sizes"
+    "cut -f1,2 $ref_genome_idx | sort -V > chr_sizes"
     """
 }
 
@@ -29,25 +29,20 @@ process align_to_ref {
     input:
         tuple val(sample_id),
               path(STRANDED_FQ)
-        path REF_GENES_BED
+        path ref_genes_bed
         path REF_GENOME_FASTA
         path REF_CHROM_SIZES
     output:
-        path "${sample_id}_sam_tmp.sam", emit: SAM_TMP
-        path "${sample_id}_unsort.bam", emit: BAM_UNSORT_TMP
         path "${sample_id}_sorted.bam", emit: BAM_SORT
-        path "", emit: BAM_SORT_BAI // Not used?
-    // params:
-    //     ref=str(REF_GENOME_FASTA),
-    // threads: config["RESOURCES_MM2_MAX_THREADS"]
+        path "${sample_id}_sorted.bam.bai", emit: BAM_SORT_BAI
     """
-    minimap2 -ax splice -uf --MD -t $params.RESOURCES_MM2_MAX_THREADS \
-    --junc-bed $REF_GENES_BED \ 
-    --secondary=no \ 
-    $REF_GENOME_FASTA $STRANDED_FQ > \
-    ${sample_id}_sam_tmp.sam && \
-    samtools view --no-PG ${sample_id}_sam_tmp.sam \
-    -t REF_CHROM_SIZES -o ${sample_id}_unsort.bam;
+    minimap2 -ax splice -uf --MD -t 2 \
+      --junc-bed ${ref_genes_bed} \ 
+      --secondary=no \ 
+      ${REF_GENOME_FASTA} ${STRANDED_FQ} > \
+      tmp.sam && \
+    samtools view --no-PG tmp.sam \
+      -t REF_CHROM_SIZES -o unsort.bam;
     samtools sort --no-PG ${sample_id}_unsort.bam -o ${sample_id}_sorted.bam;
     samtools index ${sample_id}_sorted.bam.bai
     """
@@ -61,6 +56,7 @@ workflow align {
         STRANDED_FQ
         REF_GENOME_FASTA
         REF_GENES_GTF
+        ref_genome_idx
     main:
         d = {it ->
         /* Harmonize tuples
@@ -84,7 +80,7 @@ workflow align {
             return l
         }
         call_paftools(REF_GENES_GTF)
-        get_chrom_sizes(REF_GENOME_IDX)
+        get_chrom_sizes(ref_genome_idx)
         align_to_ref(
             STRANDED_FQ,
             call_paftools.out.REF_GENES_BED,
@@ -93,5 +89,6 @@ workflow align {
    
     emit:
         BAM_SORT = align_to_ref.out.BAM_SORT
+        BAM_SORT_BAI = align_to_ref.out.BAM_SORT_BAI
 
 }

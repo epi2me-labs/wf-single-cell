@@ -15,7 +15,7 @@ nextflow.enable.dsl = 2
 
 include { fastq_ingress } from './lib/fastqingress'
 include { stranding } from './subworkflows/stranding'
-include { stranding } from './subworkflows/align'
+// include { align } from './subworkflows/align'
 
 
 process summariseAndCatReads {
@@ -117,14 +117,18 @@ workflow pipeline {
             sc_sample_sheet)
         
         // 10x reference downloads have known names
-        REF_GENOME_FASTA = params.REF_GENOME_DIR / "fasta/genome.fa"
-        REF_GENES_GTF = params.REF_GENOME_DIR / "genes/genes.gtf"
+        REF_GENOME_FASTA = "${params.REF_GENOME_DIR}/fasta/genome.fa"
+        REF_GENES_GTF = "${params.REF_GENOME_DIR}/genes/genes.gtf"
+        ref_genome_idx = "${REF_GENOME_FASTA}.fai"
+
+        println(REF_GENOME_FASTA)
         
-        align(
-            stranding.out.STRANDED_FQ,
-            REF_GENOME_FASTA,
-            REF_GENES_GTF
-        )
+        // align(
+        //     stranding.out.STRANDED_FQ,
+        //     REF_GENOME_FASTA,
+        //     REF_GENES_GTF,
+        //     ref_genome_idx
+        // )
 }
 
 
