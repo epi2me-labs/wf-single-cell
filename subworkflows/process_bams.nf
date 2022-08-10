@@ -68,7 +68,6 @@ process assign_barcodes{
         tuple val(sample_id), path(whitelist)
     output:
     """
-   
     assign_barcodes.py -t ${task.cpus} --output_bam output --output_counts counts \
     --max_ed $params.max_ed --min_ed_diff $params.min_ed_diff --kit "$params.kit" \
     --adapter1_suff_length $params.adapter1_suff_length --barcode_length $params.barcode_length \
@@ -92,13 +91,10 @@ workflow process_bams {
         by_chrom = split_bam_by_chroms(headers.rehead)
         bam = by_chrom.bams.flatten().map{ 
             it -> tuple(it.toString().split('/')[-2].toString(), it.toString().split("/")[-1].split("\\.sorted")[0], it)}
-        //bams.view()
         bai = by_chrom.bai.flatten().map{ 
             it -> tuple(it.toString().split('/')[-2].toString(), it.toString().split("/")[-1].split("\\.sorted")[0], it)}
-        //b//am.view()
-        //bai.view()
-        lol = bam.join(bai, by:[0,1])
-        assign_barcodes(lol,white_list.whitelist)
+        bam_bai = bam.join(bai, by:[0,1])
+        assign_barcodes(bam_bai,white_list.whitelist)
 
     emit:
       kit
