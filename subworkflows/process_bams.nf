@@ -9,39 +9,31 @@ process extract_barcodes{
     cpus params.threads
     input:
         tuple val(sample_id), 
-              path(bam_sort), 
-        val kit
-        val barcode_length 
-        val umi_length 
-        path barcode_superlist
+              val(kit_name),
+              val(kit_version),
+              val(barcode_length),
+              val(umi_length),
+              val(bc_long_list),
+              path(bam),
+              path(bam_idx)
+
     output:
-        tuple val(sample_id), path("*output.bam"), emit: bam
+        tuple val(sample_id), path("*output.bam"), path("*.bai"), emit: bam
         tuple val(sample_id), path("*output.tsv"), emit: counts
     """
-    samtools index $bam_sort
-        extract_barcode.py \
-        -t $task.cpus \
-        --kit $kit \
-        --adapter1_suff_length $params.BARCODE_ADAPTER1_SUFF_LENGTH \
-        --barcode_length $barcode_length \
-        --umi_length $umi_length \
-        --output_bam "${sample_id}.output.bam" \
-        --output_barcodes "${sample_id}.output.tsv" \
-        $bam_sort $barcode_superlist
-    """
-}
+    extract_barcode.py \
+    $bam $bc_long_list\
+    -t $task.cpus \
+    --kit $kit_name \
+    --adapter1_suff_length $params.BARCODE_ADAPTER1_SUFF_LENGTH \
+    --barcode_length $barcode_length \
+    --umi_length $umi_length \
+    --output_bam "tmp.bam" \
+    --output_barcodes "${sample_id}.output.tsv";
 
-process cleanup_headers_1{
-    label "wftemplate"
-    cpus params.threads
-    input:
-        tuple val(sample_id), path(bam)
-    output:
-        tuple val(sample_id), path("*.bam"), path("*.bai"), emit: rehead
-    """
-        samtools reheader --no-PG -c 'grep -v ^@PG' $bam > "$sample_id".bam
-        samtools index "$sample_id".bam
-    
+    samtools reheader --no-PG -c 'grep -v ^@PG' tmp.bam > "${sample_id}.bam"
+    samtools index "${sample_id}.bam"
+    rm tmp.bam
     """
 }
 
@@ -65,10 +57,11 @@ process split_bam_by_chroms{
     input:
         tuple val(sample_id), path(bam), path(bai)
     output:
-        path "$sample_id/chr*.bam", emit: bams
-        path "$sample_id/chr*.bai", emit: bai
+        tuple val(sample_id),
+              path("splits/chr*.bam"), 
+              path("splits/chr*.bai"), emit: bam
     """
-        split_bam_by_chroms.py -t ${task.cpus} --output_dir $sample_id $bam
+    split_bam_by_chroms.py -t ${task.cpus} --output_dir splits $bam
     """
 }
 
@@ -78,8 +71,10 @@ process assign_barcodes{
     label "wftemplate"
     cpus 10
     input:
-        tuple val(sample_id), val(chrom), path(bam), path(bai)
-        tuple val(sample_id), path(whitelist)
+        tuple val(sample_id), 
+              path(bam), 
+              path(bai), 
+              path(whitelist)
     output:
     """
     assign_barcodes.py -t ${task.cpus} --output_bam output --output_counts counts \
@@ -96,7 +91,7 @@ process get_kit_info {
         path sc_sample_sheet
               
     output:
-        path 'sample_kit_info.csv'
+        path 'sample_kit_info.csv', emit: kit_info
     
     script:
     def bc_longlist_dir = "${projectDir}/data"
@@ -143,21 +138,28 @@ workflow process_bams {
         sc_sample_sheet
         kit_config
     main:
-        // bam_list = file("$projectDir/data/data/3M-february-2018.txt.gz")
-        // bam_sort = file(params.bam_sort)
-        // kit = params.kit
-        // barcode_length = params.barcode_length
-        // umi_length = params.umi_length
-        // sample_id = "test"
-
-        kit_details = get_kit_info(
+        get_kit_info(
             kit_config,
             sc_sample_sheet)
-        
-        // bam.join(kit_details).view()
 
-        // extract_barcodes(
-        //     bam.join(kit_details))
+
+        extract_barcodes(
+            get_kit_info.out.kit_info
+            .splitCsv(header:false, skip:1)
+            .join(bam).join(bam_idx))
+        
+        split_bam_by_chroms(
+            extract_barcodes.out.bam
+        )
+
+        generate_whitelist(
+            extract_barcodes.out.counts
+        )
+
+        assign_barcodes(
+            split_bam_by_chroms.out.bam
+            .join(generate_whitelist.out.whitelist)
+        )
         
         // headers = cleanup_headers_1(newl.bam)
         // white_list = generate_whitelist(newl.counts)
