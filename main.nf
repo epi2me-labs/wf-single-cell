@@ -15,7 +15,7 @@ nextflow.enable.dsl = 2
 
 include { fastq_ingress } from './lib/fastqingress'
 include { stranding } from './subworkflows/stranding'
-// include { align } from './subworkflows/align'
+include { align } from './subworkflows/align'
 
 
 process summariseAndCatReads {
@@ -34,23 +34,6 @@ process summariseAndCatReads {
     """
 }
 
-// process get_kits {
-//     // Add kit to the fastq tuple
-//     cous 1
-//     input:
-//         tuple val(sample_id), path(fastq)
-//         val sc_sample_sheet
-//     output:
-//          tuple val(sample_id), path(fastq), val(kit)
-//     """
-//     #!/usr/bin/env python
-//     import pandas as pd
-
-//     df = pd.read_csv($sc_sample_sheet, index_col=0)
-//     kit_name = df.loc[$sample_id, 'kit_name']
-//     kit_version = df.loc[$sample_id, 'kit_version']
-//     """
-// }
 
 process getVersions {
     label "wftemplate"
@@ -101,7 +84,7 @@ process output {
 workflow pipeline {
     take:
         sc_sample_sheet
-        ref_genome_dir
+        REF_GENOME_DIR
     main:
         inputs = Channel.fromPath(sc_sample_sheet)
                     .splitCsv(header:true)
@@ -117,18 +100,16 @@ workflow pipeline {
             sc_sample_sheet)
         
         // 10x reference downloads have known names
-        REF_GENOME_FASTA = "${params.REF_GENOME_DIR}/fasta/genome.fa"
-        REF_GENES_GTF = "${params.REF_GENOME_DIR}/genes/genes.gtf"
-        ref_genome_idx = "${REF_GENOME_FASTA}.fai"
-
-        println(REF_GENOME_FASTA)
+        REF_GENOME_FASTA = file("${REF_GENOME_DIR}/fasta/genome.fa")
+        REF_GENES_GTF = file("${REF_GENOME_DIR}/genes/genes.gtf")
+        ref_genome_idx = file("${REF_GENOME_FASTA}.fai")
         
-        // align(
-        //     stranding.out.STRANDED_FQ,
-        //     REF_GENOME_FASTA,
-        //     REF_GENES_GTF,
-        //     ref_genome_idx
-        // )
+        align(
+            stranding.out.STRANDED_FQ,
+            REF_GENOME_FASTA,
+            REF_GENES_GTF,
+            ref_genome_idx
+        )
 }
 
 
@@ -136,7 +117,7 @@ workflow pipeline {
 WorkflowMain.initialise(workflow, params, log)
 workflow {
     sc_sample_sheet = file(params.single_cell_sample_sheet, checkIfExists: true)
-    ref_genome_dir = file(params.ref_genome_dir, checkIfExists: true)
+    REF_GENOME_DIR = file(params.REF_GENOME_DIR, checkIfExists: true)
 
-    pipeline(sc_sample_sheet, ref_genome_dir)
+    pipeline(sc_sample_sheet, REF_GENOME_DIR)
 }
