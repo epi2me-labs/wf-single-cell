@@ -1,18 +1,18 @@
 #!/usr/bin/env python
+"""Cell umi gene table."""
 import argparse
 import logging
-import os
-import sys
 
 import pandas as pd
 import pysam
 from tqdm import tqdm
 
+
 logger = logging.getLogger(__name__)
 
 
 def parse_args():
-    # Create argument parser
+    """Create argument parser."""
     parser = argparse.ArgumentParser()
 
     # Positional mandatory arguments
@@ -45,6 +45,7 @@ def parse_args():
 
 
 def init_logger(args):
+    """Initiate logger."""
     logging.basicConfig(
         format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
@@ -54,9 +55,7 @@ def init_logger(args):
 
 
 def load_bam_entries(n_aligns, args):
-    """
-    Load read_id, gene, corrected barcode, and corrected UMI values from BAM
-    """
+    """Load read_id, gene, corrected barcode, corrected UMI values from BAM."""
     bam = pysam.AlignmentFile(args.bam, "rb")
 
     records = []
@@ -82,7 +81,8 @@ def load_bam_entries(n_aligns, args):
 
 
 def get_bam_info(bam):
-    """
+    """Get bam info.
+
     Use `samtools idxstat` to get number of alignments and names of all contigs
     in the reference.
 
@@ -94,13 +94,15 @@ def get_bam_info(bam):
     bam = pysam.AlignmentFile(bam, "rb")
     stats = bam.get_index_statistics()
     n_aligns = int(sum([contig.mapped for contig in stats]))
-    chroms = dict([(contig.contig, contig.mapped)
-                   for contig in stats if contig.mapped > 0])
+    chroms = dict(
+        [(contig.contig, contig.mapped)
+            for contig in stats if contig.mapped > 0])
     bam.close()
     return n_aligns, chroms
 
 
 def main(args):
+    """Run entry point."""
     init_logger(args)
 
     logger.info(f"Counting alignments in {args.bam}")

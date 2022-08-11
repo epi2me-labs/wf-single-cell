@@ -1,15 +1,14 @@
 #!/usr/bin/env python
+"""Extract barcode."""
 import argparse
 import collections
 import gzip
 import logging
 import math
-import mmap
 import multiprocessing
 import os
 import pathlib
 import shutil
-import sys
 import tempfile
 
 import editdistance as ed
@@ -17,13 +16,14 @@ import parasail
 import pysam
 from tqdm import tqdm
 
+
 # Make logger globally accessible to all functions
 logger = logging.getLogger(__name__)
 
 
 def parse_args():
     """
-    Parse the command line arguments
+    Parse the command line arguments.
 
     :return: object containing all supplied arguments
     :rtype: class argparse.Namespace
@@ -34,14 +34,16 @@ def parse_args():
     # Positional mandatory arguments
     parser.add_argument(
         "bam",
-        help="Sorted BAM file of stranded sequencing reads aligned to a reference",
+        help="Sorted BAM file of stranded sequencing \
+            reads aligned to a reference",
         type=str,
     )
 
     parser.add_argument(
         "superlist",
-        help="Comprehensive whitelist of all possible cell barcodes. These vary \
-        depending on which 10X kit was used. For 3' single cell gene expression \
+        help="Comprehensive whitelist of all possible cell barcodes.\
+        These vary depending on which 10X kit was used. \
+        For 3' single cell gene expression \
         kit: data/3M-february-2018.txt.gz. For 5' single cell gene expression \
         kit: data/737K-august-2016.txt. For single cell multiome (ATAC + GEX) \
         kit: data/737K-arc-v1.txt.gz",
@@ -75,8 +77,8 @@ def parse_args():
     parser.add_argument(
         "-T",
         "--polyT_length",
-        help="Length of polyT sequence to use in the alignment query (ignored \
-        with --kit=5prime) [10]",
+        help="Length of polyT sequence to use in the \
+        alignment query (ignored with --kit=5prime) [10]",
         type=int,
         default=10,
     )
@@ -158,7 +160,8 @@ def parse_args():
 
     parser.add_argument(
         "--output_bam",
-        help="Output BAM file containing aligned reads with tags for uncorrected \
+        help="Output BAM file containing aligned reads with tags \
+        for uncorrected \
         barcodes (CR) and barcode QVs (CY) [bc_uncorr.sorted.bam]",
         type=str,
         default="bc_uncorr.sorted.bam",
@@ -183,8 +186,8 @@ def parse_args():
     args = parser.parse_args()
 
     # verify kit selection
-    if (args.kit != "3prime") and (args.kit !=
-                                   "5prime") and (args.kit != "multiome"):
+    if (args.kit != "3prime") and (
+            args.kit != "5prime") and (args.kit != "multiome"):
         raise Exception(
             "Invalid kit name! Specify either 3prime, 5prime or \
         multiome."
@@ -223,6 +226,8 @@ def init_logger(args):
 
 def update_matrix(args):
     """
+    Update matrix.
+
     Create new parasail scoring matrix. 'N' is used as wildcard character
     for barcodes and has its own match parameter (0 per default).
 
@@ -257,6 +262,8 @@ def update_matrix(args):
 
 def launch_pool(func, func_args, procs=1):
     """
+    Launch pool.
+
     Use multiprocessing library to create pool and map function calls to
     that pool
 
@@ -264,7 +271,8 @@ def launch_pool(func, func_args, procs=1):
     :type procs: int, optional
     :param func: Function to exececute in the pool
     :type func: function
-    :param func_args: List containing arguments for each call to function <funct>
+    :param func_args: List containing arguments for each
+        call to function <funct>
     :type func_args: list
     :return: List of results returned by each call to function <funct>
     :rtype: list
@@ -281,10 +289,11 @@ def launch_pool(func, func_args, procs=1):
 
 def find(char, string):
     """
-    Return iterator of indices for positions in a string
-    corresponding to a target character
+    Return iterator of indices for positions in a string \
+    corresponding to a target character.
 
-    :param char: Target character whose positions you want to locate in the string
+    :param char: Target character whose positions you want
+        to locate in the string
     :type char: str
     :param string: String to search for the target character positions
     :type string: str
@@ -298,7 +307,7 @@ def find(char, string):
 
 def edit_distance(query, target):
     """
-    Return Levenshtein distance between the two supplied strings
+    Return Levenshtein distance between the two supplied strings.
 
     :param query: Query string to compare against the target
     :type query: str
@@ -312,7 +321,7 @@ def edit_distance(query, target):
 
 
 def parse_probe_alignment(p_alignment, adapter1_probe_seq, args):
-    """ """
+    """Parse probe alignment."""
     # Find the position of the Ns in the alignment. These correspond
     # to the cell barcode + UMI sequences bound by the read1 and polyT
     idxs = list(find("N", p_alignment.traceback.ref))
@@ -346,8 +355,8 @@ for q in range(100):
 
 def compute_mean_qscore(scores):
     """
-    Returns the phred score corresponding to the mean of the probabilities
-    associated with the phred scores provided.
+    Return the phred score corresponding to the mean of the \
+    probabilities associated with the phred scores provided.
 
     :param scores: Iterable of phred scores.
     :returns: Phred score corresponding to the average error rate, as
@@ -365,8 +374,8 @@ def compute_mean_qscore(scores):
 
 def find_feature_qscores(feature, p_alignment, prefix_seq, prefix_qv):
     """
-    Using the parasail alignment results, find the qscores corresponding to the
-    feature (e.g. barcode or UMI) positions in the read.
+    Use the parasail alignment results, find the qscores corresponding \
+    to the feature (e.g. barcode or UMI) positions in the read.
 
     :param feature: Feature sequence identified from the parasail alignment
     :type feature: str
@@ -397,8 +406,8 @@ def find_feature_qscores(feature, p_alignment, prefix_seq, prefix_qv):
 
 def align_adapter(tup):
     """
-    Aligns a single adapter template to the read an computes the
-    identity for the alignment
+    Align a single adapter template to the read an computes the \
+    identity for the alignment.
 
     :param tup: Tuple containing the function arguments
     :type tup: tup
@@ -406,7 +415,6 @@ def align_adapter(tup):
         tracking the number of each barcode that we encounter
     :rtype: str, class 'collections.Counter'
     """
-
     bam_path = tup[0]
     chrom = tup[1]
     args = tup[2]
@@ -499,7 +507,7 @@ def align_adapter(tup):
 
 def load_superlist(superlist):
     """
-    Read contents of the file containing all possible cell barcode sequences.
+    Read contents of the file containing all possible cell barcode sequences. \
     File can be uncompressed or gzipped.
 
     :param superlist: Path to file containing all possible cell barcodes, e.g.
@@ -531,8 +539,8 @@ def load_superlist(superlist):
 
 def get_bam_info(bam):
     """
-    Use `samtools idxstat` to get number of alignments and names of all contigs
-    in the reference.
+    Use `samtools idxstat` to get number of alignments and \
+    names of all contigs in the reference.
 
     :param bam: Path to sorted BAM file
     :type bame: str
@@ -542,13 +550,15 @@ def get_bam_info(bam):
     bam = pysam.AlignmentFile(bam, "rb")
     stats = bam.get_index_statistics()
     n_aligns = int(sum([contig.mapped for contig in stats]))
-    chroms = dict([(contig.contig, contig.mapped)
-                   for contig in stats if contig.mapped > 0])
+    chroms = dict(
+        [(contig.contig, contig.mapped)
+            for contig in stats if contig.mapped > 0])
     bam.close()
     return n_aligns, chroms
 
 
 def main(args):
+    """Run entry point."""
     init_logger(args)
     # logger.info("Getting BAM statistics")
     n_reads, chroms = get_bam_info(args.bam)

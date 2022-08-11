@@ -1,16 +1,18 @@
 #!/usr/bin/env python
+"""Calculate saturation."""
 import argparse
 import logging
 
-import pandas as pd
 from matplotlib import pyplot as plt
+import pandas as pd
 from tqdm import tqdm
+
 
 logger = logging.getLogger(__name__)
 
 
 def parse_args():
-    # Create argument parser
+    """Create argument parser."""
     parser = argparse.ArgumentParser()
 
     # Positional mandatory arguments
@@ -42,6 +44,7 @@ def parse_args():
 
 
 def init_logger(args):
+    """Initiate logger."""
     logging.basicConfig(
         format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
@@ -51,7 +54,8 @@ def init_logger(args):
 
 
 def plot_saturation_curves(res, umi_sat, args):
-    """
+    """Plot saturation curves.
+
     Output a single file with two subplots:
     1. Median number of unique genes per cell
     2. Median number of unique UMIs per cell
@@ -121,7 +125,8 @@ def plot_saturation_curves(res, umi_sat, args):
 
 
 def calc_umi_saturation(df):
-    """
+    """Calculate UMI saturation.
+
     Sequencing Saturation = 1 - (n_deduped_reads / n_reads)
     """
     n_reads = df.shape[0]
@@ -133,9 +138,7 @@ def calc_umi_saturation(df):
 
 
 def downsample_reads(df):
-    """
-    Downsample dataframe of reads and tabulate genes and UMIs per cell
-    """
+    """Downsample dataframe of reads and tabulate genes and UMIs per cell."""
     fractions = [
         0.01,
         0.02,
@@ -189,6 +192,7 @@ def downsample_reads(df):
 
 
 def main(args):
+    """Entry point."""
     init_logger(args)
 
     df = pd.read_csv(args.gene_cell_umi, sep="\t")

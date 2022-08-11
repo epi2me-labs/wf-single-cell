@@ -1,18 +1,16 @@
 #!/usr/bin/env python
+"""Cell Umi gene stats."""
 import argparse
 import logging
-import os
-import sys
 
 import pandas as pd
-import pysam
-from tqdm import tqdm
+
 
 logger = logging.getLogger(__name__)
 
 
 def parse_args():
-    # Create argument parser
+    """Create argument parser."""
     parser = argparse.ArgumentParser()
 
     # Positional mandatory arguments
@@ -45,6 +43,7 @@ def parse_args():
 
 
 def init_logger(args):
+    """Initiate logger."""
     logging.basicConfig(
         format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
@@ -54,15 +53,13 @@ def init_logger(args):
 
 
 def read_table(args):
-    """ """
+    """Read table."""
     df = pd.read_csv(args.tsv, sep="\t")
     return df
 
 
 def per_cell_stats(df):
-    """
-    Run groupby on cell barcode and return table of per-cell stats.
-    """
+    """Run groupby on cell barcode and return table of per-cell stats."""
     reads_per_cell = df.groupby("barcode")["read_id"].count()
     umis_per_cell = df.groupby("barcode")["umi"].nunique()
     genes_per_cell = df.groupby("barcode")["gene"].nunique()
@@ -71,9 +68,7 @@ def per_cell_stats(df):
 
 
 def per_cell_umi_stats(df):
-    """
-    Run groupby on cell+UMI and return table of per-cell+UMI stats.
-    """
+    """Run groupby on cell+UMI and return table of per-cell+UMI stats."""
     reads_per_cell_umi = df.groupby(["barcode", "umi"])["read_id"].count()
     genes_per_cell_umi = df.groupby(["barcode", "umi"])["gene"].nunique()
 
@@ -81,9 +76,7 @@ def per_cell_umi_stats(df):
 
 
 def per_cell_gene_stats(df):
-    """
-    Run groupby on cell+gene and return table of per-cell+gene stats.
-    """
+    """Run groupby on cell+gene and return table of per-cell+gene stats."""
     reads_per_cell_gene = df.groupby(["barcode", "gene"])["read_id"].count()
     umis_per_cell_gene = df.groupby(["barcode", "gene"])["umi"].nunique()
 
@@ -91,9 +84,7 @@ def per_cell_gene_stats(df):
 
 
 def per_gene_bulk_stats(df):
-    """
-    Run groupby on gene and return table of per-gene (bulk) stats.
-    """
+    """Run groupby on gene and return table of per-gene (bulk) stats."""
     reads_per_gene_bulk = df.groupby("gene")["read_id"].count()
     umis_per_gene_bulk = df.groupby("gene")["umi"].nunique()
 
@@ -101,6 +92,7 @@ def per_gene_bulk_stats(df):
 
 
 def main(args):
+    """Run entry point."""
     init_logger(args)
 
     df = read_table(args)

@@ -1,17 +1,17 @@
 #!/usr/bin/env python
+"""Process matrix."""
 import argparse
 import logging
-import os
-import sys
 
 import numpy as np
 import pandas as pd
+
 
 logger = logging.getLogger(__name__)
 
 
 def parse_args():
-    # Create argument parser
+    """Create argument parser."""
     parser = argparse.ArgumentParser()
 
     # Positional mandatory arguments
@@ -25,7 +25,8 @@ def parse_args():
     # Optional arguments
     parser.add_argument(
         "--min_genes",
-        help="Filter out cells that contain fewer than <min_genes> genes [100]",
+        help="Filter out cells that contain fewer than \
+        <min_genes> genes [100]",
         type=int,
         default=100,
     )
@@ -56,7 +57,8 @@ def parse_args():
     parser.add_argument(
         "--output",
         help="Output TSV file containing processed gene expression matrix, \
-            where genes are rows and cells are columns [expression.processed.tsv]",
+            where genes are rows and cells are columns \
+            [expression.processed.tsv]",
         type=str,
         default="expression.processed.tsv",
     )
@@ -75,8 +77,10 @@ def parse_args():
 
 
 def init_logger(args):
+    """Initiate logger."""
     logging.basicConfig(
-        format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+        format="%(asctime)s -- %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
     )
     logging_level = args.verbosity * 10
     logging.root.setLevel(logging_level)
@@ -84,9 +88,8 @@ def init_logger(args):
 
 
 def filter_cells(df, args):
-    """
-    Remove cells that express fewer than N=<args.min_genes> unique genes.
-    """
+    """Remove cells that express fewer than N=<args.min_genes> \
+        unique genes."""
     df = df.transpose()
     df["total"] = df.sum(axis=1)
 
@@ -117,7 +120,7 @@ def filter_cells(df, args):
 
 
 def filter_genes(df, args):
-    """ """
+    """Filter genes."""
     df["n_cells"] = df.astype(bool).sum(axis=1)
 
     # Remove genes that are present in fewer than <args.min_cells> unique cells
@@ -134,7 +137,7 @@ def filter_genes(df, args):
 
 
 def normalize(df, args):
-    """ """
+    """Normalize."""
     df = df.transpose()
 
     # cell_count / cell_total = X / <args.norm_count>
@@ -149,7 +152,7 @@ def normalize(df, args):
 
 
 def logarithmize(df):
-    """ """
+    """Logarithmize."""
     # Add pseudo count and logarithmize the normalized counts
     logger.info("Logarithmizing counts")
     df = np.log10(df + 1)
@@ -157,6 +160,7 @@ def logarithmize(df):
 
 
 def main(args):
+    """Run entry point."""
     init_logger(args)
 
     df = pd.read_csv(args.counts, sep="\t").set_index("gene")

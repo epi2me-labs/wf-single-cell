@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+"""Adapter scan vsearch."""
 import argparse
 import gzip
 import logging
@@ -9,23 +10,20 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import time
-from collections import defaultdict
-from glob import glob
 
-import numpy as np
-import pandas as pd
-import pysam
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
+import numpy as np
+import pandas as pd
+import pysam
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
 
 def parse_args():
-    # Create argument parser
+    """Create argument parser."""
     parser = argparse.ArgumentParser()
 
     # Positional mandatory arguments
@@ -108,8 +106,8 @@ def parse_args():
     args = parser.parse_args()
 
     # verify kit selection
-    if (args.kit != "3prime") and (args.kit !=
-                                   "5prime") and (args.kit != "multiome"):
+    if (args.kit != "3prime") and (
+            args.kit != "5prime") and (args.kit != "multiome"):
         raise Exception(
             "Invalid kit name! Specify either 3prime, 5prime or \
         multiome."
@@ -144,15 +142,14 @@ COMPLEMENT_TRANS = str.maketrans(
 
 
 def run_subprocess(cmd):
-    """
-    Run OS command and return stdout & stderr
-    """
+    """Run OS command and return stdout & stderr."""
     p = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE)
     stdout, stderr = p.communicate()
     return str(stdout), str(stderr)
 
 
 def check_vsearch():
+    """Check vsearch."""
     stdout, stderr = run_subprocess("vsearch --quiet -h")
     if stderr.find("vsearch: command not found") > -1:
         logging.error("Could not load find VSEARCH -- check installation")
@@ -160,6 +157,7 @@ def check_vsearch():
 
 
 def write_adapters_fasta(args):
+    """Write adapters fasta."""
     adapters = []
     for adapter, seq in {
         "adapter1_f": args.adapter1_seq,
@@ -174,6 +172,7 @@ def write_adapters_fasta(args):
 
 
 def write_tmp_fasta(batch_reads, args):
+    """Write temp fasta."""
     tmp_fasta = tempfile.NamedTemporaryFile(
         prefix="tmp.reads.", suffix=".fasta", dir=args.tempdir, delete=False
     )
@@ -186,7 +185,7 @@ def write_tmp_fasta(batch_reads, args):
 
 
 def call_vsearch(tmp_fastq, args):
-    """ """
+    """Call vsearch."""
     # Convert batch FASTQ to FASTA for input into VSEARCH
     tmp_fasta = tmp_fastq.replace(".fastq", ".fasta")
 
@@ -214,6 +213,7 @@ def call_vsearch(tmp_fastq, args):
 
 
 def get_valid_adapter_pair_positions_in_read(read):
+    """Get valid adapter positions."""
     valid_pairs_n = 0
     fl_pairs = []
 
@@ -224,7 +224,7 @@ def get_valid_adapter_pair_positions_in_read(read):
             valid_pairs_n):
         read_id = read["query"].iloc[0]
         pair_str = (
-            f"{read.iloc[adapter_1_idx]['target']}-{read.iloc[adapter_2_idx]['target']}"
+            f"{read.iloc[adapter_1_idx]['target']}-{read.iloc[adapter_2_idx]['target']}" # noqa
         )
         fl_pair = {
             "read_id": "{}_{}".format(read_id, valid_pairs_n),
@@ -245,7 +245,7 @@ def get_valid_adapter_pair_positions_in_read(read):
             # Make sure there are enough alignments to allow this indexing
             if adapter_2_idx < read.shape[0]:
                 # Is the next found adapter a adapter2_f?
-                if read.iloc[adapter_2_idx]["target"] == compat_adapters[adapter1]:
+                if read.iloc[adapter_2_idx]["target"] == compat_adapters[adapter1]: # noqa
                     # This is a valid adapter pairing (adapter1_f-adapter2_f)
                     fl_pair, valid_pairs_n = write_valid_pair_dict(
                         read, adapter_1_idx, adapter_2_idx, valid_pairs_n
@@ -273,6 +273,7 @@ def add_entry_to_read_info(
     adapter_config,
     lab,
 ):
+    """Add entry to read info."""
     read_info[orig_read_id][new_read_id] = {
         "readlen": readlen,
         "start": start,
@@ -288,6 +289,7 @@ def add_entry_to_read_info(
 
 
 def parse_vsearch(tmp_vsearch, args):
+    """Parse vsearch."""
     colnames = [
         "query",
         "target",
@@ -362,7 +364,9 @@ def parse_vsearch(tmp_vsearch, args):
                 "adapter2_r-adapter2_f",
                     "adapter2_f-adapter2_r"]:
                 lab = "double_adapter2"
-            elif adapter_config in ["adapter1_r-adapter1_f", "adapter1_f-adapter1_r"]:
+            elif adapter_config in [
+                "adapter1_r-adapter1_f",
+                    "adapter1_f-adapter1_r"]:
                 lab = "double_adapter1"
             elif adapter_config in ["adapter2_f", "adapter2_r"]:
                 lab = "single_adapter2"
@@ -431,6 +435,7 @@ def parse_vsearch(tmp_vsearch, args):
 
 
 def revcomp_adapter_config(adapters_string):
+    """Revcomp adapter config."""
     d = {
         "adapter1_f": "adapter1_r",
         "adapter1_r": "adapter1_f",
@@ -443,7 +448,7 @@ def revcomp_adapter_config(adapters_string):
 
 
 def write_stranded_fastq(tmp_fastq, read_info, args):
-    """ """
+    """Write stranded fastq."""
     tmp_stranded_fastq = tmp_fastq.replace(".fastq", ".stranded.fastq.gz")
 
     # Iterate through FASTQ reads and re-write them with proper stranding based
@@ -464,22 +469,24 @@ def write_stranded_fastq(tmp_fastq, read_info, args):
                             rc_config = revcomp_adapter_config(
                                 d["adapter_config"])
                             d["adapter_config"] = rc_config
-                            subread_seq = subread_seq[::- \
-                                1].translate(COMPLEMENT_TRANS)
+                            subread_seq = subread_seq[::-1].translate(
+                                COMPLEMENT_TRANS)
                             subread_quals = subread_quals[::-1]
                         f_out.write(f"@{subread_id}\n".encode())
                         f_out.write(f"{subread_seq}\n".encode())
                         f_out.write(b"+\n")
                         f_out.write(f"{subread_quals}\n".encode())
                 else:
-                    # This read had no VSEARCH hits for adapter sequences, so we
-                    # should omit this read from the stranded FASTQ output
+                    # This read had no VSEARCH hits for adapter sequences,
+                    # so we should omit this read
+                    # from the stranded FASTQ output
                     pass
 
     return tmp_stranded_fastq
 
 
 def open_fastq(fastq):
+    """Open fastq."""
     if args.fastq.split(".")[-1] == "gz":
         f = gzip.open(fastq, "rt")
     else:
@@ -488,6 +495,7 @@ def open_fastq(fastq):
 
 
 def count_reads(fastq):
+    """Count reads."""
     number_lines = 0
     with open_fastq(fastq) as f:
         for line in tqdm(f, unit_scale=0.25, unit=" reads"):
@@ -497,7 +505,7 @@ def count_reads(fastq):
 
 
 def batch_iterator(iterator, args):
-    """Returns lists of length batch_size.
+    """Return lists of length batch_size.
 
     This can be used on any iterator, for example to batch up
     SeqRecord objects from Bio.SeqIO.parse(...), or to batch
@@ -525,6 +533,7 @@ def batch_iterator(iterator, args):
 
 
 def get_subread_info(read_info):
+    """Get subread info."""
     subread_info = []
     for read_id, subread_d in read_info.items():
         for subread_id, attr_d in subread_d.items():
@@ -534,6 +543,7 @@ def get_subread_info(read_info):
 
 
 def write_tmp_table(tmp_fastq, subread_info):
+    """Write temp table."""
     df = pd.DataFrame.from_records(subread_info)
     tmp_table = tmp_fastq.replace(".fastq.gz", ".info.tsv")
     df.to_csv(tmp_table, sep="\t", index=False)
@@ -541,6 +551,7 @@ def write_tmp_table(tmp_fastq, subread_info):
 
 
 def process_batch(tup):
+    """Process batch."""
     tmp_fastq = tup[0]
     args = tup[1]
 
@@ -554,6 +565,7 @@ def process_batch(tup):
 
 
 def init_logger(args):
+    """Init logger."""
     logging.basicConfig(
         format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
@@ -563,16 +575,18 @@ def init_logger(args):
 
 
 def write_output_table(tmp_tables, args):
-    """ """
+    """Write output table."""
     if len(tmp_tables) > 1:
-        pd.concat([pd.read_csv(d, sep="\t") for d in tmp_tables],
-                  axis=0).to_csv(args.output_tsv, sep="\t", index=False)
+        pd.concat(
+            [pd.read_csv(
+                d, sep="\t") for d in tmp_tables], axis=0).to_csv(
+                    args.output_tsv, sep="\t", index=False)
     else:
         shutil.copy(tmp_tables[0], args.output_tsv)
 
 
 def write_output_fastq(tmp_fastqs, args):
-    """ """
+    """Write output fastq."""
     with open(args.output_fastq, "wb") as f_out:
         for tmp_fastq in tmp_fastqs:
             with open(tmp_fastq, "rb") as f_:
@@ -582,7 +596,7 @@ def write_output_fastq(tmp_fastqs, args):
 
 
 def write_tmp_fastx_files_for_processing(n_batches, args):
-    """ """
+    """Write tmp fastx."""
     # Write a FASTA file containing the adapter sequences for VSEARCH to use
     write_adapters_fasta(args)
 
@@ -618,6 +632,7 @@ def write_tmp_fastx_files_for_processing(n_batches, args):
 
 
 def main(args):
+    """Entry point."""
     init_logger(args)
     check_vsearch()
 

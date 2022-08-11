@@ -1,21 +1,21 @@
 #!/usr/bin/env python
+"""Plot umap."""
 import argparse
 import logging
-import os
 import sys
 
-import matplotlib
 import matplotlib.cm as cm
+from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.colors import LinearSegmentedColormap, ListedColormap
+
 
 logger = logging.getLogger(__name__)
 
 
 def parse_args():
-    # Create argument parser
+    """Create argument parser."""
     parser = argparse.ArgumentParser()
 
     # Positional mandatory arguments
@@ -98,6 +98,7 @@ def parse_args():
 
 
 def init_logger(args):
+    """Initiate logger."""
     logging.basicConfig(
         format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
@@ -107,6 +108,7 @@ def init_logger(args):
 
 
 def remove_top_right_axes(ax):
+    """Remove top right axes."""
     ax.spines["right"].set_visible(False)
     ax.spines["top"].set_visible(False)
     ax.tick_params(axis="both", direction="in")
@@ -115,7 +117,7 @@ def remove_top_right_axes(ax):
 
 
 def scatterplot(df, values, args):
-    """ """
+    """Scatter plot."""
     fig = plt.figure(figsize=[8, 8])
     ax = fig.add_axes([0.08, 0.08, 0.85, 0.85])
 
@@ -161,7 +163,7 @@ def scatterplot(df, values, args):
 
 
 def get_expression(args):
-    """ """
+    """Get expression."""
     df_f = (
         pd.read_csv(args.full_matrix, delimiter="\t")
         .rename(columns={"gene": "cell"})
@@ -199,6 +201,7 @@ def get_expression(args):
 
 
 def main(args):
+    """Run entry point."""
     init_logger(args)
 
     df = pd.read_csv(args.umap, delimiter="\t").set_index("barcode")
@@ -218,15 +221,18 @@ def main(args):
         scatterplot(df, df_annot.loc[:, "mitochondrial"], args)
 
     # if args.target_cells:
-    #     logger.info(f"Plotting UMAP with highlighted cells from {args.target_cells}")
+    #     logger.info(f"Plotting UMAP with highlighted
+    #       cells from {args.target_cells}")
     #
-    #     df_highlight = pd.read_csv(args.target_cells, header=None, names=["barcode"])
+    #     df_highlight = pd.read_csv(args.target_cells,
+    #       header=None, names=["barcode"])
     #     df_highlight["barcode"] = df_highlight["barcode"].str.split(
     #         "-", n=0, expand=True
     #     )
     #     df_highlight["highlight"] = "red"
     #     df_highlight = df_highlight.set_index("barcode")
-    #     df_highlight = pd.merge(df, df_highlight, on="barcode", how="left").fillna(
+    #     df_highlight = pd.merge(df, df_highlight,
+    #           on="barcode", how="left").fillna(
     #         "lightgray"
     #     )
     #     values = df_highlight.loc[:, "highlight"]

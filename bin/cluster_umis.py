@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+"""Cluster UMIs."""
 # This code makes significant use of the UMI-tools package (MIT license).
 #
 # https://github.com/CGATOxford/UMI-tools
@@ -11,33 +12,29 @@ import collections
 import itertools
 import logging
 import multiprocessing
-import os
 import pathlib
 import re
-import shutil
-import subprocess
-import sys
 import tempfile
-import time
 
+from editdistance import eval as edit_distance
 import numpy as np
 import pandas as pd
 import pysam
-from editdistance import eval as edit_distance
 from tqdm import tqdm
+
 
 logger = logging.getLogger(__name__)
 
 
 def parse_args():
-    # Create argument parser
+    """Create argument parser."""
     parser = argparse.ArgumentParser()
 
     # Positional mandatory arguments
     parser.add_argument(
         "bam",
-        help="BAM file of alignments with tags for gene (GN), corrected barcode \
-        (CB) and uncorrected UMI (UY)",
+        help="BAM file of alignments with tags for gene (GN), \
+        corrected barcode (CB) and uncorrected UMI (UY)",
         type=str,
     )
 
@@ -61,9 +58,11 @@ def parse_args():
 
     parser.add_argument(
         "--cell_gene_max_reads",
-        help="Maximum number of reads to consider for a particular gene + cell \
-        barcode combination. This is required to prevent too many PCR \
-        duplicates from crashing the UMI clustering algorithm. Can be increased \
+        help="Maximum number of reads to consider for a particular \
+        gene + cell barcode combination. \
+        This is required to prevent too many PCR \
+        duplicates from crashing the UMI clustering algorithm. \
+        Can be increased \
         if sufficient UMI complexity is observed. [20000]",
         type=int,
         default=20000,
@@ -92,6 +91,7 @@ def parse_args():
 
 
 def init_logger(args):
+    """Initiate logger."""
     logging.basicConfig(
         format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
@@ -101,7 +101,8 @@ def init_logger(args):
 
 
 def breadth_first_search(node, adj_list):
-    """
+    """Breadth first search.
+
     This function has been copied from the UMI-tools package, originally found
     in the networks.py source code here:
     https://github.com/CGATOxford/UMI-tools/blob/c3ead0792ad590822ca72239ef01b8e559802da9/umi_tools/network.py#L21
@@ -123,7 +124,7 @@ def breadth_first_search(node, adj_list):
 
 def get_adj_list_directional(umis, counts, threshold=2):
     """
-    Neil: LEVENSTEIN distance is an instance of the edit distance
+    Neil: LEVENSTEIN distance is an instance of the edit distance.
 
     Identify all umis within the LEVENSHTEIN distance threshold
     and where the counts of the first umi is > (2 * second umi counts)-1.
@@ -131,11 +132,10 @@ def get_adj_list_directional(umis, counts, threshold=2):
     This function from UMI-tools has been modified to use Levenshtein distance
     instead of hamming distance.
 
-    This function has been modified from the UMI-tools package, originally found
-    in the network.py source code here:
+    This function has been modified from the UMI-tools package,
+    originally found in the network.py source code here:
     https://github.com/CGATOxford/UMI-tools/blob/c3ead0792ad590822ca72239ef01b8e559802da9/umi_tools/network.py#L187
     """
-
     adj_list = {umi: [] for umi in umis}
     iter_umi_pairs = itertools.combinations(umis, 2)
     for umi1, umi2 in iter_umi_pairs:
@@ -150,13 +150,12 @@ def get_adj_list_directional(umis, counts, threshold=2):
 
 def get_connected_components_adjacency(umis, graph, counts):
     """
-    find the connected UMIs within an adjacency dictionary
+    Find the connected UMIs within an adjacency dictionary.
 
     This function has been copied from the UMI-tools package, originally found
     in the network.py source code here:
     https://github.com/CGATOxford/UMI-tools/blob/c3ead0792ad590822ca72239ef01b8e559802da9/umi_tools/network.py#L213
     """
-
     # TS: TO DO: Work out why recursive function doesn't lead to same
     # final output. Then uncomment below
 
@@ -179,13 +178,12 @@ def get_connected_components_adjacency(umis, graph, counts):
 
 def group_directional(clusters, adj_list, counts):
     """
-    return groups for directional method
+    Return groups for directional method.
 
     This function has been copied from the UMI-tools package, originally found
     in the network.py source code here:
     https://github.com/CGATOxford/UMI-tools/blob/c3ead0792ad590822ca72239ef01b8e559802da9/umi_tools/network.py#L250
     """
-
     observed = set()
     groups = []
     for cluster in clusters:
@@ -206,6 +204,7 @@ def group_directional(clusters, adj_list, counts):
 
 
 def cluster(counts_dict, threshold=3):
+    """Cluster."""
     adj_list = get_adj_list_directional(
         counts_dict.keys(), counts_dict, threshold)
     clusters = get_connected_components_adjacency(
@@ -220,11 +219,13 @@ def cluster(counts_dict, threshold=3):
 
 
 def create_map_to_correct_umi(cluster_list):
+    """Create map to correct umi."""
     my_map = {y: x[0] for x in cluster_list for y in x}
     return my_map
 
 
 def correct_umis(umis):
+    """Correct Umis."""
     counts_dict = dict(umis.value_counts())
     umi_map = create_map_to_correct_umi(cluster(counts_dict))
     return umis.replace(umi_map)
@@ -232,6 +233,8 @@ def correct_umis(umis):
 
 def add_tags(chrom, umis, genes, args):
     """
+    Add tags.
+
     Using the read_id:umi_corr and read_id:gene dictionaries, add UB:Z and GN:Z
     tags to the output BAM file.
     """
@@ -258,6 +261,8 @@ def add_tags(chrom, umis, genes, args):
 
 def get_bam_info(bam):
     """
+    Get bam info.
+
     Use `samtools idxstat` to get number of alignments and names of all contigs
     in the reference.
 
@@ -269,14 +274,17 @@ def get_bam_info(bam):
     bam = pysam.AlignmentFile(bam, "rb")
     stats = bam.get_index_statistics()
     n_aligns = int(sum([contig.mapped for contig in stats]))
-    chroms = dict([(contig.contig, contig.mapped)
-                   for contig in stats if contig.mapped > 0])
+    chroms = dict(
+        [(contig.contig, contig.mapped)
+            for contig in stats if contig.mapped > 0])
     bam.close()
     return n_aligns, chroms
 
 
 def create_region_name(align, args):
     """
+    Create region name.
+
     Create a 'gene name' based on the aligned chromosome and coordinates.
     The midpoint of the alignment determines which genomic interval to use
     for the 'gene name'.
@@ -305,15 +313,15 @@ def create_region_name(align, args):
 
 
 def chunks(lst, n):
-    """
-    Yield successive n-sized chunks from lst.
-    """
+    """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
         yield lst[i: i + n]
 
 
 def launch_pool(func, func_args, procs=1):
     """
+    Launch pool.
+
     Use multiprocessing library to create pool and map function calls to
     that pool
 
@@ -321,7 +329,8 @@ def launch_pool(func, func_args, procs=1):
     :type procs: int, optional
     :param func: Function to exececute in the pool
     :type func: function
-    :param func_args: List containing arguments for each call to function <funct>
+    :param func_args: List containing arguments
+        for each call to function <funct>
     :type func_args: list
     :return: List of results returned by each call to function <funct>
     :rtype: list
@@ -338,6 +347,7 @@ def launch_pool(func, func_args, procs=1):
 
 
 def run_groupby(df):
+    """Run groupby."""
     df["umi_corr"] = df.groupby(["gene_cell"])[
         "umi_uncorr"].transform(correct_umis)
     return df
@@ -345,6 +355,8 @@ def run_groupby(df):
 
 def process_bam_records(input_bam, chrom, args):
     """
+    Process bam records.
+
     Read through all the alignments for specific chromosome to pull out
     the gene, barcode, and uncorrected UMI information. Use that to cluster
     UMIs and get the corrected UMI sequence. We'll then write out a temporary
@@ -431,6 +443,7 @@ def process_bam_records(input_bam, chrom, args):
 
 
 def main(args):
+    """Run entry point."""
     init_logger(args)
     n_aligns, chroms = get_bam_info(args.bam)
 

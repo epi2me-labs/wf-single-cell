@@ -1,21 +1,19 @@
 #!/usr/bin/env python
+"""Add gene tags."""
 import argparse
-import gzip
 import logging
 import os
-import pathlib
-import subprocess
-import sys
 
 import numpy as np
 import pysam
 from tqdm import tqdm
 
+
 logger = logging.getLogger(__name__)
 
 
 def parse_args():
-    # Create argument parser
+    """Create argument parser."""
     parser = argparse.ArgumentParser()
 
     # Positional mandatory arguments
@@ -32,8 +30,8 @@ def parse_args():
     # Optional arguments
     parser.add_argument(
         "--output",
-        help="Output BAM file containing aligned reads with gene name tags (GN) \
-        [gene.sorted.bam]",
+        help="Output BAM file containing aligned reads with gene name \
+            tags (GN) [gene.sorted.bam]",
         type=str,
         default="gene.sorted.bam",
     )
@@ -52,6 +50,7 @@ def parse_args():
 
 
 def init_logger(args):
+    """Initiate logger."""
     logging.basicConfig(
         format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
@@ -61,9 +60,7 @@ def init_logger(args):
 
 
 def get_bam_info(bam):
-    """
-    Use `samtools idxstat` to get number of alignments and names of all contigs
-    in the reference.
+    """Get number of alignments and names of all contigs in the reference.
 
     :param bam: Path to sorted BAM file
     :type bame: str
@@ -79,7 +76,8 @@ def get_bam_info(bam):
 
 
 def process_bam_entries(args):
-    """
+    """Process bam entries.
+
     Iterate simultaneously throught the BAM and the featureCounts TSV file of
     read/gene assignments. These files must be sorted identically, otherwise it
     will throw an exception. The gene names found in the featureCounts TSV are
@@ -119,6 +117,7 @@ def process_bam_entries(args):
 
 
 def main(args):
+    """Run the entry point."""
     init_logger(args)
 
     process_bam_entries(args)

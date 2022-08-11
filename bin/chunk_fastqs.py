@@ -1,24 +1,21 @@
 #!/usr/bin/env python
+"""Chunk fastqs."""
 import argparse
-import collections
 import gzip
 import logging
 import multiprocessing
 import os
-import pathlib
 import shutil
 import subprocess
-import sys
 
 import numpy as np
 import pysam
-from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
 
 def parse_args():
-    # Create argument parser
+    """Create argument parser."""
     parser = argparse.ArgumentParser()
 
     # Positional mandatory arguments
@@ -59,6 +56,7 @@ def parse_args():
 
 
 def init_logger(args):
+    """Initiate logger."""
     logging.basicConfig(
         format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
@@ -68,9 +66,7 @@ def init_logger(args):
 
 
 def run_subprocess(cmd):
-    """
-    Run OS command and return stdout & stderr
-    """
+    """Run OS command and return stdout & stderr."""
     p = subprocess.Popen(
         cmd,
         shell=True,
@@ -89,7 +85,7 @@ def chunks(lst, n):
 
 
 def batch_iterator(iterator, batch_size):
-    """Returns lists of length batch_size.
+    """Return lists of length batch_size.
 
     This can be used on any iterator, for example to batch up
     SeqRecord objects from Bio.SeqIO.parse(...), or to batch
@@ -117,7 +113,7 @@ def batch_iterator(iterator, batch_size):
 
 
 def load_fofn(fn):
-    """ """
+    """Load file."""
     input_fastqs = []
     for line in open(fn, "r"):
         path = line.strip()
@@ -126,7 +122,8 @@ def load_fofn(fn):
 
 
 def count_reads(fastq):
-    """
+    """Count reads.
+
     Assumes a 4-line FASTQ. Uses grep or zgrep to count the number of lines and
     divides by four to get the read count.
     """
@@ -141,7 +138,7 @@ def count_reads(fastq):
 
 
 def cat_files(tup):
-    """ """
+    """Concat files."""
     chunk_fns = tup[0]
     i = tup[1]
     ext = tup[2]
@@ -161,7 +158,8 @@ def cat_files(tup):
 
 
 def get_input_file_ext(input_fastqs, args):
-    """
+    """Get input file ext.
+
     Determine the extension of the FASTQ files listed in
     the input fofn. We will maintain this extension in
     the catted output files.
@@ -181,7 +179,8 @@ def get_input_file_ext(input_fastqs, args):
 
     if ext == "gz":
         subext = set([p.split(".")[-2] for p in input_fastqs])
-        assert len(subext) == 1, "Unexpected mixture of file extensions in FOFN"
+        assert len(
+            subext) == 1, "Unexpected mixture of file extensions in FOFN"
 
         subext = list(subext)[0]
         ext = f"{subext}.{ext}"
@@ -190,6 +189,7 @@ def get_input_file_ext(input_fastqs, args):
 
 
 def main(args):
+    """Run entry point."""
     init_logger(args)
 
     input_fastqs = load_fofn(args.fofn)
@@ -274,9 +274,10 @@ def main(args):
             os.remove(tmp_combined_fn)
 
     else:
-        # There are already N=<args.threads> input files, so just copy them into
-        # the output directory for downstream processing. Unzip them if they are
-        # gzipped.
+        # There are already N=<args.threads> input files,
+        # so just copy them into
+        # the output directory for downstream processing.
+        # Unzip them if they are gzipped.
         for i, fn in enumerate(input_fastqs):
             dest_fn = os.path.join(args.output_dir, f"proc.{i}.fastq")
             if ext == "gz":

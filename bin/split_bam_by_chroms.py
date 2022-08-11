@@ -1,30 +1,27 @@
 #!/usr/bin/env python
+"""Split bam by chroms."""
 import argparse
-import gzip
 import logging
-import math
 import multiprocessing
 import os
-import pathlib
-import re
 import shutil
-import sys
-import tempfile
 
 import pysam
 from tqdm import tqdm
+
 
 logger = logging.getLogger(__name__)
 
 
 def parse_args():
-    # Create argument parser
+    """Create argument parser."""
     parser = argparse.ArgumentParser()
 
     # Positional mandatory arguments
     parser.add_argument(
         "bam",
-        help="Sorted BAM file of stranded sequencing reads aligned to a reference.",
+        help="Sorted BAM file of stranded sequencing \
+            reads aligned to a reference.",
         type=str,
     )
 
@@ -55,6 +52,7 @@ def parse_args():
 
 
 def init_logger(args):
+    """Initiate logger."""
     logging.basicConfig(
         format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
@@ -65,7 +63,7 @@ def init_logger(args):
 
 def process_bam_records(tup):
     """
-    Write a separate BAM file for alignments to each chromosome in the
+    Write a separate BAM file for alignments to each chromosome in the \
     input_bam.
 
     :param tup: Tuple containing the input arguments
@@ -98,14 +96,15 @@ def process_bam_records(tup):
 
 def launch_pool(func, func_args, procs=1):
     """
-    Use multiprocessing library to create pool and map function calls to
-    that pool
+    Use multiprocessing library to create pool and map function calls to \
+    that pool.
 
     :param procs: Number of processes to use for pool
     :type procs: int, optional
     :param func: Function to exececute in the pool
     :type func: function
-    :param func_args: List containing arguments for each call to function <funct>
+    :param func_args: List containing \
+    arguments for each call to function <funct>
     :type func_args: list
     :return: List of results returned by each call to function <funct>
     :rtype: list
@@ -122,8 +121,8 @@ def launch_pool(func, func_args, procs=1):
 
 def get_bam_info(bam):
     """
-    Use `samtools idxstat` to get number of alignments and names of all contigs
-    in the reference.
+    Use `samtools idxstat` to get number of alignments and \
+    names of all contigs in the reference.
 
     :param bam: Path to sorted BAM file
     :type bame: str
@@ -133,13 +132,15 @@ def get_bam_info(bam):
     bam = pysam.AlignmentFile(bam, "rb")
     stats = bam.get_index_statistics()
     n_aligns = int(sum([contig.mapped for contig in stats]))
-    chroms = dict([(contig.contig, contig.mapped)
-                   for contig in stats if contig.mapped > 0])
+    chroms = dict([(
+        contig.contig, contig.mapped) for
+        contig in stats if contig.mapped > 0])
     bam.close()
     return n_aligns, chroms
 
 
 def main(args):
+    """Run entry point."""
     init_logger(args)
     # logger.info("Getting BAM statistics")
     n_reads, chroms = get_bam_info(args.bam)

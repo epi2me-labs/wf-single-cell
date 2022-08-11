@@ -1,24 +1,21 @@
 #!/usr/bin/env python
+"""Gene expression."""
 import argparse
 import collections
-import gzip
 import logging
-import os
-import pathlib
 import re
-import subprocess
-import sys
 
 import numpy as np
 import pandas as pd
 import pysam
 from tqdm import tqdm
 
+
 logger = logging.getLogger(__name__)
 
 
 def parse_args():
-    # Create argument parser
+    """Create argument parser."""
     parser = argparse.ArgumentParser()
 
     # Positional mandatory arguments
@@ -47,6 +44,7 @@ def parse_args():
 
 
 def init_logger(args):
+    """Initiate logger."""
     logging.basicConfig(
         format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
@@ -57,8 +55,8 @@ def init_logger(args):
 
 def get_bam_info(bam):
     """
-    Use `samtools idxstat` to get number of alignments and names of all contigs
-    in the reference.
+    Use `samtools idxstat` to get number of alignments and \
+    names of all contigs in the reference.
 
     :param bam: Path to sorted BAM file
     :type bame: str
@@ -74,7 +72,7 @@ def get_bam_info(bam):
 
 
 def read_bam_entries(bam, n_reads):
-    """ """
+    """Read bam entries."""
     genes = set()
     barcodes = set()
 
@@ -98,7 +96,7 @@ def read_bam_entries(bam, n_reads):
 
 
 def populate_matrix(genes, barcodes, umi_sets):
-    """ """
+    """Populate matrix."""
     rows = sorted(genes)
 
     cols = list(barcodes)
@@ -114,8 +112,8 @@ def populate_matrix(genes, barcodes, umi_sets):
 
 def process_bam_entries(args):
     """
-    Iterate through the BAM file and count unique UMIs (UB tag) associated with
-    each gene (GN tag) and cell barcode (CB tag).
+    Iterate through the BAM file and count unique UMIs (UB tag) \
+    associated with each gene (GN tag) and cell barcode (CB tag).
 
     :param args: object containing all supplied arguments
     :type args: class argparse.Namespace
@@ -138,6 +136,7 @@ def process_bam_entries(args):
 
 
 def main(args):
+    """Run entry point."""
     init_logger(args)
 
     process_bam_entries(args)
