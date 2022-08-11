@@ -77,8 +77,8 @@ def parse_args():
     parser.add_argument(
         "-T",
         "--polyT_length",
-        help="Length of polyT sequence to use in the alignment query (ignored \
-        with --kit=5prime) [10]",
+        help="Length of polyT sequence to use in the \
+        alignment query (ignored with --kit=5prime) [10]",
         type=int,
         default=10,
     )
@@ -160,7 +160,8 @@ def parse_args():
 
     parser.add_argument(
         "--output_bam",
-        help="Output BAM file containing aligned reads with tags for uncorrected \
+        help="Output BAM file containing aligned reads with tags \
+        for uncorrected \
         barcodes (CR) and barcode QVs (CY) [bc_uncorr.sorted.bam]",
         type=str,
         default="bc_uncorr.sorted.bam",

@@ -33,8 +33,8 @@ def parse_args():
     # Positional mandatory arguments
     parser.add_argument(
         "bam",
-        help="BAM file of alignments with tags for gene (GN), corrected barcode \
-        (CB) and uncorrected UMI (UY)",
+        help="BAM file of alignments with tags for gene (GN), \
+        corrected barcode (CB) and uncorrected UMI (UY)",
         type=str,
     )
 
@@ -58,8 +58,9 @@ def parse_args():
 
     parser.add_argument(
         "--cell_gene_max_reads",
-        help="Maximum number of reads to consider for a particular gene + cell \
-        barcode combination. This is required to prevent too many PCR \
+        help="Maximum number of reads to consider for a particular \
+        gene + cell barcode combination. \
+        This is required to prevent too many PCR \
         duplicates from crashing the UMI clustering algorithm. \
         Can be increased \
         if sufficient UMI complexity is observed. [20000]",

@@ -26,8 +26,8 @@ def parse_args():
     # Positional mandatory arguments
     parser.add_argument(
         "bam",
-        help="Sorted BAM file of stranded sequencing reads aligned to a reference. \
-            Alignments must have the CR and CY tags.",
+        help="Sorted BAM file of stranded sequencing reads aligned to \
+            a reference. Alignments must have the CR and CY tags.",
         type=str,
     )
 
@@ -49,8 +49,9 @@ def parse_args():
 
     parser.add_argument(
         "--output_bam",
-        help="Output BAM file containing aligned reads with tags for uncorrected \
-        barcodes (CR), corrected barcodes (CB), barcode QVs (CY), uncorrected \
+        help="Output BAM file containing aligned reads with tags for \
+        uncorrected barcodes (CR), corrected barcodes (CB),\
+        barcode QVs (CY), uncorrected \
         UMIs (UR), and UMI QVs (UY) [bc_corr.umi_uncorr.sorted.bam]",
         type=str,
         default="bc_corr.umi_uncorr.sorted.bam",

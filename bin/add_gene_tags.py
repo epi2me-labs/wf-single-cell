@@ -30,8 +30,8 @@ def parse_args():
     # Optional arguments
     parser.add_argument(
         "--output",
-        help="Output BAM file containing aligned reads with gene name tags (GN) \
-        [gene.sorted.bam]",
+        help="Output BAM file containing aligned reads with gene name \
+            tags (GN) [gene.sorted.bam]",
         type=str,
         default="gene.sorted.bam",
     )
