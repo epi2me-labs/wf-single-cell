@@ -1,16 +1,17 @@
 #!/usr/bin/env python
+"""Umap reduce."""
 import argparse
 import logging
-import os
 
 import pandas as pd
 import umap
+
 
 logger = logging.getLogger(__name__)
 
 
 def parse_args():
-    # Create argument parser
+    """Create argument parser."""
     parser = argparse.ArgumentParser()
 
     # Positional mandatory arguments
@@ -67,6 +68,7 @@ def parse_args():
 
 
 def init_logger(args):
+    """Initiate logger."""
     logging.basicConfig(
         format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
@@ -76,6 +78,7 @@ def init_logger(args):
 
 
 def main(args):
+    """Run entry point."""
     init_logger(args)
 
     df = pd.read_csv(args.matrix, delimiter="\t").set_index("gene")
@@ -84,7 +87,8 @@ def main(args):
     X = df.transpose()
 
     logger.info(
-        f"Running UMAP: {X.shape[1]} features --> {args.dimensions} dimensions")
+        f"Running UMAP: {X.shape[1]} features --> \
+            {args.dimensions} dimensions")
     reducer = umap.UMAP(
         n_neighbors=args.n_neighbors,
         min_dist=args.min_dist,

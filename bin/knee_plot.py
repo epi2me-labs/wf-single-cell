@@ -1,9 +1,10 @@
 #!/usr/bin/env python
+"""Knee plot."""
 import argparse
+from collections import Counter
 import logging
 import operator
 import sys
-from collections import Counter
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,11 +12,12 @@ import numpy.matlib as npm
 from scipy.signal import argrelextrema
 from scipy.stats import gaussian_kde
 
+
 logger = logging.getLogger(__name__)
 
 
 def parse_args():
-    # Create argument parser
+    """Create argument parser."""
     parser = argparse.ArgumentParser()
 
     # Positional mandatory arguments
@@ -38,10 +40,11 @@ def parse_args():
     parser.add_argument(
         "--cell_count",
         help="Instead of empirically setting the cell count \
-                        threshold from the knee plot using distance or density \
-                        algorithms, use the top <N> cells based on read count. \
-                        This option overrides the <knee_method> for generating \
-                        the whitelist [None]",
+                        threshold from the knee plot using distance \
+                        or density algorithms, use the top <N> cells based \
+                        on read count. \
+                        This option overrides the <knee_method> \
+                        for generating the whitelist [None]",
         type=int,
         default=None,
     )
@@ -49,7 +52,8 @@ def parse_args():
     parser.add_argument(
         "--read_count_threshold",
         help="Instead of empirically setting the cell count \
-                        threshold from the knee plot using distance or density \
+                        threshold from the knee plot using distance or \
+                        density \
                         algorithms, pick cells based on an explicit minimum \
                         read count per cell. This option overrides the \
                         <knee_method> for generating the whitelist [None]",
@@ -93,32 +97,36 @@ def parse_args():
     if (args.cell_count is not None) and (
             args.read_count_threshold is not None):
         raise Exception(
-            "Cannot specify BOTH --cell_count and --read_count_threshold. Please pick one method."
+            "Cannot specify BOTH --cell_count and \
+                --read_count_threshold. Please pick one method."
         )
 
     if args.cell_count is not None:
         logging.info(
-            f"Using explicit cell count (N = {args.cell_count}) for creating whitelist, not the distance or density algorithm"
+            f"Using explicit cell count (N = {args.cell_count})\
+                for creating whitelist, not the distance or density algorithm"
         )
 
     if args.read_count_threshold is not None:
         logging.info(
-            f"Using explicit reads per cell threshold (>= {args.read_count_threshold}) for creating whitelist, not the distance or density algorithm"
+            f"Using explicit reads per cell threshold \
+                (>= {args.read_count_threshold}) for creating whitelist,\
+                    not the distance or density algorithm"
         )
 
     return args
 
 
 def getKneeDistance(values):
-    """
+    """Get knee distance.
+
     This function is based on
-    https://stackoverflow.com/questions/2018178/finding-the-best-trade-off-point-on-a-curve
+    https://stackoverflow.com/questions/2018178/finding-the-best-trade-off-point-on-a-curve 
     and https://dataplatform.cloud.ibm.com/analytics/notebooks/54d79c2a-f155-40ec-93ec-ed05b58afa39/view?access_token=6d8ec910cf2a1b3901c721fcb94638563cd646fe14400fecbb76cea6aaae2fb1
     The idea is to draw a line from the first to last point on the
     cumulative counts curve and then find the point on the curve
     which is the maximum distance away from this line
-    """
-
+    """ # noqa
     # get coordinates of all the points
     nPoints = len(values)
     allCoord = np.vstack((range(nPoints), values)).T
@@ -134,7 +142,8 @@ def getKneeDistance(values):
     vecFromFirst = allCoord - firstPoint
 
     # To calculate the distance to the line, we split vecFromFirst into two
-    # components, one that is parallel to the line and one that is perpendicular
+    # components, one that is parallel to the line and one that
+    # is perpendicular.
     # Then, we take the norm of the part that is perpendicular to the line and
     # get the distance.
     # We find the vector parallel to the line by projecting vecFromFirst onto
@@ -169,8 +178,9 @@ def getKneeEstimateDensity(
         expect_cells=False,
         cell_number=False,
         plotfile_prefix=None):
-    """estimate the number of "true" cell barcodes using a gaussian
-    density-based method
+    """Estimate the number of "true" cell barcodes using a gaussian \
+    density-based method.
+
     input:
          cell_barcode_counts = dict(key = barcode, value = count)
          expect_cells (optional) = define the expected number of cells
@@ -179,7 +189,6 @@ def getKneeEstimateDensity(
     returns:
          List of true barcodes
     """
-
     # very low abundance cell barcodes are filtered out (< 0.001 *
     # the most abundant)
     threshold = 0.001 * cell_barcode_counts.most_common(1)[0][1]
@@ -246,6 +255,7 @@ def getKneeEstimateDensity(
 
 
 def get_barcode_counts(barcodes):
+    """Get barcode counts."""
     barcode_counts = {}
     for line in open(barcodes, "r"):
         line = line.strip()
@@ -256,16 +266,19 @@ def get_barcode_counts(barcodes):
 
 
 def apply_bc_cutoff(ont_bc_sorted, idx):
+    """Apply bc cutoff."""
     return set(list(ont_bc_sorted.keys())[: idx + 1])
 
 
 def write_ont_barcodes(cutoff_ont_bcs, args):
+    """Write ont barcodes."""
     with open(args.output_whitelist, "wt") as f:
         f.write("\n".join(list(cutoff_ont_bcs)))
         f.write("\n")
 
 
 def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
+    """Make kneeplot."""
     ont_bc_sorted = dict(
         sorted(ont_bc.items(), key=operator.itemgetter(1), reverse=True)
     )
@@ -321,7 +334,9 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
             print("Invalid value for --knee_method (distance, density)")
             sys.exit()
         logger.info(
-            f"Writing {len(cutoff_ont_bcs)} cells to {args.output_whitelist} based on the {args.knee_method} algorithm"
+            f"Writing {len(cutoff_ont_bcs)} cells to \
+                {args.output_whitelist} based on the \
+                    {args.knee_method} algorithm"
         )
     elif args.cell_count is not None:
         cell_count = min(len(ont_bc_sorted), args.cell_count)
@@ -331,11 +346,13 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
             f"Writing top {cell_count} cells to {args.output_whitelist}")
     elif args.read_count_threshold is not None:
         cutoff_ont_bcs = set(
-            [bc for bc, n in ont_bc_sorted.items() if n >= args.read_count_threshold]
+            [bc for bc, n in ont_bc_sorted.items()
+                if n >= args.read_count_threshold]
         )
         idxOfBestPoint = len(cutoff_ont_bcs)
         logger.info(
-            f"Writing {len(cutoff_ont_bcs)} cells with >= {args.read_count_threshold} reads to {args.output_whitelist}"
+            f"Writing {len(cutoff_ont_bcs)} cells with >= \
+                {args.read_count_threshold} reads to {args.output_whitelist}"
         )
 
     write_ont_barcodes(cutoff_ont_bcs, args)
@@ -430,11 +447,13 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
 
 
 def read_ilmn_barcodes(barcodes):
+    """Read ilmn barcodes."""
     bc = set([x.split("-")[0] for x in np.loadtxt(barcodes, dtype="str")])
     return bc
 
 
 def intersect_ont_ilmn(ont_bc, ilmn_bc):
+    """Intersect ont ilmn."""
     conserved_bc = {}
     for bc, n in ont_bc.items():
         if bc in ilmn_bc:
@@ -443,6 +462,7 @@ def intersect_ont_ilmn(ont_bc, ilmn_bc):
 
 
 def init_logger(args):
+    """Initiate logger."""
     logging.basicConfig(
         format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
@@ -452,6 +472,7 @@ def init_logger(args):
 
 
 def main(args):
+    """Run entry point."""
     ont_bc = get_barcode_counts(args.barcodes)
     if args.ilmn_barcodes is not None:
         ilmn_bc = read_ilmn_barcodes(args.ilmn_barcodes)
@@ -466,5 +487,4 @@ def main(args):
 
 if __name__ == "__main__":
     args = parse_args()
-
     main(args)

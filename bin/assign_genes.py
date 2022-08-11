@@ -1,21 +1,19 @@
 #!/usr/bin/env python
+"""Assign genes."""
 import argparse
-import collections
 import logging
 import os
-import pathlib
-import shutil
-import sys
 
 import bioframe as bf
 import numpy as np
 import pandas as pd
 
+
 logger = logging.getLogger(__name__)
 
 
 def parse_args():
-    # Create argument parser
+    """Create argument parser."""
     parser = argparse.ArgumentParser()
 
     # Positional mandatory arguments
@@ -69,6 +67,7 @@ def parse_args():
 
 
 def init_logger(args):
+    """Initiate logger."""
     logging.basicConfig(
         format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
@@ -115,7 +114,9 @@ def load_gtf(args):
 
 def load_bed(args):
     """
-    Read in the BED file of alignment intervals. BED file created by running
+    Read in the BED file of alignment intervals.
+
+    BED file created by running
     bedtools bamtobed -i <BAM>
 
     :param args: object containing all supplied arguments
@@ -141,7 +142,8 @@ def load_bed(args):
 
 
 def assign_status_low_mapq(df, args):
-    """
+    """Assign status low mapq.
+
     Assign all reads with ambiguous mapping as "Unassigned_mapq" and set the
     assigned gene to NA.
 
@@ -149,7 +151,8 @@ def assign_status_low_mapq(df, args):
     :type df: pandas dataFrame
     :param args: object containing all supplied arguments
     :type args: class argparse.Namespace
-    :return: dataframe of gene annotation assignments with Unassigned_mapq labels
+    :return: dataframe of gene annotation assignments
+        with Unassigned_mapq labels
     :rtype: pandas dataFrame
     """
     df.loc[df["score"] < args.mapq, "status"] = "Unassigned_mapq"
@@ -159,12 +162,16 @@ def assign_status_low_mapq(df, args):
 
 def assign_status_ambiguous_overlap(df):
     """
+    Assign status ambiguous overlap.
+
     Assign all reads with equal overlap with multiple features as
     "Unassigned_ambiguous" and set gene assignment to NA
 
-    :param df: dataframe of all gene annotation assignments per alignment
+    :param df: dataframe of all gene annotation assignments
+        per alignment
     :type df: pandas dataFrame
-    :return: dataframe of gene annotation assignments with Unassigned_ambiguous labels
+    :return: dataframe of gene annotation assignments
+        with Unassigned_ambiguous labels
     :rtype: pandas dataFrame
     """
     is_ambiguous = df[df["status"] == "Unknown"].duplicated(
@@ -180,11 +187,12 @@ def assign_status_ambiguous_overlap(df):
 
 def assign_status_no_features(df):
     """
-    Assign all reads without any features as "Unassigned_no_features"
+    Assign all reads without any features as "Unassigned_no_features".
 
     :param df: dataframe of all gene annotation assignments per alignment
     :type df: pandas dataFrame
-    :return: dataframe of gene annotation assignments with Unassigned_no_features labels
+    :return: dataframe of gene annotation assignments with
+        Unassigned_no_features labels
     :rtype: pandas dataFrame
     """
     df.loc[df["gene"] == 0, "status"] = "Unassigned_no_features"
@@ -194,7 +202,9 @@ def assign_status_no_features(df):
 
 def find_largest_overlap(df):
     """
-    Find the largest overlap when multiple overlaps are present. Label the longest
+    Find the largest overlap when multiple overlaps are present.
+
+    Label the longest
     overlap as Assigned and drop the shorter overlaps from the dataframe.
 
     :param df: dataframe of all gene annotation assignments per alignment
@@ -214,7 +224,8 @@ def find_largest_overlap(df):
 
 
 def get_overlaps(bed, gtf):
-    """
+    """Get overlaps.
+
     Use bioframe to identify overlaps between the alignment and gene annotation
     intervals.
 
@@ -225,7 +236,6 @@ def get_overlaps(bed, gtf):
     :return: dataframe of annotations per alignment based on overlaps
     :rtype: pandas dataFrame
     """
-
     # how="left" means that the returned dataframe contains all alignments,
     # regardless of whether it overlapped with any annotation intervals.
     df = bf.overlap(
@@ -272,7 +282,10 @@ def get_overlaps(bed, gtf):
 
 def process_bed_chunk(bed_chunk, gtf, args):
     """
-    Read in the chunked bed dataframe and the chromosome-specific GTF reference.
+    Process bed chunk.
+
+    Read in the chunked bed dataframe and
+    the chromosome-specific GTF reference.
     Find the alignment/annotation overlaps using bioframe and assign a gene
     based on the results.
 
@@ -299,6 +312,7 @@ def process_bed_chunk(bed_chunk, gtf, args):
 
 
 def main(args):
+    """Run main entry point."""
     gtf = load_gtf(args)
     bed = load_bed(args)
 
