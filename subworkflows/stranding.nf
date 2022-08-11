@@ -6,6 +6,8 @@
 process chunk_files {
     // The orginal SM rule (call_cat_fastq) called chunk_fastqs.py, which did file concatenation and chuck creation, we need only the latter
     cpus params.max_threads
+    label "wfsockeye"
+    conda "envs/stranding.yml"
     input:
         tuple val(sample_id),
               val(kit_name),
@@ -26,6 +28,8 @@ process call_adapter_scan {
     // Stranding of reads and ?
     // Neil: Only one thread for this. Seems low
     // Do we need a batch number to add to output filenames?
+    label "wfsockeye"
+    conda "envs/stranding.yml"
     input:
         tuple val(sample_id),
             val(kit_name),
