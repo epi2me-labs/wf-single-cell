@@ -41,9 +41,9 @@ def parse_args():
 
     parser.add_argument(
         "superlist",
-        help="Comprehensive whitelist of all possible cell barcodes. These vary \
-        depending on which 10X kit was used. For 3' single cell gene \
-        expression \
+        help="Comprehensive whitelist of all possible cell barcodes.\
+        These vary depending on which 10X kit was used. \
+        For 3' single cell gene expression \
         kit: data/3M-february-2018.txt.gz. For 5' single cell gene expression \
         kit: data/737K-august-2016.txt. For single cell multiome (ATAC + GEX) \
         kit: data/737K-arc-v1.txt.gz",
