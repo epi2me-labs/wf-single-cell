@@ -5,6 +5,7 @@
 
 process chunk_files {
     // The orginal SM rule (call_cat_fastq) called chunk_fastqs.py, which did file concatenation and chuck creation, we need only the latter
+    cpus params.max_threads
     input:
         tuple val(sample_id),
               val(kit_name),
@@ -17,7 +18,7 @@ process chunk_files {
               val(kit_version),
               path("chunks/*")
     """
-    seqkit split $fastq -p $params.MAX_THREADS -O chunks
+    seqkit split $fastq -p ${task.cpus} -O chunks
     """
 }
 

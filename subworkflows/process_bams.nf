@@ -6,7 +6,7 @@ process extract_barcodes{
     Build minimap index from reference genome
     */
     label "wftemplate"
-    cpus params.threads
+    cpus params.max_threads
     input:
         tuple val(sample_id), 
               val(kit_name),
@@ -18,8 +18,8 @@ process extract_barcodes{
               path(bam_idx)
 
     output:
-        tuple val(sample_id), path("*output.bam"), path("*.bai"), emit: bam
-        tuple val(sample_id), path("*output.tsv"), emit: counts
+        tuple val(sample_id), path("*.bam"), path("*.bai"), emit: bam
+        tuple val(sample_id), path("*.tsv"), emit: counts
     """
     extract_barcode.py \
     $bam $bc_long_list\
@@ -29,7 +29,7 @@ process extract_barcodes{
     --barcode_length $barcode_length \
     --umi_length $umi_length \
     --output_bam "tmp.bam" \
-    --output_barcodes "${sample_id}.output.tsv";
+    --output_barcodes "${sample_id}.barcodes.tsv";
 
     samtools reheader --no-PG -c 'grep -v ^@PG' tmp.bam > "${sample_id}.bam"
     samtools index "${sample_id}.bam"
@@ -39,26 +39,27 @@ process extract_barcodes{
 
 process generate_whitelist{
     label "wftemplate"
-    cpus params.threads
+    cpus params.max_threads
     input:
         tuple val(sample_id), path(counts)
     output:
         tuple val(sample_id), path("*whitelist.tsv"), emit: whitelist
         tuple val(sample_id), path("*kneeplot.png"), emit: kneeplot
     """
-    knee_plot.py $params.barcode_kneeplot_flags --output_whitelist "$sample_id"_whitelist.tsv \
-    --output_plot "$sample_id"_kneeplot.png $counts
+    knee_plot.py ${params.BARCODE_KNEEPLOT_FLAGS} \
+        --output_whitelist "${sample_id}_whitelist.tsv" \
+        --output_plot "${sample_id}_kneeplot.png" $counts
     """
 }
 
 process split_bam_by_chroms{
     label "wftemplate"
-    cpus params.threads
+    cpus params.max_threads
     input:
         tuple val(sample_id), path(bam), path(bai)
     output:
-        tuple val(sample_id),
-              path("splits/chr*.bam"), 
+        tuple val(sample_id), 
+              path("splits/chr*.bam"),
               path("splits/chr*.bai"), emit: bam
     """
     split_bam_by_chroms.py -t ${task.cpus} --output_dir splits $bam
@@ -66,23 +67,138 @@ process split_bam_by_chroms{
 }
 
 
-
 process assign_barcodes{
     label "wftemplate"
-    cpus 10
+    cpus params.max_threads
     input:
-        tuple val(sample_id), 
-              path(bam), 
-              path(bai), 
-              path(whitelist)
+         tuple val(sample_id), 
+               val(kit_name),
+               val(kit_version),
+               val(barcode_length),
+               val(umi_length),
+               path(bc_long_list),
+               path(whitelist),
+               val(chr),
+               val(sample_id),
+               path(bam),
+               path(bai)
     output:
+        tuple val(sample_id), 
+            val(chr),
+            path("${sample_id}.bc_assign.bam"),
+            path("${sample_id}.bc_assign.bam.bai"), 
+            emit: CHROM_BAM_BC_BAI
+        tuple val(sample_id), 
+              path("${sample_id}.bc_assign_counts.tsv"), 
+              emit: CHROM_ASSIGNED_BARCODE_COUNTS
     """
-    assign_barcodes.py -t ${task.cpus} --output_bam output --output_counts counts \
-    --max_ed $params.max_ed --min_ed_diff $params.min_ed_diff --kit "$params.kit" \
-    --adapter1_suff_length $params.adapter1_suff_length --barcode_length $params.barcode_length \
-    --umi_length $params.umi_length $bam $whitelist
+    assign_barcodes.py -t ${task.cpus} \
+        --output_bam tmp.bam \
+        --output_counts ${sample_id}.bc_assign_counts.tsv \
+        --max_ed $params.BARCODE_MAX_ED \
+        --min_ed_diff $params.BARCODE_MIN_ED_DIFF \
+        --kit $kit_name \
+        --adapter1_suff_length $params.BARCODE_ADAPTER1_SUFF_LENGTH \
+        --barcode_length $barcode_length \
+        --umi_length \
+        $umi_length $bam $whitelist
+
+    # Cleanup header #2
+    samtools reheader --no-PG -c 'grep -v ^@PG' \
+        tmp.bam > "${sample_id}.bc_assign.bam";
+    samtools index "${sample_id}.bc_assign.bam"
 """
 }
+
+process bam_to_bed {
+    input:
+        tuple val(sample_id), 
+              val(chr),
+              path(bam),
+              path(bai) 
+    output:
+        tuple val(sample_id), 
+              val(chr),
+              path('*bc_assign.bed'), 
+              emit: CHROM_BED_BC
+    """
+    bedtools bamtobed -i $bam > "${sample_id}_bc_assign.bed"
+    """
+}
+
+process split_gtf_by_chroms {
+    input:
+        path(gtf)
+    output:
+        path("*"), emit: CHROM_GTF
+    """
+    awk '/^[^#]/ {print>\$1}' $gtf 
+    """
+}   
+
+process assign_genes {
+    input:
+        tuple val(sample_id),
+              val(chr),
+              path(CHROM_BED_BC),
+              path(CHROM_GTF)
+    output:
+        tuple val(sample_id),
+              val(chr),
+              path("${sample_id}_${chr}.read.gene_assigns.tsv"),
+              emit: CHROM_TSV_GENE_ASSIGNS
+    """
+    python assign_genes.py \
+    --output ${sample_id}_${chr}.read.gene_assigns.tsv \
+    CHROM_BED_BC CHROM_GTF
+    """
+}
+
+process add_gene_tags_to_bam {
+    input:
+        tuple val(sample_id),
+              path(CHROM_BAM_BC),
+              path(CHROM_BAM_BC_BAI),
+              path(CHROM_TSV_GENE_ASSIGNS)
+    output:
+        tuple val(sample_id),
+              path("${sample_id}_bc_assign.gene.bam"), 
+              path("${sample_id}_bc_assign.gene.bam"),
+              emit: CHROM_BAM_BC_GENE_BAI
+    """
+    touch {input.bai};
+    add_gene_tags.py \
+        --output tmp.bam \
+    CHROM_BAM_BC CHROM_TSV_GENE_ASSIGNS"
+
+    # Cleanup headers #3
+    samtools reheader --no-PG -c 'grep -v ^@PG' \
+    tmp.bam > ; ${sample_id}_bc_assign.gene.bam
+    samtools index ${sample_id}_bc_assign.gene.bam
+    """
+}
+
+
+// process cluster_umis {
+//     input:
+//         CHROM_BAM_BC_GENE,
+//         bai=CHROM_BAM_BC_GENE_BAI,
+//     output:
+//         bam=temp(CHROM_BAM_FULLY_TAGGED_TMP),
+//     params:
+//         interval=config["UMI_GENOMIC_INTERVAL"],
+//         cell_gene_max_reads=config["UMI_CELL_GENE_MAX_READS"],
+//     conda:
+//         "../envs/umis.yml"
+//     threads: config["UMI_CLUSTER_MAX_THREADS"]
+//     shell:
+//         "touch {input.bai}; "
+//         "python {SCRIPT_DIR}/cluster_umis.py "
+//         "--threads {threads} "
+//         "--ref_interval {params.interval} "
+//         "--cell_gene_max_reads {params.cell_gene_max_reads} "
+//         "--output {output.bam} {input.bam}"
+// }
 
 
 process get_kit_info {
@@ -137,6 +253,7 @@ workflow process_bams {
         bam_idx
         sc_sample_sheet
         kit_config
+        gtf
     main:
         get_kit_info(
             kit_config,
@@ -156,10 +273,39 @@ workflow process_bams {
             extract_barcodes.out.counts
         )
 
-        assign_barcodes(
-            split_bam_by_chroms.out.bam
-            .join(generate_whitelist.out.whitelist)
-        )
+        bam_bai_chromes = split_bam_by_chroms.out.bam.map({it ->
+        // Merge bams and indxes along and add chromosome into tuple
+        // [sample_id, chr, bam, bai]
+            pairs = []
+            for (i=0; i<it[1].size(); i++) {
+                chr = it[1][i].toString().tokenize('/')[-1].tokenize('.')[-3]
+                pairs.add(tuple(it[0], chr, it[1][i], it[2][i]))
+            }
+            return pairs
+        }).flatMap(it-> it)
+
+        // // Todo remove redundant sample_ID
+        chro_bam_kit = get_kit_info.out.kit_info
+            .splitCsv(header:false, skip:1).join(generate_whitelist.out.whitelist)
+            .cross(bam_bai_chromes).map({it -> it.flatten()})
+            
+        assign_barcodes(chro_bam_kit)
+
+        bam_to_bed(assign_barcodes.out.CHROM_BAM_BC_BAI)
+
+        chr_gtf = split_gtf_by_chroms(gtf)
+        .flatten()
+        .map {file -> 
+            // create [chr, gtf]
+             tuple(file.toString().tokenize('/')[-1], file)}.view() // Add chromosome to tuple
+           
+ 
+        // assign_genes(
+        //     bam_to_bed.out.CHROM_BED_BC
+        //     .cross(chr_gtf{it -> it[1]})
+        //     )
+
+
         
         // headers = cleanup_headers_1(newl.bam)
         // white_list = generate_whitelist(newl.counts)

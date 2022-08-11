@@ -122,7 +122,8 @@ workflow pipeline {
             align.out.BAM_SORT,
             align.out.BAM_SORT_BAI,
             sc_sample_sheet,
-            kit_configs
+            kit_configs,
+            REF_GENES_GTF
         )
 
 }
