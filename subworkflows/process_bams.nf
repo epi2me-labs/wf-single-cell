@@ -157,11 +157,13 @@ process assign_genes {
 process add_gene_tags_to_bam {
     input:
         tuple val(sample_id),
+              cal(chr),
               path(CHROM_BAM_BC),
               path(CHROM_BAM_BC_BAI),
               path(CHROM_TSV_GENE_ASSIGNS)
     output:
         tuple val(sample_id),
+              val(chr),
               path("${sample_id}_bc_assign.gene.bam"), 
               path("${sample_id}_bc_assign.gene.bam"),
               emit: CHROM_BAM_BC_GENE_BAI
@@ -179,26 +181,35 @@ process add_gene_tags_to_bam {
 }
 
 
-// process cluster_umis {
-//     input:
-//         CHROM_BAM_BC_GENE,
-//         bai=CHROM_BAM_BC_GENE_BAI,
-//     output:
-//         bam=temp(CHROM_BAM_FULLY_TAGGED_TMP),
-//     params:
-//         interval=config["UMI_GENOMIC_INTERVAL"],
-//         cell_gene_max_reads=config["UMI_CELL_GENE_MAX_READS"],
-//     conda:
-//         "../envs/umis.yml"
-//     threads: config["UMI_CLUSTER_MAX_THREADS"]
-//     shell:
-//         "touch {input.bai}; "
-//         "python {SCRIPT_DIR}/cluster_umis.py "
-//         "--threads {threads} "
-//         "--ref_interval {params.interval} "
-//         "--cell_gene_max_reads {params.cell_gene_max_reads} "
-//         "--output {output.bam} {input.bam}"
-// }
+process cluster_umis {
+    cpus params.UMI_CLUSTER_MAX_THREADS
+    input:
+        tuple val(sample_id),
+              val(chr),
+              path(bam),
+              path(bai),
+    output:
+         tuple val(sample_id),
+              val(chr),
+              path("*.bam"),
+              path("*.bam.bai")
+    // params:
+    //     interval=config["UMI_GENOMIC_INTERVAL"],
+    //     cell_gene_max_reads=config["UMI_CELL_GENE_MAX_READS"],
+    // threads: config["UMI_CLUSTER_MAX_THREADS"]
+    """
+    cluster_umis.py 
+    --threads task.cpus \
+    --ref_interval $params.UMI_GENOMIC_INTERVAL \ 
+    --cell_gene_max_reads $params.UMI_CELL_GENE_MAX_READS \
+    --output tmp.bam $bam
+
+    //Cleanup headers #4
+    samtools reheader --no-PG -c 'grep -v ^@PG' \
+    tmp.bam > {output.bam};
+    samtools index ${sample_id}_${chr}_tagged.bam
+    """
+}
 
 
 process get_kit_info {

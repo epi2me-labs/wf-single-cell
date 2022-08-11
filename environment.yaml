@@ -5,11 +5,7 @@ channels:
     - bioconda
     - defaults
 dependencies:
-    - python==3.8.*
-    - aplanat >=0.5.0
-    - pysam >=0.15.03
-    - fastcat
-    - epi2melabs
+    - pysam==0.15.03
     - seqkit
     - biopython
     - pandas
@@ -17,7 +13,7 @@ dependencies:
     - numpy
     - vsearch==2.15.1
     - bioframe==0.3.2
-    - samtools==1.14
+    - samtools==>=1.10
     - editdistance
     - parasail-python==1.2.3
     - bedtools==2.30.0
