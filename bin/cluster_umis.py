@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # This code makes significant use of the UMI-tools package (MIT license).
 #
 # https://github.com/CGATOxford/UMI-tools
