@@ -1,4 +1,50 @@
+process get_kit_info {
+    label "wfsockeye"
+    conda "envs/assign_genes.yml"
+    input:
+        path kit_config
+        path sc_sample_sheet
+              
+    output:
+        path 'sample_kit_info.csv', emit: kit_info
+    
+    script:
+    def bc_longlist_dir = "${projectDir}/data"
+    """
+    #!/usr/bin/env python
+    import pandas as pd
 
+    sample_df = pd.read_csv("${sc_sample_sheet}", sep=",", comment="#").set_index("run_id", drop=True)
+
+    kit_df = pd.read_csv("$kit_config", sep=",", comment="#")
+
+    records = []
+    for run_id, row in sample_df.iterrows():
+        kit_name = sample_df.loc[run_id, "kit_name"]
+        kit_version = sample_df.loc[run_id, "kit_version"]
+
+        # Get barcode length based on the kit_name and kit_version specified for this run_id.
+        rows = (kit_df["kit_name"] == kit_name) & (kit_df["kit_version"] == kit_version)
+        barcode_length = kit_df.loc[rows, "barcode_length"].values[0]
+
+        # Get the appropriate cell barcode longlist based on the kit_name specified for this run_id.
+        if kit_name == "3prime":
+            long_list = "${bc_longlist_dir}/3M-february-2018.txt.gz"
+        elif kit_name == "5prime":
+            long_list = "${bc_longlist_dir}/737K-august-2016.txt.gz"
+        elif kit_name == "multiome":
+            long_list = "${bc_longlist_dir}/737K-arc-v1.txt.gz"
+        else:
+            raise Exception("Encountered an unexpected kit_name in samples.csv")
+
+        # Get UMI length based on the kit_name and kit_version specified for this run_id.
+        umi_length = kit_df.loc[rows, "umi_length"].values[0]
+        records.append([run_id, kit_name, kit_version, barcode_length, umi_length, long_list])
+    df_out = pd.DataFrame.from_records(records)
+    df_out.columns = ["sample_id", "kit_name", "kit_version", "barcode_length", "umi_length", "long_list"]
+    df_out.to_csv('sample_kit_info.csv', index=False)
+    """
+}
 
 
 process extract_barcodes{
@@ -218,6 +264,7 @@ process cleanup_headers_3 {
                path(bam)
     output:
         tuple val(sample_id), 
+              val(chr),
               path("*.bam"), 
               path("*.bam.bai"), 
               emit: CHROM_BAM_BC_BAI
@@ -236,22 +283,19 @@ process cluster_umis {
         tuple val(sample_id),
               val(chr),
               path(bam),
-              path(bai),
+              path(bai)
     output:
          tuple val(sample_id),
               val(chr),
               path("tmp.bam"),
               emit: bam
-    // params:
-    //     interval=config["UMI_GENOMIC_INTERVAL"],
-    //     cell_gene_max_reads=config["UMI_CELL_GENE_MAX_READS"],
-    // threads: config["UMI_CLUSTER_MAX_THREADS"]
     """
-    cluster_umis.py 
-    --threads task.cpus \
+    cluster_umis.py \
+    $bam \
+    --threads $task.cpus \
     --ref_interval $params.UMI_GENOMIC_INTERVAL \
     --cell_gene_max_reads $params.UMI_CELL_GENE_MAX_READS \
-    --output tmp.bam $bam
+    --output tmp.bam 
     """
 }
 
@@ -260,7 +304,9 @@ process cleanup_headers_4{
     conda "envs/samtools.yml"
     cpus params.max_threads
     input:
-         tuple val(sample_id), val(chr), path(bam)
+         tuple val(sample_id), 
+               val(chr), 
+               path(bam)
     output:
         tuple val(sample_id), path("*.bam"), path("*.bam.bai"), 
         emit: CHROM_BAM_BC_BAI
@@ -276,7 +322,9 @@ process combine_chrom_bams {
     label "wfsockeye"
     conda "envs/samtools.yml"
     input:
-        tuple val(sample_ids), path(bams)
+        tuple val(sample_id), 
+              path(bams),
+              path(bais)
     output:
         tuple val(sample_id), 
               path("${sample_id}.merged.bam"), 
@@ -293,13 +341,14 @@ process count_cell_gene_umi_reads {
     conda "envs/barcodes.yml"
     input:
         tuple val(sample_id),
-              path(bam)
+              path(bam),
+              path(bai)
     output:
-        tuple val(sample_id)
+        tuple val(sample_id),
               path("${sample_id}_cell_umi_gene.tsv"),
               emit: CELL_UMI_GENE_TSV
     """
-    python cell_umi_gene_table.py \
+    cell_umi_gene_table.py \
         --output  ${sample_id}_cell_umi_gene.tsv $bam
     """
 }
@@ -314,8 +363,9 @@ process umi_gene_saturation {
         tuple val(sample_id),
               path("*saturation_curves.png")
     """
-    python calc_saturation.py \
-        --output ${sample_id}_saturation_curves.png" cell_umi_gene_tsv
+    calc_saturation.py \
+        --output ${sample_id}_saturation_curves.png \
+        $cell_umi_gene_tsv
     """
 }
 
@@ -331,7 +381,7 @@ process construct_expression_matrix {
               path("*gene_expression.counts.tsv"), 
               emit: MATRIX_COUNTS_TSV
     """
-    python gene_expression.py \
+    gene_expression.py \
         --output ${sample_id}_gene_expression.counts.tsv $bam
     """
 }
@@ -368,7 +418,8 @@ process umap_reduce_expression_matrix {
               emit: MATRIX_UMAP_TSV
     """
     umap_reduce.py \
-        --output ${sample_id}_gene_expression.umap.tsv $MATRIX_PROCESSED_TSV
+        --output ${sample_id}_gene_expression.umap.tsv \
+        $MATRIX_PROCESSED_TSV
     """
 }
 
@@ -385,7 +436,7 @@ process umap_plot_total_umis {
               path("*umap.total.png"), 
               emit: MATRIX_UMAP_PLOT_TOTAL
     """
-    python plot_umap.py \
+    plot_umap.py \
         --output ${sample_id}_umap.total.png \
         $MATRIX_UMAP_TSV $MATRIX_PROCESSED_TSV
     """
@@ -407,7 +458,7 @@ process umap_plot_genes {
     """
     plot_umap.py \
         --gene $gene \
-        --output {output.plot \
+        --output ${sample_id}_umap.gene.${gene}.png \
         $MATRIX_UMAP_TSV $MATRIX_PROCESSED_TSV
     """
 }
@@ -423,7 +474,6 @@ process umap_plot_mito_genes {
         tuple val(sample_id),
               path("*umap.mitochondrial.png"), 
               emit: MATRIX_UMAP_PLOT_MITO
-    conda "envs/plotting.yml"
     """
     plot_umap.py \
         --mito_genes \
@@ -432,54 +482,6 @@ process umap_plot_mito_genes {
     """
 }
     
-
-process get_kit_info {
-    label "wfsockeye"
-    conda "envs/assign_genes.yml"
-    input:
-        path kit_config
-        path sc_sample_sheet
-              
-    output:
-        path 'sample_kit_info.csv', emit: kit_info
-    
-    script:
-    def bc_longlist_dir = "${projectDir}/data"
-    """
-    #!/usr/bin/env python
-    import pandas as pd
-
-    sample_df = pd.read_csv("${sc_sample_sheet}", sep=",", comment="#").set_index("run_id", drop=True)
-
-    kit_df = pd.read_csv("$kit_config", sep=",", comment="#")
-
-    records = []
-    for run_id, row in sample_df.iterrows():
-        kit_name = sample_df.loc[run_id, "kit_name"]
-        kit_version = sample_df.loc[run_id, "kit_version"]
-
-        # Get barcode length based on the kit_name and kit_version specified for this run_id.
-        rows = (kit_df["kit_name"] == kit_name) & (kit_df["kit_version"] == kit_version)
-        barcode_length = kit_df.loc[rows, "barcode_length"].values[0]
-
-        # Get the appropriate cell barcode longlist based on the kit_name specified for this run_id.
-        if kit_name == "3prime":
-            long_list = "${bc_longlist_dir}/3M-february-2018.txt.gz"
-        elif kit_name == "5prime":
-            long_list = "${bc_longlist_dir}/737K-august-2016.txt.gz"
-        elif kit_name == "multiome":
-            long_list = "${bc_longlist_dir}/737K-arc-v1.txt.gz"
-        else:
-            raise Exception("Encountered an unexpected kit_name in samples.csv")
-
-        # Get UMI length based on the kit_name and kit_version specified for this run_id.
-        umi_length = kit_df.loc[rows, "umi_length"].values[0]
-        records.append([run_id, kit_name, kit_version, barcode_length, umi_length, long_list])
-    df_out = pd.DataFrame.from_records(records)
-    df_out.columns = ["sample_id", "kit_name", "kit_version", "barcode_length", "umi_length", "long_list"]
-    df_out.to_csv('sample_kit_info.csv', index=False)
-    """
-}
 
 workflow process_bams {
     take:
@@ -492,7 +494,6 @@ workflow process_bams {
         get_kit_info(
             kit_config,
             sc_sample_sheet)
-
 
         extract_barcodes(
             get_kit_info.out.kit_info
@@ -553,37 +554,36 @@ workflow process_bams {
 
         cleanup_headers_3(add_gene_tags_to_bam.out.CHROM_BAM_BC)
 
-        // cluster_umis(cleanup_headers_3.out.CHROM_BAM_BC_BAI)
+        cluster_umis(cleanup_headers_3.out.CHROM_BAM_BC_BAI)
 
-        // cleanup_headers_4(cluster_umis.out.bam)
+        cleanup_headers_4(cluster_umis.out.bam)
 
-        // combine_chrom_bams(
-        //     cleanup_headers_4.outCHROM_BAM_BC_BAI.groupTuple()) // groupBy sample_id?
+        // group by sample_id
+        combine_chrom_bams(
+            cleanup_headers_4.out.CHROM_BAM_BC_BAI.groupTuple()) 
 
-        // count_cell_gene_umi_reads(combine_chrom_bams.out.BAM_FULLY_TAGGED)
+        count_cell_gene_umi_reads(combine_chrom_bams.out.BAM_FULLY_TAGGED)
 
-        // umi_gene_saturation(count_cell_gene_umi_reads.out.CELL_UMI_GENE_TSV)
+        umi_gene_saturation(count_cell_gene_umi_reads.out.CELL_UMI_GENE_TSV)
 
-        // construct_expression_matrix(combine_chrom_bams.out.BAM_FULLY_TAGGED)
+        construct_expression_matrix(combine_chrom_bams.out.BAM_FULLY_TAGGED)
 
-        // process_expression_matrix(construct_expression_matrix.out.MATRIX_COUNTS_TSV)
+        process_expression_matrix(construct_expression_matrix.out.MATRIX_COUNTS_TSV)
 
-        // umap_reduce_expression_matrix(process_expression_matrix.out.MATRIX_PROCESSED_TSV)
+        umap_reduce_expression_matrix(process_expression_matrix.out.MATRIX_PROCESSED_TSV)
 
-        // umap_plot_total_umis(
-        //     umap_reduce_expression_matrix.MATRIX_UMAP_TSV
-        //     .join(process_expression_matrix.MATRIX_PROCESSED_TSV))
+        umap_plot_total_umis(
+            umap_reduce_expression_matrix.out.MATRIX_UMAP_TSV
+            .join(process_expression_matrix.out.MATRIX_PROCESSED_TSV))
 
-        // TODO: CHANNEL OF GENES
-        // genes_to_plot = Channel.fromPath(params.UMAP_PLOT_GENES)
-        //     .splitCsv()
-        // umap_plot_genes(umap_reduce_expression_matrix.MATRIX_UMAP_TSV
-        //     .join(process_expression_matrix.MATRIX_PROCESSED_TSV),
-        //     .combine(genes_to_plot))
+        genes_to_plot = Channel.fromPath(params.UMAP_PLOT_GENES)
+            .splitCsv()
+        
+        umap_plot_genes(
+            umap_reduce_expression_matrix.out.MATRIX_UMAP_TSV
+            .join(process_expression_matrix.out.MATRIX_PROCESSED_TSV)
+            .combine(genes_to_plot))
 
-        // umap_plot_mito_genes(umap_reduce_expression_matrix.MATRIX_UMAP_TSV
-        //     .join(process_expression_matrix.MATRIX_PROCESSED_TSV))
-
-
-
+        umap_plot_mito_genes(umap_reduce_expression_matrix.out.MATRIX_UMAP_TSV
+            .join(process_expression_matrix.out.MATRIX_PROCESSED_TSV))
 }
