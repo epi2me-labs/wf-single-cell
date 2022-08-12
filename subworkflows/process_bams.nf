@@ -115,8 +115,8 @@ process assign_barcodes{
         --kit $kit_name \
         --adapter1_suff_length $params.BARCODE_ADAPTER1_SUFF_LENGTH \
         --barcode_length $barcode_length \
-        --umi_length \
-        $umi_length $bam $whitelist
+        --umi_length $umi_length \
+        $bam $whitelist
 """
 }
 
@@ -192,9 +192,9 @@ process add_gene_tags_to_bam {
     conda "envs/umis.yml"
     input:
         tuple val(sample_id),
-              cal(chr),
+              val(chr),
               path(CHROM_BAM_BC),
-              path(CHROM_BAM_BC_BAI)
+              path(CHROM_BAM_BC_BAI),
               path(CHROM_TSV_GENE_ASSIGNS)
     output:
         tuple val(sample_id),
@@ -213,17 +213,20 @@ process cleanup_headers_3 {
     cpus params.max_threads
     conda "envs/samtools.yml"
     input:
-         tuple val(sample_id), val(chr), path(bam)
+         tuple val(sample_id), 
+               val(chr), 
+               path(bam)
     output:
-        tuple val(sample_id), path("*.bam"), path("*.bam.bai"), 
-        emit: CHROM_BAM_BC_BAI
+        tuple val(sample_id), 
+              path("*.bam"), 
+              path("*.bam.bai"), 
+              emit: CHROM_BAM_BC_BAI
     """
     samtools reheader --no-PG -c 'grep -v ^@PG' $bam \
-        > ${sample_id}_bc_assign.gene.bam;
-    samtools index ${sample_id}_bc_assign.gene.bam
+        > ${sample_id}_${chr}_bc_assign.gene.bam;
+    samtools index ${sample_id}_${chr}_bc_assign.gene.bam
     """
 }
-
 
 process cluster_umis {
     label "wfsockeye"
@@ -520,11 +523,11 @@ workflow process_bams {
         }).flatMap(it-> it)
 
         // // Todo remove redundant sample_ID
-        chro_bam_kit = get_kit_info.out.kit_info
+        chr_bam_kit = get_kit_info.out.kit_info
             .splitCsv(header:false, skip:1).join(generate_whitelist.out.whitelist)
             .cross(bam_bai_chromes).map({it -> it.flatten()})
-            
-        assign_barcodes(chro_bam_kit)
+        // chr_bam_kit.view()
+        assign_barcodes(chr_bam_kit)
 
         cleanup_headers_2(assign_barcodes.out.CHROM_BAM_BC)
 
@@ -539,7 +542,7 @@ workflow process_bams {
         assign_genes(
             bam_to_bed.out.CHROM_BED_BC
             .cross(chr_gtf).map({it ->
-            // rejig the tuple to be [sample_id, chr, bed, gtf]
+            // rejig the tuple to [sample_id, chr, bed, gtf]
             [it[0][1], it[0][0], it[0][2], it[1][1]]})
         )
 
@@ -548,7 +551,7 @@ workflow process_bams {
             // join on sample_id + chr
             .join(assign_genes.out.CHROM_TSV_GENE_ASSIGNS, by:[0, 1]))
 
-        // cleanup_headers_3(add_gene_tags_to_bam.out.CHROM_BAM_BC)
+        cleanup_headers_3(add_gene_tags_to_bam.out.CHROM_BAM_BC)
 
         // cluster_umis(cleanup_headers_3.out.CHROM_BAM_BC_BAI)
 
