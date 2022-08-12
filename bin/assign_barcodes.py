@@ -498,7 +498,7 @@ def process_bam_records(tup):
     else:
         bam_out_fn = args.output_bam
 
-    bam_out = pysam.AlignmentFile(args.output_bam, "wb", template=bam)
+    bam_out = pysam.AlignmentFile(bam_out_fn, "wb", template=bam)
 
     barcode_counter = collections.Counter()
 
