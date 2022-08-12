@@ -36,17 +36,16 @@ process extract_barcodes{
 
 process cleanup_headers_1 {
     label "wfsockeye"
-    cpus params.MAX_THREADS
+    cpus params.max_threads
     conda "envs/samtools.yml"
     input:
-         tuple val(sample_id), path("*.bam")
+         tuple val(sample_id), path(bam)
     output:
         tuple val(sample_id), path("*.bam"), path("*.bam.bai"), 
         emit: extract_barcodes_cleaned
     """
-    samtools reheader --no-PG -c 'grep -v ^@PG' tmp.bam > "${sample_id}.bam"
+    samtools reheader --no-PG -c 'grep -v ^@PG' $bam > "${sample_id}.bam"
     samtools index "${sample_id}.bam"
-    rm tmp.bam
     """
 }
 
@@ -94,23 +93,23 @@ process assign_barcodes{
                val(umi_length),
                path(bc_long_list),
                path(whitelist),
-               val(chr),
-               val(sample_id),
+               val(_), // Redundant sample_id: remove
+               val(chr), 
                path(bam),
                path(bai)
     output:
         tuple val(sample_id), 
             val(chr),
-            path("${sample_id}.bc_assign.bam"),
+            path("tmp.bam"),
             emit: CHROM_BAM_BC
         tuple val(sample_id),
               val(chr),
-              path("${sample_id}.bc_assign_counts.tsv"), 
+              path("*.bc_assign_counts.tsv"), 
               emit: CHROM_ASSIGNED_BARCODE_COUNTS
     """
     assign_barcodes.py -t ${task.cpus} \
         --output_bam tmp.bam \
-        --output_counts ${sample_id}.bc_assign_counts.tsv \
+        --output_counts ${sample_id}_${chr}.bc_assign_counts.tsv \
         --max_ed $params.BARCODE_MAX_ED \
         --min_ed_diff $params.BARCODE_MIN_ED_DIFF \
         --kit $kit_name \
@@ -123,24 +122,29 @@ process assign_barcodes{
 
 process cleanup_headers_2 {
     label "wfsockeye"
-    cpus params.MAX_THREADS
+    cpus params.max_threads
     conda "envs/samtools.yml"
     input:
          tuple val(sample_id), val(chr), path(bam)
     output:
-        tuple val(sample_id), val(chr), path("*.bam"), path("*.bam.bai"), 
+        tuple val(sample_id), 
+              val(chr), 
+              path("*.bam"), 
+              path("*.bam.bai"), 
         emit: CHROM_BAM_BC_BAI
     """
-    samtools reheader --no-PG -c 'grep -v ^@PG' \
-    $bam > "${sample_id}.bc_assign.bam";
+    samtools reheader --no-PG -c 'grep -v ^@PG' $bam \
+        > "${sample_id}.bc_assign.bam";
     samtools index "${sample_id}.bc_assign.bam"
     """
 }
 
 process bam_to_bed {
+    label "wfsockeye"
+    conda "envs/bedtools.yml"
     input:
-        tuple val(sample_id), 
-              val(chr),
+        tuple val(chr), //emit chr first for doing cross on gtfs 
+              val(sample_id),
               path(bam),
               path(bai) 
     output:
@@ -164,6 +168,8 @@ process split_gtf_by_chroms {
 }   
 
 process assign_genes {
+    label "wfsockeye"
+    conda "envs/assign_genes.yml"
     input:
         tuple val(sample_id),
               val(chr),
@@ -175,37 +181,36 @@ process assign_genes {
               path("${sample_id}_${chr}.read.gene_assigns.tsv"),
               emit: CHROM_TSV_GENE_ASSIGNS
     """
-    python assign_genes.py \
+    assign_genes.py \
     --output ${sample_id}_${chr}.read.gene_assigns.tsv \
-    CHROM_BED_BC CHROM_GTF
+    $CHROM_BED_BC $CHROM_GTF
     """
 }
 
 process add_gene_tags_to_bam {
+    label "wfsockeye"
+    conda "envs/umis.yml"
     input:
         tuple val(sample_id),
               cal(chr),
               path(CHROM_BAM_BC),
               path(CHROM_BAM_BC_BAI)
-        tuple val(sample_id),
-              val(chr),
               path(CHROM_TSV_GENE_ASSIGNS)
     output:
         tuple val(sample_id),
               val(chr),
-              path("${sample_id}_bc_assign.gene.bam"), 
+              path("tmp.bam"), 
               emit: CHROM_BAM_BC
     """
-    touch {input.bai};
     add_gene_tags.py \
         --output tmp.bam \
-    CHROM_BAM_BC CHROM_TSV_GENE_ASSIGNS"
+        $CHROM_BAM_BC $CHROM_TSV_GENE_ASSIGNS
     """
 }
 
 process cleanup_headers_3 {
     label "wfsockeye"
-    cpus params.MAX_THREADS
+    cpus params.max_threads
     conda "envs/samtools.yml"
     input:
          tuple val(sample_id), val(chr), path(bam)
@@ -213,14 +218,16 @@ process cleanup_headers_3 {
         tuple val(sample_id), path("*.bam"), path("*.bam.bai"), 
         emit: CHROM_BAM_BC_BAI
     """
-    samtools reheader --no-PG -c 'grep -v ^@PG' \
-    tmp.bam > ${sample_id}_bc_assign.gene.bam
+    samtools reheader --no-PG -c 'grep -v ^@PG' $bam \
+        > ${sample_id}_bc_assign.gene.bam;
     samtools index ${sample_id}_bc_assign.gene.bam
     """
 }
 
 
 process cluster_umis {
+    label "wfsockeye"
+    conda "envs/umis.yml"
     cpus params.UMI_CLUSTER_MAX_THREADS
     input:
         tuple val(sample_id),
@@ -230,8 +237,8 @@ process cluster_umis {
     output:
          tuple val(sample_id),
               val(chr),
-              path("*.bam"),
-              path("*.bam.bai")
+              path("tmp.bam"),
+              emit: bam
     // params:
     //     interval=config["UMI_GENOMIC_INTERVAL"],
     //     cell_gene_max_reads=config["UMI_CELL_GENE_MAX_READS"],
@@ -242,32 +249,29 @@ process cluster_umis {
     --ref_interval $params.UMI_GENOMIC_INTERVAL \
     --cell_gene_max_reads $params.UMI_CELL_GENE_MAX_READS \
     --output tmp.bam $bam
-
-    //Cleanup headers #4
-    samtools reheader --no-PG -c 'grep -v ^@PG' \
-    tmp.bam > {output.bam};
-    samtools index ${sample_id}_${chr}_tagged.bam
     """
 }
 
 process cleanup_headers_4{
     label "wfsockeye"
     conda "envs/samtools.yml"
-    cpus params.MAX_THREADS
+    cpus params.max_threads
     input:
          tuple val(sample_id), val(chr), path(bam)
     output:
         tuple val(sample_id), path("*.bam"), path("*.bam.bai"), 
         emit: CHROM_BAM_BC_BAI
     """
-    samtools reheader --no-PG -c 'grep -v ^@PG' \
-    $bam >  ${sample_id}_${chr}.tagged.bam
+    samtools reheader --no-PG -c 'grep -v ^@PG' $bam \
+        >  ${sample_id}_${chr}.tagged.bam;
     samtools index ${sample_id}_${chr}.tagged.bam
     """
 }
 
 process combine_chrom_bams {
     // Merge all chromosome bams by sample_id
+    label "wfsockeye"
+    conda "envs/samtools.yml"
     input:
         tuple val(sample_ids), path(bams)
     output:
@@ -275,7 +279,6 @@ process combine_chrom_bams {
               path("${sample_id}.merged.bam"), 
               path("${sample_id}.merged.bam.bai"),
               emit: BAM_FULLY_TAGGED
-    conda "envs/samtools.yml"
     """
     samtools merge -o "${sample_id}.merged.bam" $bams; 
     samtools index "${sample_id}.merged.bam";
@@ -283,6 +286,8 @@ process combine_chrom_bams {
 }
 
 process count_cell_gene_umi_reads {
+    label "wfsockeye"
+    conda "envs/barcodes.yml"
     input:
         tuple val(sample_id),
               path(bam)
@@ -290,7 +295,6 @@ process count_cell_gene_umi_reads {
         tuple val(sample_id)
               path("${sample_id}_cell_umi_gene.tsv"),
               emit: CELL_UMI_GENE_TSV
-    conda "envs/barcodes.yml"
     """
     python cell_umi_gene_table.py \
         --output  ${sample_id}_cell_umi_gene.tsv $bam
@@ -298,13 +302,14 @@ process count_cell_gene_umi_reads {
 }
 
 process umi_gene_saturation {
+    label "wfsockeye"
+    conda "envs/plotting.yml"
     input:
         tuple val(sample_id),
               path(cell_umi_gene_tsv)
     output:
         tuple val(sample_id),
               path("*saturation_curves.png")
-    conda "envs/plotting.yml"
     """
     python calc_saturation.py \
         --output ${sample_id}_saturation_curves.png" cell_umi_gene_tsv
@@ -312,6 +317,8 @@ process umi_gene_saturation {
 }
 
 process construct_expression_matrix {
+    label "wfsockeye"
+    conda "envs/barcodes.yml"
     input:
         tuple val(sample_id),
               path(bam),
@@ -320,7 +327,6 @@ process construct_expression_matrix {
         tuple val(sample_id), 
               path("*gene_expression.counts.tsv"), 
               emit: MATRIX_COUNTS_TSV
-    conda "envs/barcodes.yml"
     """
     python gene_expression.py \
         --output ${sample_id}_gene_expression.counts.tsv $bam
@@ -328,14 +334,15 @@ process construct_expression_matrix {
 }
 
 process process_expression_matrix {
+    label "wfsockeye"
+    conda "envs/barcodes.yml"
     input:
         tuple val(sample_id),
               path(MATRIX_COUNTS_TSV)
     output:
         tuple val(sample_id), 
         path("*gene_expression.processed.tsv"),
-        emit: MATRIX_PROCESSED_TSV,
-    conda "/envs/barcodes.yml"
+        emit: MATRIX_PROCESSED_TSV
     """
     process_matrix.py \
     --min_genes $params.MATRIX_MIN_GENES \
@@ -347,6 +354,8 @@ process process_expression_matrix {
 }
 
 process umap_reduce_expression_matrix {
+    label "wfsockeye"
+    conda "envs/umap.yml"
     input:
         tuple val(sample_id),
               path(MATRIX_PROCESSED_TSV)
@@ -354,7 +363,6 @@ process umap_reduce_expression_matrix {
          tuple val(sample_id),
               path("*gene_expression.umap.tsv"), 
               emit: MATRIX_UMAP_TSV
-    conda "/envs/umap.yml"
     """
     umap_reduce.py \
         --output ${sample_id}_gene_expression.umap.tsv $MATRIX_PROCESSED_TSV
@@ -363,6 +371,8 @@ process umap_reduce_expression_matrix {
 
 
 process umap_plot_total_umis {
+    label "wfsockeye"
+    conda "envs/plotting.yml"
     input:
         tuple val(sample_id),
               path(MATRIX_UMAP_TSV),
@@ -371,7 +381,6 @@ process umap_plot_total_umis {
           tuple val(sample_id),
               path("*umap.total.png"), 
               emit: MATRIX_UMAP_PLOT_TOTAL
-    conda "envs/plotting.yml"
     """
     python plot_umap.py \
         --output ${sample_id}_umap.total.png \
@@ -381,6 +390,8 @@ process umap_plot_total_umis {
 
 process umap_plot_genes {
     // TODO: make a channle of input genes for thes process
+    label "wfsockeye"
+    conda "envs/plotting.yml"
     input:
         tuple val(sample_id),
               path(MATRIX_UMAP_TSV),
@@ -390,7 +401,6 @@ process umap_plot_genes {
         tuple val(sample_id),
               path("*umap.gene.${gene}.png"), 
               emit: MATRIX_UMAP_PLOT_GENE
-    conda "envs/plotting.yml"
     """
     plot_umap.py \
         --gene $gene \
@@ -400,6 +410,8 @@ process umap_plot_genes {
 }
 
 process umap_plot_mito_genes {
+    label "wfsockeye"
+    conda "envs/plotting.yml"
     input:
         tuple val(sample_id),
               path(MATRIX_UMAP_TSV),
@@ -518,27 +530,32 @@ workflow process_bams {
 
         bam_to_bed(cleanup_headers_2.out.CHROM_BAM_BC_BAI)
 
-        // chr_gtf = split_gtf_by_chroms(gtf)
-        // .flatten()
-        // .map {file -> 
-        //     // create [chr, gtf]
-        //      tuple(file.toString().tokenize('/')[-1], file)}.view() // Add chromosome to tuple
-           
- 
-        // assign_genes(
-        //     bam_to_bed.out.CHROM_BED_BC
-        //     .cross(chr_gtf{it -> it[1]}))
+        chr_gtf = split_gtf_by_chroms(gtf)
+        .flatten()
+        .map {file -> 
+            // create [chr, gtf]
+             tuple(file.toString().tokenize('/')[-1], file)} // Add chromosome to tuple
 
-        // add_gene_tags_to_bam(
-        //     cleanup_headers_2.out.CHROM_BAM_BC_BAI
-        //     .join(assign_genes))
+        assign_genes(
+            bam_to_bed.out.CHROM_BED_BC
+            .cross(chr_gtf).map({it ->
+            // rejig the tuple to be [sample_id, chr, bed, gtf]
+            [it[0][1], it[0][0], it[0][2], it[1][1]]})
+        )
+
+        add_gene_tags_to_bam(
+            cleanup_headers_2.out.CHROM_BAM_BC_BAI
+            // join on sample_id + chr
+            .join(assign_genes.out.CHROM_TSV_GENE_ASSIGNS, by:[0, 1]))
 
         // cleanup_headers_3(add_gene_tags_to_bam.out.CHROM_BAM_BC)
 
         // cluster_umis(cleanup_headers_3.out.CHROM_BAM_BC_BAI)
 
+        // cleanup_headers_4(cluster_umis.out.bam)
+
         // combine_chrom_bams(
-        //     cluster_umis.out.groupTuple()) // groupBy sample_id?
+        //     cleanup_headers_4.outCHROM_BAM_BC_BAI.groupTuple()) // groupBy sample_id?
 
         // count_cell_gene_umi_reads(combine_chrom_bams.out.BAM_FULLY_TAGGED)
 
@@ -553,28 +570,17 @@ workflow process_bams {
         // umap_plot_total_umis(
         //     umap_reduce_expression_matrix.MATRIX_UMAP_TSV
         //     .join(process_expression_matrix.MATRIX_PROCESSED_TSV))
-        // )
 
-        //TODO: CHANNEL OF GENES
+        // TODO: CHANNEL OF GENES
+        // genes_to_plot = Channel.fromPath(params.UMAP_PLOT_GENES)
+        //     .splitCsv()
         // umap_plot_genes(umap_reduce_expression_matrix.MATRIX_UMAP_TSV
         //     .join(process_expression_matrix.MATRIX_PROCESSED_TSV),
-        //     .join(genes_channel))
+        //     .combine(genes_to_plot))
 
-        umap
-
-
-
+        // umap_plot_mito_genes(umap_reduce_expression_matrix.MATRIX_UMAP_TSV
+        //     .join(process_expression_matrix.MATRIX_PROCESSED_TSV))
 
 
 
-        
-        // headers = cleanup_headers_1(newl.bam)
-        // white_list = generate_whitelist(newl.counts)
-        // by_chrom = split_bam_by_chroms(headers.rehead)
-        // bam = by_chrom.bams.flatten().map{ 
-        //     it -> tuple(it.toString().split('/')[-2].toString(), it.toString().split("/")[-1].split("\\.sorted")[0], it)}
-        // bai = by_chrom.bai.flatten().map{ 
-        //     it -> tuple(it.toString().split('/')[-2].toString(), it.toString().split("/")[-1].split("\\.sorted")[0], it)}
-        // bam_bai = bam.join(bai, by:[0,1])
-        // assign_barcodes(bam_bai,white_list.whitelist)
 }
