@@ -22,7 +22,7 @@ include { process_bams } from './subworkflows/process_bams'
 process summariseAndCatReads {
     // concatenate fastq and fastq.gz in a dir
 
-    label "wftemplate"
+    label "wfsockeye"
     cpus 1
     input:
         tuple path(directory), val(meta)
@@ -37,7 +37,7 @@ process summariseAndCatReads {
 
 
 process getVersions {
-    label "wftemplate"
+    label "wfsockeye"
     cpus 1
     output:
         path "versions.txt"
@@ -50,7 +50,7 @@ process getVersions {
 
 
 process getParams {
-    label "wftemplate"
+    label "wfsockeye"
     cpus 1
     output:
         path "params.json"
@@ -69,15 +69,16 @@ process getParams {
 // decoupling the publish from the process steps.
 process output {
     // publish inputs to output directory
-    label "wftemplate"
-    publishDir "${params.out_dir}/${sample_id}", mode: 'copy', pattern: "*"
+    publishDir "${params.out_dir}", mode: 'copy', pattern: "*", 
+        saveAs: { filename -> "${sample_id}/$filename" }
+    label "isoforms"
     input:
         tuple val(sample_id),
-              val(fname)
+              path(fname)
     output:
         path fname
     """
-    echo "Writing output files."
+    echo "Writing output files"
     """
 }
 
@@ -140,11 +141,15 @@ workflow {
     REF_GENOME_DIR = file(params.REF_GENOME_DIR, checkIfExists: true)
 
     pipeline(sc_sample_sheet, REF_GENOME_DIR)
-    // output(pipeline.out.results.groupTuple()
-    //     .flatMap({it->  l = []
-    //         for (x in it[1..-1]){
-    //             l.add([it[0], it[1][0]])
-    //         }
-    //         return l
-    // }).view())
+    
+    output(pipeline.out.results.flatMap({it ->
+        l = [];
+            for (i=1; i<it.size(); i++) {
+                l.add(tuple(it[0], it[i]))
+            }
+            return l
+
+
+        }).view()
+    )
 }
