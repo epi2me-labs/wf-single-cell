@@ -70,9 +70,10 @@ process getParams {
 process output {
     // publish inputs to output directory
     label "wftemplate"
-    publishDir "${params.out_dir}", mode: 'copy', pattern: "*"
+    publishDir "${params.out_dir}/${sample_id}", mode: 'copy', pattern: "*"
     input:
-        path fname
+        tuple val(sample_id),
+              val(fname)
     output:
         path fname
     """
@@ -125,6 +126,9 @@ workflow pipeline {
             kit_configs,
             REF_GENES_GTF
         )
+        results = process_bams.out.results
+    emit:
+        results
 
 }
 
@@ -136,4 +140,11 @@ workflow {
     REF_GENOME_DIR = file(params.REF_GENOME_DIR, checkIfExists: true)
 
     pipeline(sc_sample_sheet, REF_GENOME_DIR)
+    // output(pipeline.out.results.groupTuple()
+    //     .flatMap({it->  l = []
+    //         for (x in it[1..-1]){
+    //             l.add([it[0], it[1][0]])
+    //         }
+    //         return l
+    // }).view())
 }

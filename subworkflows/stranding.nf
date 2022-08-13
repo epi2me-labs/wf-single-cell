@@ -118,7 +118,6 @@ process summarize_adapter_table {
     with open("${sample_id}_config_stats.json", "w") as f:
         json.dump(stats, f, indent=4)
     """
-
 }
 
 

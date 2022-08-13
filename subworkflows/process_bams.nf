@@ -130,7 +130,6 @@ process split_bam_by_chroms{
 process assign_barcodes{
     label "wfsockeye"
     conda "envs/barcodes.yml"
-    cpus params.max_threads
     input:
          tuple val(sample_id), 
                val(kit_name),
@@ -153,7 +152,7 @@ process assign_barcodes{
               path("*.bc_assign_counts.tsv"), 
               emit: CHROM_ASSIGNED_BARCODE_COUNTS
     """
-    assign_barcodes.py -t ${task.cpus} \
+    assign_barcodes.py -t 1 \
         --output_bam tmp.bam \
         --output_counts ${sample_id}_${chr}.bc_assign_counts.tsv \
         --max_ed $params.BARCODE_MAX_ED \
@@ -511,10 +510,11 @@ workflow process_bams {
         generate_whitelist(
             extract_barcodes.out.counts
         )
+        
 
-        bam_bai_chromes = split_bam_by_chroms.out.bam.map({it ->
-        // Merge bams and indxes along and add chromosome into tuple
+        // Extract chr from filename and add to tuple to give: 
         // [sample_id, chr, bam, bai]
+        bam_bai_chromes = split_bam_by_chroms.out.bam.map({it ->
             pairs = []
             for (i=0; i<it[1].size(); i++) {
                 chr = it[1][i].toString().tokenize('/')[-1].tokenize('.')[-3]
@@ -523,11 +523,11 @@ workflow process_bams {
             return pairs
         }).flatMap(it-> it)
 
-        // // Todo remove redundant sample_ID
+        // Todo remove redundant sample_ID
         chr_bam_kit = get_kit_info.out.kit_info
             .splitCsv(header:false, skip:1).join(generate_whitelist.out.whitelist)
             .cross(bam_bai_chromes).map({it -> it.flatten()})
-        // chr_bam_kit.view()
+
         assign_barcodes(chr_bam_kit)
 
         cleanup_headers_2(assign_barcodes.out.CHROM_BAM_BC)
@@ -538,52 +538,59 @@ workflow process_bams {
         .flatten()
         .map {file -> 
             // create [chr, gtf]
-             tuple(file.toString().tokenize('/')[-1], file)} // Add chromosome to tuple
-
-        assign_genes(
-            bam_to_bed.out.CHROM_BED_BC
-            .cross(chr_gtf).map({it ->
-            // rejig the tuple to [sample_id, chr, bed, gtf]
-            [it[0][1], it[0][0], it[0][2], it[1][1]]})
-        )
-
-        add_gene_tags_to_bam(
-            cleanup_headers_2.out.CHROM_BAM_BC_BAI
-            // join on sample_id + chr
-            .join(assign_genes.out.CHROM_TSV_GENE_ASSIGNS, by:[0, 1]))
-
-        cleanup_headers_3(add_gene_tags_to_bam.out.CHROM_BAM_BC)
-
-        cluster_umis(cleanup_headers_3.out.CHROM_BAM_BC_BAI)
-
-        cleanup_headers_4(cluster_umis.out.bam)
-
-        // group by sample_id
-        combine_chrom_bams(
-            cleanup_headers_4.out.CHROM_BAM_BC_BAI.groupTuple()) 
-
-        count_cell_gene_umi_reads(combine_chrom_bams.out.BAM_FULLY_TAGGED)
-
-        umi_gene_saturation(count_cell_gene_umi_reads.out.CELL_UMI_GENE_TSV)
-
-        construct_expression_matrix(combine_chrom_bams.out.BAM_FULLY_TAGGED)
-
-        process_expression_matrix(construct_expression_matrix.out.MATRIX_COUNTS_TSV)
-
-        umap_reduce_expression_matrix(process_expression_matrix.out.MATRIX_PROCESSED_TSV)
-
-        umap_plot_total_umis(
-            umap_reduce_expression_matrix.out.MATRIX_UMAP_TSV
-            .join(process_expression_matrix.out.MATRIX_PROCESSED_TSV))
-
-        genes_to_plot = Channel.fromPath(params.UMAP_PLOT_GENES)
-            .splitCsv()
+             tuple(file.toString().tokenize('/')[-1], file)}
         
-        umap_plot_genes(
-            umap_reduce_expression_matrix.out.MATRIX_UMAP_TSV
-            .join(process_expression_matrix.out.MATRIX_PROCESSED_TSV)
-            .combine(genes_to_plot))
+        // combine all chr bams with chr gtfs
+        chr_bams_gtf = chr_gtf.cross(
+            bam_to_bed.out.CHROM_BED_BC)
+            .map({it ->
+            //  rejig the tuple to [sample_id, chr, bed, gtf]
+             tuple(it[1][1], it[0][0], it[1][2], it[0][1])})
 
-        umap_plot_mito_genes(umap_reduce_expression_matrix.out.MATRIX_UMAP_TSV
-            .join(process_expression_matrix.out.MATRIX_PROCESSED_TSV))
+         assign_genes(chr_bams_gtf)
+
+         add_gene_tags_to_bam(
+             cleanup_headers_2.out.CHROM_BAM_BC_BAI
+              // join on sample_id + chr
+             .join(assign_genes.out.CHROM_TSV_GENE_ASSIGNS, by:[0, 1]))
+
+         cleanup_headers_3(add_gene_tags_to_bam.out.CHROM_BAM_BC)
+
+         cluster_umis(cleanup_headers_3.out.CHROM_BAM_BC_BAI)
+
+         cleanup_headers_4(cluster_umis.out.bam)
+
+         // group by sample_id
+         combine_chrom_bams(
+             cleanup_headers_4.out.CHROM_BAM_BC_BAI.groupTuple()) 
+
+         count_cell_gene_umi_reads(combine_chrom_bams.out.BAM_FULLY_TAGGED)
+
+         umi_gene_saturation(count_cell_gene_umi_reads.out.CELL_UMI_GENE_TSV)
+
+         construct_expression_matrix(combine_chrom_bams.out.BAM_FULLY_TAGGED)
+
+         process_expression_matrix(construct_expression_matrix.out.MATRIX_COUNTS_TSV)
+
+         umap_reduce_expression_matrix(process_expression_matrix.out.MATRIX_PROCESSED_TSV)
+
+         umap_plot_total_umis(
+             umap_reduce_expression_matrix.out.MATRIX_UMAP_TSV
+             .join(process_expression_matrix.out.MATRIX_PROCESSED_TSV))
+
+         genes_to_plot = Channel.fromPath(params.UMAP_PLOT_GENES)
+             .splitCsv()
+        
+         umap_plot_genes(
+             umap_reduce_expression_matrix.out.MATRIX_UMAP_TSV
+             .join(process_expression_matrix.out.MATRIX_PROCESSED_TSV)
+             .combine(genes_to_plot))
+
+         umap_plot_mito_genes(umap_reduce_expression_matrix.out.MATRIX_UMAP_TSV
+             .join(process_expression_matrix.out.MATRIX_PROCESSED_TSV))
+     emit:
+         results = umi_gene_saturation.out
+             .join(construct_expression_matrix.out)
+             .join(process_expression_matrix.out)
+
 }
