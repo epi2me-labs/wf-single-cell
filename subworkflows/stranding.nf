@@ -87,7 +87,7 @@ process summarize_adapter_table {
     import pandas as pd
     import json
 
-    df = pd.read_csv("${READ_CONFIG}", sep="\t")
+    df = pd.read_csv("${read_config}", sep="\t")
     stats = {}
     stats["{$sample_id}"] = {}
     stats["{$sample_id}"]["general"] = {}

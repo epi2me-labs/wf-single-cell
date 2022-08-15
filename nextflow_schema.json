@@ -55,7 +55,7 @@
             },
             "required": [
                 "single_cell_sample_sheet",
-                "REF_GENOME_DIR"
+                "ref_genome_dir"
             ]
         },
         "advanced_options": {

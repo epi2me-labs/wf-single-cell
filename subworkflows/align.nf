@@ -6,7 +6,7 @@ process call_paftools {
     output:
         path "ref_genes.bed", emit: ref_genes_bed
     """
-    paftools.js gff2bed -j $REF_GENES_GTF > ref_genes.bed
+    paftools.js gff2bed -j $ref_genes_gtf > ref_genes.bed
     """
 }
 
