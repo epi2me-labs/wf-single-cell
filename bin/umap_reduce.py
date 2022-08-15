@@ -94,6 +94,7 @@ def main(args):
         min_dist=args.min_dist,
         n_components=args.dimensions,
         verbose=2,
+        random_state=42  # For testing
     )
 
     X_embedded = reducer.fit_transform(X)
