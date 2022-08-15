@@ -489,6 +489,7 @@ workflow process_bams {
         sc_sample_sheet
         kit_config
         gtf
+        umap_genes
     main:
         get_kit_info(
             kit_config,
@@ -578,7 +579,7 @@ workflow process_bams {
              umap_reduce_expression_matrix.out.matrix_umap_tsv
              .join(process_expression_matrix.out.matrix_processed_tsv))
 
-         genes_to_plot = Channel.fromPath(params.umap_plot_genes)
+         genes_to_plot = Channel.fromPath(umap_genes)
              .splitCsv()
         
          umap_plot_genes(

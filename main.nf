@@ -88,6 +88,7 @@ workflow pipeline {
     take:
         sc_sample_sheet
         ref_genome_dir
+        umap_genes
     main:
         inputs = Channel.fromPath(sc_sample_sheet)
                     .splitCsv(header:true)
@@ -125,7 +126,8 @@ workflow pipeline {
             align.out.bam_sort_bai,
             sc_sample_sheet,
             kit_configs,
-            ref_genes_gtf
+            ref_genes_gtf,
+            umap_genes
         )
         results = process_bams.out.results
     emit:
@@ -139,8 +141,9 @@ WorkflowMain.initialise(workflow, params, log)
 workflow {
     sc_sample_sheet = file(params.single_cell_sample_sheet, checkIfExists: true)
     ref_genome_dir = file(params.ref_genome_dir, checkIfExists: true)
+    umap_genes = file(params.umap_plot_genes, checkIfExists: true)
 
-    pipeline(sc_sample_sheet, ref_genome_dir)
+    pipeline(sc_sample_sheet, ref_genome_dir, umap_plot_genes)
     
     output(pipeline.out.results.flatMap({it ->
         l = [];

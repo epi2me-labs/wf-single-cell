@@ -140,18 +140,9 @@
                     "default": 10000
                 },
                 "umap_plot_genes": {
-                    "type": "object",
-                    "description": "List of gene symbols to perform UMI clustering on.",
-                    "default": [
-                        "CD19",
-                        "CD24",
-                        "CD27",
-                        "CD38",
-                        "CD79A",
-                        "CD79B",
-                        "PAX5",
-                        "XBP1"
-                    ]
+                    "type": "string",
+                    "format": "path",
+                    "description": "List of gene symbols to perform UMI clustering on."
                 },
                 "resources_mm2_mem_gb": {
                     "type": "integer",
