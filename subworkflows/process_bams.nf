@@ -61,22 +61,22 @@ process extract_barcodes{
               val(barcode_length),
               val(umi_length),
               val(bc_long_list),
-              path(bam),
-              path(bam_idx)
+              path(bam_sort),
+              path(bam_sort_idx)
 
     output:
-        tuple val(sample_id), path("*.bam"), emit: bam
-        tuple val(sample_id), path("*.tsv"), emit: counts
+        tuple val(sample_id), path("*.bam"), emit: BAM_BC_UNCORR_TMP
+        tuple val(sample_id), path("*.tsv"), emit: BARCODE_COUNTS
     """
     extract_barcode.py \
-    $bam $bc_long_list\
+    $bam_sort $bc_long_list\
     -t $task.cpus \
     --kit $kit_name \
     --adapter1_suff_length $params.BARCODE_ADAPTER1_SUFF_LENGTH \
     --barcode_length $barcode_length \
     --umi_length $umi_length \
     --output_bam "tmp.bam" \
-    --output_barcodes "${sample_id}.barcodes.tsv";
+    --output_barcodes "${sample_id}.uncorrected_bc_counts.tsv";
     """
 }
 
@@ -119,8 +119,8 @@ process split_bam_by_chroms{
         tuple val(sample_id), path(bam), path(bai)
     output:
         tuple val(sample_id), 
-              path("splits/chr*.bam"),
-              path("splits/chr*.bai"), emit: bam
+              path("splits/*.bam"),
+              path("splits/*.bai"), emit: bam
     """
     split_bam_by_chroms.py -t ${task.cpus} --output_dir splits $bam
     """
@@ -179,8 +179,8 @@ process cleanup_headers_2 {
         emit: CHROM_BAM_BC_BAI
     """
     samtools reheader --no-PG -c 'grep -v ^@PG' $bam \
-        > "${sample_id}.bc_assign.bam";
-    samtools index "${sample_id}.bc_assign.bam"
+        > "${sample_id}_${chr}.bc_assign.bam";
+    samtools index "${sample_id}_${chr}.bc_assign.bam"
     """
 }
 
@@ -245,7 +245,7 @@ process add_gene_tags_to_bam {
         tuple val(sample_id),
               val(chr),
               path("tmp.bam"), 
-              emit: CHROM_BAM_BC
+              emit: CHROM_BAM_BC_GENE_TMP
     """
     add_gene_tags.py \
         --output tmp.bam \
@@ -326,12 +326,12 @@ process combine_chrom_bams {
               path(bais)
     output:
         tuple val(sample_id), 
-              path("${sample_id}.merged.bam"), 
-              path("${sample_id}.merged.bam.bai"),
+              path("*tagged.sorted.bam"), 
+              path("*tagged.sorted.bam.bai"),
               emit: BAM_FULLY_TAGGED
     """
-    samtools merge -o "${sample_id}.merged.bam" $bams; 
-    samtools index "${sample_id}.merged.bam";
+    samtools merge -o "${sample_id}.tagged.sorted.bam" $bams; 
+    samtools index "${sample_id}.tagged.sorted.bam";
     """
 }
 
@@ -500,7 +500,7 @@ workflow process_bams {
             .join(bam).join(bam_idx))
         
         cleanup_headers_1(
-            extract_barcodes.out.bam
+            extract_barcodes.out.BAM_BC_UNCORR_TMP
         )
         
         split_bam_by_chroms(
@@ -508,10 +508,11 @@ workflow process_bams {
         )
 
         generate_whitelist(
-            extract_barcodes.out.counts
+            extract_barcodes.out.BARCODE_COUNTS
         )
-        
 
+        // split_bam_by_chroms.out.bam.view()  // only 25 here
+        
         // Extract chr from filename and add to tuple to give: 
         // [sample_id, chr, bam, bai]
         bam_bai_chromes = split_bam_by_chroms.out.bam.map({it ->
@@ -523,10 +524,17 @@ workflow process_bams {
             return pairs
         }).flatMap(it-> it)
 
-        // Todo remove redundant sample_ID
+
+        //  chr_bam_kit = get_kit_info.out.kit_info
+        //     .splitCsv(header:false, skip:1)
+        //     .join(generate_whitelist.out.whitelist).view()
+        // bam_bai_chromes.view()
+
+        // merge 
         chr_bam_kit = get_kit_info.out.kit_info
-            .splitCsv(header:false, skip:1).join(generate_whitelist.out.whitelist)
-            .cross(bam_bai_chromes).map({it -> it.flatten()})
+            .splitCsv(header:false, skip:1)
+            .join(generate_whitelist.out.whitelist)
+            .cross(bam_bai_chromes).map({it -> it.flatten()})    
 
         assign_barcodes(chr_bam_kit)
 
@@ -554,7 +562,7 @@ workflow process_bams {
               // join on sample_id + chr
              .join(assign_genes.out.CHROM_TSV_GENE_ASSIGNS, by:[0, 1]))
 
-         cleanup_headers_3(add_gene_tags_to_bam.out.CHROM_BAM_BC)
+         cleanup_headers_3(add_gene_tags_to_bam.out.CHROM_BAM_BC_GENE_TMP)
 
          cluster_umis(cleanup_headers_3.out.CHROM_BAM_BC_BAI)
 
