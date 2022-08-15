@@ -87,7 +87,7 @@ process output {
 workflow pipeline {
     take:
         sc_sample_sheet
-        REF_GENOME_DIR
+        ref_genome_dir
     main:
         inputs = Channel.fromPath(sc_sample_sheet)
                     .splitCsv(header:true)
@@ -103,9 +103,9 @@ workflow pipeline {
             sc_sample_sheet)
         
         // 10x reference downloads have known names
-        REF_GENOME_FASTA = file("${REF_GENOME_DIR}/fasta/genome.fa", checkIfExists: true)
-        REF_GENES_GTF = file("${REF_GENOME_DIR}/genes/genes.gtf", checkIfExists: true)
-        ref_genome_idx = file("${REF_GENOME_FASTA}.fai", checkIfExists: true)
+        ref_genome_fasta = file("${ref_genome_dir}/fasta/genome.fa", checkIfExists: true)
+        ref_genes_gtf = file("${ref_genome_dir}/genes/genes.gtf", checkIfExists: true)
+        ref_genome_idx = file("${ref_genome_fasta}.fai", checkIfExists: true)
         
         if (params.kit_config){
             kit_configs = file("${params.kit_config}/kit_configs.csv", checkIfExists: true)
@@ -114,18 +114,18 @@ workflow pipeline {
         }
         
         align(
-            stranding.out.STRANDED_FQ,
-            REF_GENOME_FASTA,
-            REF_GENES_GTF,
+            stranding.out.stranded_fq,
+            ref_genome_fasta,
+            ref_genes_gtf,
             ref_genome_idx
         )
 
         process_bams(
-            align.out.BAM_SORT,
-            align.out.BAM_SORT_BAI,
+            align.out.bam_sort,
+            align.out.bam_sort_bai,
             sc_sample_sheet,
             kit_configs,
-            REF_GENES_GTF
+            ref_genes_gtf
         )
         results = process_bams.out.results
     emit:
@@ -138,9 +138,9 @@ workflow pipeline {
 WorkflowMain.initialise(workflow, params, log)
 workflow {
     sc_sample_sheet = file(params.single_cell_sample_sheet, checkIfExists: true)
-    REF_GENOME_DIR = file(params.REF_GENOME_DIR, checkIfExists: true)
+    ref_genome_dir = file(params.ref_genome_dir, checkIfExists: true)
 
-    pipeline(sc_sample_sheet, REF_GENOME_DIR)
+    pipeline(sc_sample_sheet, ref_genome_dir)
     
     output(pipeline.out.results.flatMap({it ->
         l = [];

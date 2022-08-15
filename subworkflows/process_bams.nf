@@ -65,14 +65,14 @@ process extract_barcodes{
               path(bam_sort_idx)
 
     output:
-        tuple val(sample_id), path("*.bam"), emit: BAM_BC_UNCORR_TMP
-        tuple val(sample_id), path("*.tsv"), emit: BARCODE_COUNTS
+        tuple val(sample_id), path("*.bam"), emit: bam_bc_uncorr_tmp
+        tuple val(sample_id), path("*.tsv"), emit: barcode_counts
     """
     extract_barcode.py \
     $bam_sort $bc_long_list\
     -t $task.cpus \
     --kit $kit_name \
-    --adapter1_suff_length $params.BARCODE_ADAPTER1_SUFF_LENGTH \
+    --adapter1_suff_length $params.barcode_adapter1_suff_length \
     --barcode_length $barcode_length \
     --umi_length $umi_length \
     --output_bam "tmp.bam" \
@@ -105,7 +105,7 @@ process generate_whitelist{
         tuple val(sample_id), path("*whitelist.tsv"), emit: whitelist
         tuple val(sample_id), path("*kneeplot.png"), emit: kneeplot
     """
-    knee_plot.py ${params.BARCODE_KNEEPLOT_FLAGS} \
+    knee_plot.py ${params.barcode_kneeplot_flags} \
         --output_whitelist "${sample_id}_whitelist.tsv" \
         --output_plot "${sample_id}_kneeplot.png" $counts
     """
@@ -146,19 +146,19 @@ process assign_barcodes{
         tuple val(sample_id), 
             val(chr),
             path("tmp.bam"),
-            emit: CHROM_BAM_BC
+            emit: chrom_bam_bc
         tuple val(sample_id),
               val(chr),
               path("*.bc_assign_counts.tsv"), 
-              emit: CHROM_ASSIGNED_BARCODE_COUNTS
+              emit: chrom_assigned_barcode_counts
     """
     assign_barcodes.py -t 1 \
         --output_bam tmp.bam \
         --output_counts ${sample_id}_${chr}.bc_assign_counts.tsv \
-        --max_ed $params.BARCODE_MAX_ED \
-        --min_ed_diff $params.BARCODE_MIN_ED_DIFF \
+        --max_ed $params.barcode_max_ed \
+        --min_ed_diff $params.barcode_min_ed_diff \
         --kit $kit_name \
-        --adapter1_suff_length $params.BARCODE_ADAPTER1_SUFF_LENGTH \
+        --adapter1_suff_length $params.barcode_adapter1_suff_length \
         --barcode_length $barcode_length \
         --umi_length $umi_length \
         $bam $whitelist
@@ -176,7 +176,7 @@ process cleanup_headers_2 {
               val(chr), 
               path("*.bam"), 
               path("*.bam.bai"), 
-        emit: CHROM_BAM_BC_BAI
+        emit: chrom_bam_bc_bai
     """
     samtools reheader --no-PG -c 'grep -v ^@PG' $bam \
         > "${sample_id}_${chr}.bc_assign.bam";
@@ -196,7 +196,7 @@ process bam_to_bed {
         tuple val(sample_id), 
               val(chr),
               path('*bc_assign.bed'), 
-              emit: CHROM_BED_BC
+              emit: chrom_bed_bc
     """
     bedtools bamtobed -i $bam > "${sample_id}_bc_assign.bed"
     """
@@ -206,7 +206,7 @@ process split_gtf_by_chroms {
     input:
         path(gtf)
     output:
-        path("*"), emit: CHROM_GTF
+        path("*"), emit: chrom_gtf
     """
     awk '/^[^#]/ {print>\$1}' $gtf 
     """
@@ -218,17 +218,17 @@ process assign_genes {
     input:
         tuple val(sample_id),
               val(chr),
-              path(CHROM_BED_BC),
-              path(CHROM_GTF)
+              path(chrom_bed_bc),
+              path(chrom_gtf)
     output:
         tuple val(sample_id),
               val(chr),
               path("${sample_id}_${chr}.read.gene_assigns.tsv"),
-              emit: CHROM_TSV_GENE_ASSIGNS
+              emit: chrom_tsv_gene_assigns
     """
     assign_genes.py \
     --output ${sample_id}_${chr}.read.gene_assigns.tsv \
-    $CHROM_BED_BC $CHROM_GTF
+    $chrom_bed_bc $chrom_gtf
     """
 }
 
@@ -238,18 +238,18 @@ process add_gene_tags_to_bam {
     input:
         tuple val(sample_id),
               val(chr),
-              path(CHROM_BAM_BC),
-              path(CHROM_BAM_BC_BAI),
-              path(CHROM_TSV_GENE_ASSIGNS)
+              path(chrom_bam_bc),
+              path(chrom_bam_bc_bai),
+              path(chrom_tsv_gene_assigns)
     output:
         tuple val(sample_id),
               val(chr),
               path("tmp.bam"), 
-              emit: CHROM_BAM_BC_GENE_TMP
+              emit: chrom_bam_bc_gene_tmp
     """
     add_gene_tags.py \
         --output tmp.bam \
-        $CHROM_BAM_BC $CHROM_TSV_GENE_ASSIGNS
+        $chrom_bam_bc $chrom_tsv_gene_assigns
     """
 }
 
@@ -266,7 +266,7 @@ process cleanup_headers_3 {
               val(chr),
               path("*.bam"), 
               path("*.bam.bai"), 
-              emit: CHROM_BAM_BC_BAI
+              emit: chrom_bam_bc_bai
     """
     samtools reheader --no-PG -c 'grep -v ^@PG' $bam \
         > ${sample_id}_${chr}_bc_assign.gene.bam;
@@ -277,7 +277,7 @@ process cleanup_headers_3 {
 process cluster_umis {
     label "wfsockeye"
     conda "${projectDir}/envs/umis.yml"
-    cpus params.UMI_CLUSTER_MAX_THREADS
+    cpus params.umi_cluster_max_threads
     input:
         tuple val(sample_id),
               val(chr),
@@ -292,8 +292,8 @@ process cluster_umis {
     cluster_umis.py \
     $bam \
     --threads $task.cpus \
-    --ref_interval $params.UMI_GENOMIC_INTERVAL \
-    --cell_gene_max_reads $params.UMI_CELL_GENE_MAX_READS \
+    --ref_interval $params.umi_genomic_interval \
+    --cell_gene_max_reads $params.umi_cell_gene_max_reads \
     --output tmp.bam 
     """
 }
@@ -308,7 +308,7 @@ process cleanup_headers_4{
                path(bam)
     output:
         tuple val(sample_id), path("*.bam"), path("*.bam.bai"), 
-        emit: CHROM_BAM_BC_BAI
+        emit: chrom_bam_bc_bai
     """
     samtools reheader --no-PG -c 'grep -v ^@PG' $bam \
         >  ${sample_id}_${chr}.tagged.bam;
@@ -328,7 +328,7 @@ process combine_chrom_bams {
         tuple val(sample_id), 
               path("*tagged.sorted.bam"), 
               path("*tagged.sorted.bam.bai"),
-              emit: BAM_FULLY_TAGGED
+              emit: bam_fully_tagged
     """
     samtools merge -o "${sample_id}.tagged.sorted.bam" $bams; 
     samtools index "${sample_id}.tagged.sorted.bam";
@@ -345,7 +345,7 @@ process count_cell_gene_umi_reads {
     output:
         tuple val(sample_id),
               path("${sample_id}_cell_umi_gene.tsv"),
-              emit: CELL_UMI_GENE_TSV
+              emit: cell_umi_gene_tsv
     """
     cell_umi_gene_table.py \
         --output  ${sample_id}_cell_umi_gene.tsv $bam
@@ -378,7 +378,7 @@ process construct_expression_matrix {
     output:
         tuple val(sample_id), 
               path("*gene_expression.counts.tsv"), 
-              emit: MATRIX_COUNTS_TSV
+              emit: matrix_counts_tsv
     """
     gene_expression.py \
         --output ${sample_id}_gene_expression.counts.tsv $bam
@@ -390,18 +390,18 @@ process process_expression_matrix {
     conda "${projectDir}/envs/barcodes.yml"
     input:
         tuple val(sample_id),
-              path(MATRIX_COUNTS_TSV)
+              path(matrix_counts_tsv)
     output:
         tuple val(sample_id), 
         path("*gene_expression.processed.tsv"),
-        emit: MATRIX_PROCESSED_TSV
+        emit: matrix_processed_tsv
     """
     process_matrix.py \
-    --min_genes $params.MATRIX_MIN_GENES \
-    --min_cells $params.MATRIX_MIN_CELLS \
-    --max_mito $params.MATRIX_MAX_MITO \
-    --norm_count $params.MATRIX_NORM_COUNT \
-    --output ${sample_id}_gene_expression.processed.tsv $MATRIX_COUNTS_TSV
+    --min_genes $params.matrix_min_genes \
+    --min_cells $params.matrix_min_cells \
+    --max_mito $params.matrix_max_mito \
+    --norm_count $params.matrix_norm_count \
+    --output ${sample_id}_gene_expression.processed.tsv $matrix_counts_tsv
     """
 }
 
@@ -410,15 +410,15 @@ process umap_reduce_expression_matrix {
     conda "${projectDir}/envs/umap.yml"
     input:
         tuple val(sample_id),
-              path(MATRIX_PROCESSED_TSV)
+              path(matrix_processed_tsv)
     output:
          tuple val(sample_id),
               path("*gene_expression.umap.tsv"), 
-              emit: MATRIX_UMAP_TSV
+              emit: matrix_umap_tsv
     """
     umap_reduce.py \
         --output ${sample_id}_gene_expression.umap.tsv \
-        $MATRIX_PROCESSED_TSV
+        $matrix_processed_tsv
     """
 }
 
@@ -428,16 +428,16 @@ process umap_plot_total_umis {
     conda "${projectDir}/envs/plotting.yml"
     input:
         tuple val(sample_id),
-              path(MATRIX_UMAP_TSV),
-              path(MATRIX_PROCESSED_TSV)
+              path(matrix_umap_tsv),
+              path(matrix_processed_tsv)
     output:
           tuple val(sample_id),
               path("*umap.total.png"), 
-              emit: MATRIX_UMAP_PLOT_TOTAL
+              emit: matrix_umap_plot_total
     """
     plot_umap.py \
         --output ${sample_id}_umap.total.png \
-        $MATRIX_UMAP_TSV $MATRIX_PROCESSED_TSV
+        $matrix_umap_tsv $matrix_processed_tsv
     """
 }
 
@@ -447,18 +447,18 @@ process umap_plot_genes {
     conda "${projectDir}/envs/plotting.yml"
     input:
         tuple val(sample_id),
-              path(MATRIX_UMAP_TSV),
-              path(MATRIX_PROCESSED_TSV),
+              path(matrix_umap_tsv),
+              path(matrix_processed_tsv),
               val(gene)
     output:
         tuple val(sample_id),
               path("*umap.gene.${gene}.png"), 
-              emit: MATRIX_UMAP_PLOT_GENE
+              emit: matrix_umap_plot_gene
     """
     plot_umap.py \
         --gene $gene \
         --output ${sample_id}_umap.gene.${gene}.png \
-        $MATRIX_UMAP_TSV $MATRIX_PROCESSED_TSV
+        $matrix_umap_tsv $matrix_processed_tsv
     """
 }
 
@@ -467,17 +467,17 @@ process umap_plot_mito_genes {
     conda "${projectDir}/envs/plotting.yml"
     input:
         tuple val(sample_id),
-              path(MATRIX_UMAP_TSV),
-              path(MATRIX_PROCESSED_TSV)
+              path(matrix_umap_tsv),
+              path(matrix_processed_tsv)
     output:
         tuple val(sample_id),
               path("*umap.mitochondrial.png"), 
-              emit: MATRIX_UMAP_PLOT_MITO
+              emit: matrix_umap_plot_mito
     """
     plot_umap.py \
         --mito_genes \
         --output ${sample_id}_umap.mitochondrial.png \
-        $MATRIX_UMAP_TSV $MATRIX_PROCESSED_TSV
+        $matrix_umap_tsv $matrix_processed_tsv
     """
 }
     
@@ -500,7 +500,7 @@ workflow process_bams {
             .join(bam).join(bam_idx))
         
         cleanup_headers_1(
-            extract_barcodes.out.BAM_BC_UNCORR_TMP
+            extract_barcodes.out.bam_bc_uncorr_tmp
         )
         
         split_bam_by_chroms(
@@ -508,7 +508,7 @@ workflow process_bams {
         )
 
         generate_whitelist(
-            extract_barcodes.out.BARCODE_COUNTS
+            extract_barcodes.out.barcode_counts
         )
         
         // Extract chr from filename and add to tuple to give: 
@@ -530,9 +530,9 @@ workflow process_bams {
 
         assign_barcodes(chr_bam_kit)
 
-        cleanup_headers_2(assign_barcodes.out.CHROM_BAM_BC)
+        cleanup_headers_2(assign_barcodes.out.chrom_bam_bc)
 
-        bam_to_bed(cleanup_headers_2.out.CHROM_BAM_BC_BAI)
+        bam_to_bed(cleanup_headers_2.out.chrom_bam_bc_bai)
 
         chr_gtf = split_gtf_by_chroms(gtf)
         .flatten()
@@ -542,7 +542,7 @@ workflow process_bams {
         
         // combine all chr bams with chr gtfs
         chr_bams_gtf = chr_gtf.cross(
-            bam_to_bed.out.CHROM_BED_BC)
+            bam_to_bed.out.chrom_bed_bc)
             .map({it ->
             //  rejig the tuple to [sample_id, chr, bed, gtf]
              tuple(it[1][1], it[0][0], it[1][2], it[0][1])})
@@ -550,44 +550,44 @@ workflow process_bams {
          assign_genes(chr_bams_gtf)
 
          add_gene_tags_to_bam(
-             cleanup_headers_2.out.CHROM_BAM_BC_BAI
+             cleanup_headers_2.out.chrom_bam_bc_bai
               // join on sample_id + chr
-             .join(assign_genes.out.CHROM_TSV_GENE_ASSIGNS, by:[0, 1]))
+             .join(assign_genes.out.chrom_tsv_gene_assigns, by:[0, 1]))
 
-         cleanup_headers_3(add_gene_tags_to_bam.out.CHROM_BAM_BC_GENE_TMP)
+         cleanup_headers_3(add_gene_tags_to_bam.out.chrom_bam_bc_gene_tmp)
 
-         cluster_umis(cleanup_headers_3.out.CHROM_BAM_BC_BAI)
+         cluster_umis(cleanup_headers_3.out.chrom_bam_bc_bai)
 
          cleanup_headers_4(cluster_umis.out.bam)
 
          // group by sample_id
          combine_chrom_bams(
-             cleanup_headers_4.out.CHROM_BAM_BC_BAI.groupTuple()) 
+             cleanup_headers_4.out.chrom_bam_bc_bai.groupTuple())
 
-         count_cell_gene_umi_reads(combine_chrom_bams.out.BAM_FULLY_TAGGED)
+         count_cell_gene_umi_reads(combine_chrom_bams.out.bam_fully_tagged)
 
-         umi_gene_saturation(count_cell_gene_umi_reads.out.CELL_UMI_GENE_TSV)
+         umi_gene_saturation(count_cell_gene_umi_reads.out.cell_umi_gene_tsv)
 
-         construct_expression_matrix(combine_chrom_bams.out.BAM_FULLY_TAGGED)
+         construct_expression_matrix(combine_chrom_bams.out.bam_fully_tagged)
 
-         process_expression_matrix(construct_expression_matrix.out.MATRIX_COUNTS_TSV)
+         process_expression_matrix(construct_expression_matrix.out.matrix_counts_tsv)
 
-         umap_reduce_expression_matrix(process_expression_matrix.out.MATRIX_PROCESSED_TSV)
+         umap_reduce_expression_matrix(process_expression_matrix.out.matrix_processed_tsv)
 
          umap_plot_total_umis(
-             umap_reduce_expression_matrix.out.MATRIX_UMAP_TSV
-             .join(process_expression_matrix.out.MATRIX_PROCESSED_TSV))
+             umap_reduce_expression_matrix.out.matrix_umap_tsv
+             .join(process_expression_matrix.out.matrix_processed_tsv))
 
-         genes_to_plot = Channel.fromPath(params.UMAP_PLOT_GENES)
+         genes_to_plot = Channel.fromPath(params.umap_plot_genes)
              .splitCsv()
         
          umap_plot_genes(
-             umap_reduce_expression_matrix.out.MATRIX_UMAP_TSV
-             .join(process_expression_matrix.out.MATRIX_PROCESSED_TSV)
+             umap_reduce_expression_matrix.out.matrix_umap_tsv
+             .join(process_expression_matrix.out.matrix_processed_tsv)
              .combine(genes_to_plot))
 
-         umap_plot_mito_genes(umap_reduce_expression_matrix.out.MATRIX_UMAP_TSV
-             .join(process_expression_matrix.out.MATRIX_PROCESSED_TSV))
+         umap_plot_mito_genes(umap_reduce_expression_matrix.out.matrix_umap_tsv
+             .join(process_expression_matrix.out.matrix_processed_tsv))
      emit:
          results = umi_gene_saturation.out
              .join(construct_expression_matrix.out)

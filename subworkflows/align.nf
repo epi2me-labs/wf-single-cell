@@ -2,9 +2,9 @@ process call_paftools {
     label "wfsockeye"
     conda "${projectDir}/envs/minimap2.yml"
     input:
-        path REF_GENES_GTF
+        path ref_genes_gtf
     output:
-        path "ref_genes.bed", emit: REF_GENES_BED
+        path "ref_genes.bed", emit: ref_genes_bed
     """
     paftools.js gff2bed -j $REF_GENES_GTF > ref_genes.bed
     """
@@ -12,40 +12,33 @@ process call_paftools {
 
 process get_chrom_sizes{
     input:
-        // genome=str(REF_GENOME_FASTA) + ".fai",
         path ref_genome_idx
     output:
-        // chrsizes=REF_CHROM_SIZES,
-        path 'chr_sizes', emit: REF_CHROM_SIZES
+        path 'chr_sizes', emit: ref_chrom_sizes
     """
     cut -f1,2 $ref_genome_idx | sort -V > chr_sizes
     """
 }
-
-
-// def get_split_ont_align_mem_gb(wildcards, threads):
-//     return config["RESOURCES_MM2_MEM_GB"] / threads
-
 
 process align_to_ref {
     label "wfsockeye"
     conda "${projectDir}/envs/minimap2.yml"
     input:
         tuple val(sample_id),
-              path(STRANDED_FQ)
+              path(stranded_fq)
         path ref_genes_bed
-        path REF_GENOME_FASTA
-        path REF_CHROM_SIZES
+        path ref_genome_fasta
+        path ref_chrom_sizes
     output:
-        tuple val(sample_id), path("*sorted.bam"), emit: BAM_SORT
-        tuple val(sample_id), path("*sorted.bam.bai"), emit: BAM_SORT_BAI
+        tuple val(sample_id), path("*sorted.bam"), emit: bam_sort
+        tuple val(sample_id), path("*sorted.bam.bai"), emit: bam_sort_bai
     """
-     minimap2 -ax splice -uf --MD -t $params.RESOURCES_MM2_MAX_THREADS \
+     minimap2 -ax splice -uf --MD -t $params.resources_mm2_max_threads \
       --junc-bed ${ref_genes_bed} \
       --secondary=no \
-      ${REF_GENOME_FASTA} ${STRANDED_FQ} > tmp.sam && \
+      ${ref_genome_fasta} ${stranded_fq} > tmp.sam && \
     samtools view --no-PG tmp.sam \
-      -t REF_CHROM_SIZES -o unsort.bam;
+      -t ref_chrom_sizes -o unsort.bam;
     samtools sort --no-PG unsort.bam -o ${sample_id}_sorted.bam;
     samtools index ${sample_id}_sorted.bam
     """
@@ -56,21 +49,21 @@ process align_to_ref {
 // workflow module
 workflow align {
     take:
-        STRANDED_FQ
-        REF_GENOME_FASTA
-        REF_GENES_GTF
+        stranded_fq
+        ref_genome_fasta
+        ref_genes_gtf
         ref_genome_idx
     main:
-        call_paftools(REF_GENES_GTF)
+        call_paftools(ref_genes_gtf)
         get_chrom_sizes(ref_genome_idx)
         align_to_ref(
-            STRANDED_FQ,
-            call_paftools.out.REF_GENES_BED,
-            REF_GENOME_FASTA,
-            get_chrom_sizes.out.REF_CHROM_SIZES)
+            stranded_fq,
+            call_paftools.out.ref_genes_bed,
+            ref_genome_fasta,
+            get_chrom_sizes.out.ref_chrom_sizes)
    
     emit:
-        BAM_SORT = align_to_ref.out.BAM_SORT
-        BAM_SORT_BAI = align_to_ref.out.BAM_SORT_BAI
+        bam_sort = align_to_ref.out.bam_sort
+        bam_sort_bai = align_to_ref.out.bam_sort_bai
 
 }
