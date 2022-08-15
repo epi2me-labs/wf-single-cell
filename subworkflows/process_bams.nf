@@ -510,31 +510,23 @@ workflow process_bams {
         generate_whitelist(
             extract_barcodes.out.BARCODE_COUNTS
         )
-
-        // split_bam_by_chroms.out.bam.view()  // only 25 here
         
         // Extract chr from filename and add to tuple to give: 
         // [sample_id, chr, bam, bai]
         bam_bai_chromes = split_bam_by_chroms.out.bam.map({it ->
             pairs = []
             for (i=0; i<it[1].size(); i++) {
-                chr = it[1][i].toString().tokenize('/')[-1].tokenize('.')[-3]
+                chr = it[1][i].toString().tokenize('/')[-1] - '.sorted.bam'
                 pairs.add(tuple(it[0], chr, it[1][i], it[2][i]))
             }
             return pairs
         }).flatMap(it-> it)
 
-
-        //  chr_bam_kit = get_kit_info.out.kit_info
-        //     .splitCsv(header:false, skip:1)
-        //     .join(generate_whitelist.out.whitelist).view()
-        // bam_bai_chromes.view()
-
         // merge 
         chr_bam_kit = get_kit_info.out.kit_info
             .splitCsv(header:false, skip:1)
             .join(generate_whitelist.out.whitelist)
-            .cross(bam_bai_chromes).map({it -> it.flatten()})    
+            .cross(bam_bai_chromes).map({it -> it.flatten()})
 
         assign_barcodes(chr_bam_kit)
 
@@ -600,5 +592,6 @@ workflow process_bams {
          results = umi_gene_saturation.out
              .join(construct_expression_matrix.out)
              .join(process_expression_matrix.out)
+            //  .join(yn kwukh4e)
 
 }
