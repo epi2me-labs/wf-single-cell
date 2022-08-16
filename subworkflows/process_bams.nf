@@ -88,10 +88,10 @@ process cleanup_headers_1 {
          tuple val(sample_id), path(bam)
     output:
         tuple val(sample_id), path("*.bam"), path("*.bam.bai"), 
-        emit: extract_barcodes_cleaned
+        emit: bam_bc_uncorr
     """
-    samtools reheader --no-PG -c 'grep -v ^@PG' $bam > "${sample_id}.bam"
-    samtools index "${sample_id}.bam"
+    samtools reheader --no-PG -c 'grep -v ^@PG' $bam > "${sample_id}.bc_extract.sorted.bam"
+    samtools index "${sample_id}.bc_extract.sorted.bam"
     """
 }
 
@@ -107,7 +107,7 @@ process generate_whitelist{
     """
     knee_plot.py ${params.barcode_kneeplot_flags} \
         --output_whitelist "${sample_id}_whitelist.tsv" \
-        --output_plot "${sample_id}_kneeplot.png" $counts
+        --output_plot "${sample_id}.kneeplot.png" $counts
     """
 }
 
@@ -363,7 +363,7 @@ process umi_gene_saturation {
               path("*saturation_curves.png")
     """
     calc_saturation.py \
-        --output ${sample_id}_saturation_curves.png \
+        --output ${sample_id}.saturation_curves.png \
         $cell_umi_gene_tsv
     """
 }
@@ -381,7 +381,7 @@ process construct_expression_matrix {
               emit: matrix_counts_tsv
     """
     gene_expression.py \
-        --output ${sample_id}_gene_expression.counts.tsv $bam
+        --output ${sample_id}.gene_expression.counts.tsv $bam
     """
 }
 
@@ -401,7 +401,7 @@ process process_expression_matrix {
     --min_cells $params.matrix_min_cells \
     --max_mito $params.matrix_max_mito \
     --norm_count $params.matrix_norm_count \
-    --output ${sample_id}_gene_expression.processed.tsv $matrix_counts_tsv
+    --output ${sample_id}.gene_expression.processed.tsv $matrix_counts_tsv
     """
 }
 
@@ -417,7 +417,7 @@ process umap_reduce_expression_matrix {
               emit: matrix_umap_tsv
     """
     umap_reduce.py \
-        --output ${sample_id}_gene_expression.umap.tsv \
+        --output ${sample_id}.gene_expression.umap.tsv \
         $matrix_processed_tsv
     """
 }
@@ -436,7 +436,7 @@ process umap_plot_total_umis {
               emit: matrix_umap_plot_total
     """
     plot_umap.py \
-        --output ${sample_id}_umap.total.png \
+        --output ${sample_id}.umap.total.png \
         $matrix_umap_tsv $matrix_processed_tsv
     """
 }
@@ -457,7 +457,7 @@ process umap_plot_genes {
     """
     plot_umap.py \
         --gene $gene \
-        --output ${sample_id}_umap.gene.${gene}.png \
+        --output ${sample_id}.umap.gene.${gene}.png \
         $matrix_umap_tsv $matrix_processed_tsv
     """
 }
@@ -476,12 +476,11 @@ process umap_plot_mito_genes {
     """
     plot_umap.py \
         --mito_genes \
-        --output ${sample_id}_umap.mitochondrial.png \
+        --output ${sample_id}.umap.mitochondrial.png \
         $matrix_umap_tsv $matrix_processed_tsv
     """
 }
     
-
 workflow process_bams {
     take:
         bam
@@ -505,7 +504,7 @@ workflow process_bams {
         )
         
         split_bam_by_chroms(
-            cleanup_headers_1.out.extract_barcodes_cleaned
+            cleanup_headers_1.out.bam_bc_uncorr
         )
 
         generate_whitelist(
@@ -587,12 +586,30 @@ workflow process_bams {
              .join(process_expression_matrix.out.matrix_processed_tsv)
              .combine(genes_to_plot))
 
-         umap_plot_mito_genes(umap_reduce_expression_matrix.out.matrix_umap_tsv
-             .join(process_expression_matrix.out.matrix_processed_tsv))
+         umap_plot_mito_genes(
+            umap_reduce_expression_matrix.out.matrix_umap_tsv
+            .join(process_expression_matrix.out.matrix_processed_tsv))
+        
      emit:
-         results = umi_gene_saturation.out
+         umap_plots = umap_plot_genes.out.groupTuple()
+            .flatMap({it -> 
+                l = []
+                for (i=0; i<it[1].size(); i++)
+                    l.add(tuple(it[0], it[1][i]))
+                return l
+                })
+                .concat(umap_plot_total_umis.out)
+                .concat(umap_plot_mito_genes.out)
+                .groupTuple()
+                
+        results = umi_gene_saturation.out
              .join(construct_expression_matrix.out)
              .join(process_expression_matrix.out)
-            //  .join(yn kwukh4e)
-
+             .join(cleanup_headers_1.out.bam_bc_uncorr)
+             .join(generate_whitelist.out.whitelist)
+             .join(generate_whitelist.out.kneeplot)
+             .join(combine_chrom_bams.out.bam_fully_tagged)
+             .join(extract_barcodes.out.barcode_counts)
+             .join(umap_reduce_expression_matrix.out.matrix_umap_tsv)
+             
 }

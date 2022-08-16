@@ -129,12 +129,26 @@ workflow pipeline {
             ref_genes_gtf,
             umap_genes
         )
-        results = process_bams.out.results
     emit:
-        results
-
+        results = process_bams.out.results
+        umap_plots = process_bams.out.umap_plots
 }
 
+process pack_images {
+    label "wfsockeye"
+    input:
+        tuple val(sample_id),
+              path(imgs)  
+        output:
+            tuple val(sample_id),
+                path('umap_plots')
+    """
+    mkdir umap_plots
+    for img in $imgs; do
+        cp \$img umap_plots
+    done;
+    """
+}
 
 // entrypoint workflow
 WorkflowMain.initialise(workflow, params, log)
@@ -143,16 +157,21 @@ workflow {
     ref_genome_dir = file(params.ref_genome_dir, checkIfExists: true)
     umap_genes = file(params.umap_plot_genes, checkIfExists: true)
 
-    pipeline(sc_sample_sheet, ref_genome_dir, umap_plot_genes)
+    pipeline(sc_sample_sheet, ref_genome_dir, umap_genes)
+
+
+    pack_images(pipeline.out.umap_plots)
     
     output(pipeline.out.results.flatMap({it ->
+        // Convert [sample_id, file, file, ..] 
+        // to      [[sample_id, file], [sample_id, file], ...]
         l = [];
             for (i=1; i<it.size(); i++) {
                 l.add(tuple(it[0], it[i]))
             }
             return l
-
-
-        }).view()
+        }).concat(pack_images.out)
     )
+
+
 }
