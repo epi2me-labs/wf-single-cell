@@ -91,6 +91,7 @@ workflow pipeline {
         umap_genes
     main:
 
+        // Paths in sc_sample_sheet should be relative to sc_sample_sheet parent directoy
         sample_sheet_parent = file(sc_sample_sheet).getParent()
 
         inputs = Channel.fromPath(sc_sample_sheet)
@@ -100,7 +101,6 @@ workflow pipeline {
                               row.kit_name, 
                               row.kit_version, 
                               file("$sample_sheet_parent/$row.path"))}
-        inputs.view()
         
         // Sockeye
         stranding(

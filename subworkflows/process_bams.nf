@@ -1,6 +1,6 @@
 process get_kit_info {
     label "wfsockeye"
-    conda "${projectDir}/envs/assign_genes.yml"
+    conda "${projectDir}/envs/barcodes.yml"
     input:
         path kit_config
         path sc_sample_sheet
@@ -104,8 +104,10 @@ process generate_whitelist{
     output:
         tuple val(sample_id), path("*whitelist.tsv"), emit: whitelist
         tuple val(sample_id), path("*kneeplot.png"), emit: kneeplot
+     def kneeflags = params.barcode_kneeplot_flags ?  params.barcode_kneeplot_flags : ''
+    
     """
-    knee_plot.py ${params.barcode_kneeplot_flags} \
+    knee_plot.py ${kneeflags} \
         --output_whitelist "${sample_id}_whitelist.tsv" \
         --output_plot "${sample_id}.kneeplot.png" $counts
     """
@@ -214,7 +216,7 @@ process split_gtf_by_chroms {
 
 process assign_genes {
     label "wfsockeye"
-    conda "${projectDir}/envs/assign_genes.yml"
+    conda "${projectDir}/envs/barcodes.yml"
     input:
         tuple val(sample_id),
               val(chr),
@@ -234,7 +236,7 @@ process assign_genes {
 
 process add_gene_tags_to_bam {
     label "wfsockeye"
-    conda "${projectDir}/envs/umis.yml"
+    conda "${projectDir}/envs/barcodes.yml"
     input:
         tuple val(sample_id),
               val(chr),
@@ -276,7 +278,7 @@ process cleanup_headers_3 {
 
 process cluster_umis {
     label "wfsockeye"
-    conda "${projectDir}/envs/umis.yml"
+    conda "${projectDir}/envs/barcodes.yml"
     cpus params.umi_cluster_max_threads
     input:
         tuple val(sample_id),
@@ -354,7 +356,7 @@ process count_cell_gene_umi_reads {
 
 process umi_gene_saturation {
     label "wfsockeye"
-    conda "${projectDir}/envs/plotting.yml"
+    conda "${projectDir}/envs/barcodes.yml"
     input:
         tuple val(sample_id),
               path(cell_umi_gene_tsv)
@@ -425,7 +427,7 @@ process umap_reduce_expression_matrix {
 
 process umap_plot_total_umis {
     label "wfsockeye"
-    conda "${projectDir}/envs/plotting.yml"
+    conda "${projectDir}/envs/barcodes.yml"
     input:
         tuple val(sample_id),
               path(matrix_umap_tsv),
@@ -444,7 +446,7 @@ process umap_plot_total_umis {
 process umap_plot_genes {
     // TODO: make a channle of input genes for thes process
     label "wfsockeye"
-    conda "${projectDir}/envs/plotting.yml"
+    conda "${projectDir}/envs/barcodes.yml"
     input:
         tuple val(sample_id),
               path(matrix_umap_tsv),
@@ -531,8 +533,6 @@ workflow process_bams {
             }
             return pairs
         }).flatMap(it-> it)
-
-        bam_bai_chromes.view()
 
         // merge 
         chr_bam_kit = get_kit_info.out.kit_info
@@ -623,5 +623,4 @@ workflow process_bams {
              .join(combine_chrom_bams.out.bam_fully_tagged)
              .join(extract_barcodes.out.barcode_counts)
              .join(umap_reduce_expression_matrix.out.matrix_umap_tsv)
-             
 }
