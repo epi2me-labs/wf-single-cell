@@ -83,7 +83,7 @@ process extract_barcodes{
 process cleanup_headers_1 {
     label "wfsockeye"
     cpus params.max_threads
-    conda "${projectDir}/envs/samtools.yml"
+    conda "${projectDir}/envs/barcodes.yml"
     input:
          tuple val(sample_id), path(bam)
     output:
@@ -97,7 +97,7 @@ process cleanup_headers_1 {
 
 process generate_whitelist{
     label "wfsockeye"
-    conda "${projectDir}/envs/kneeplot.yml"
+    conda "${projectDir}/envs/barcodes.yml"
     cpus params.max_threads
     input:
         tuple val(sample_id), path(counts)
@@ -170,7 +170,7 @@ process assign_barcodes{
 process cleanup_headers_2 {
     label "wfsockeye"
     cpus params.max_threads
-    conda "${projectDir}/envs/samtools.yml"
+    conda "${projectDir}/envs/barcodes.yml"
     input:
          tuple val(sample_id), val(chr), path(bam)
     output:
@@ -188,7 +188,7 @@ process cleanup_headers_2 {
 
 process bam_to_bed {
     label "wfsockeye"
-    conda "${projectDir}/envs/bedtools.yml"
+    conda "${projectDir}/envs/barcodes.yml"
     input:
         tuple val(chr), //emit chr first for doing cross on gtfs 
               val(sample_id),
@@ -258,7 +258,7 @@ process add_gene_tags_to_bam {
 process cleanup_headers_3 {
     label "wfsockeye"
     cpus params.max_threads
-    conda "${projectDir}/envs/samtools.yml"
+    conda "${projectDir}/envs/barcodes.yml"
     input:
          tuple val(sample_id), 
                val(chr), 
@@ -302,7 +302,7 @@ process cluster_umis {
 
 process cleanup_headers_4{
     label "wfsockeye"
-    conda "${projectDir}/envs/samtools.yml"
+    conda "${projectDir}/envs/barcodes.yml"
     cpus params.max_threads
     input:
          tuple val(sample_id), 
@@ -409,7 +409,7 @@ process process_expression_matrix {
 
 process umap_reduce_expression_matrix {
     label "wfsockeye"
-    conda "${projectDir}/envs/umap.yml"
+    conda "${projectDir}/envs/barcodes.yml"
     input:
         tuple val(sample_id),
               path(matrix_processed_tsv)
@@ -466,7 +466,7 @@ process umap_plot_genes {
 
 process umap_plot_mito_genes {
     label "wfsockeye"
-    conda "${projectDir}/envs/plotting.yml"
+    conda "${projectDir}/envs/barcodes.yml"
     input:
         tuple val(sample_id),
               path(matrix_umap_tsv),

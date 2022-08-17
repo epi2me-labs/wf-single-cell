@@ -1,6 +1,6 @@
 process call_paftools {
     label "wfsockeye"
-    conda "${projectDir}/envs/minimap2.yml"
+    conda "${projectDir}/envs/barcodes.yml"
     input:
         path ref_genes_gtf
     output:
@@ -22,7 +22,7 @@ process get_chrom_sizes{
 
 process align_to_ref {
     label "wfsockeye"
-    conda "${projectDir}/envs/minimap2.yml"
+    conda "${projectDir}/envs/barcodes.yml"
     input:
         tuple val(sample_id),
               path(stranded_fq)

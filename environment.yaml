@@ -1,17 +1,24 @@
-name: wf-sockeye
+name: wf-single-cell
 channels:
   - conda-forge
   - bioconda
   - defaults
 dependencies:
-  - python >= 3.8
-  - snakemake >= 5.30
-  - mamba
-  - drmaa
-  - click
+  - python=3.8
   - pandas
-  - requests
-  - pip
-  - pip:
-      - python-gitlab
-
+  - tqdm
+  - numpy
+  - pysam>=0.16.0
+  - samtools>=1.14
+  - seqkit
+  - editdistance
+  - parasail-python==1.2.3
+  - bioframe==0.3.2
+  - matplotlib
+  - bedtools==2.30.0
+  - scikit-learn
+  - minimap2
+  - biopython
+  - pysam>=0.16.0
+  - vsearch==2.15.1
+  - umap-learn==0.5.2
