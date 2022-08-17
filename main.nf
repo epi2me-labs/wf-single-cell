@@ -90,13 +90,17 @@ workflow pipeline {
         ref_genome_dir
         umap_genes
     main:
+
+        sample_sheet_parent = file(sc_sample_sheet).getParent()
+
         inputs = Channel.fromPath(sc_sample_sheet)
                     .splitCsv(header:true)
                     .map { row -> tuple(
                               row.run_id, 
                               row.kit_name, 
                               row.kit_version, 
-                              file(row.path))}
+                              file("$sample_sheet_parent/$row.path"))}
+        inputs.view()
         
         // Sockeye
         stranding(
@@ -158,7 +162,6 @@ workflow {
     umap_genes = file(params.umap_plot_genes, checkIfExists: true)
 
     pipeline(sc_sample_sheet, ref_genome_dir, umap_genes)
-
 
     pack_images(pipeline.out.umap_plots)
     
