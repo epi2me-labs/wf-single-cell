@@ -7,7 +7,7 @@ process chunk_files {
     // The orginal SM rule (call_cat_fastq) called chunk_fastqs.py, which did file concatenation and chuck creation, we need only the latter
     cpus params.max_threads
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
         tuple val(sample_id),
               val(kit_name),
@@ -29,7 +29,7 @@ process call_adapter_scan {
     // Neil: Only one thread for this. Seems low
     // Do we need a batch number to add to output filenames?
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
         tuple val(sample_id),
             val(kit_name),
@@ -79,7 +79,7 @@ process gather_fastq{
 
 process summarize_adapter_table {
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
         tuple val(sample_id), path(read_config)
     output:

@@ -1,6 +1,6 @@
 process get_kit_info {
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
         path kit_config
         path sc_sample_sheet
@@ -52,7 +52,7 @@ process extract_barcodes{
     Build minimap index from reference genome
     */
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     cpus params.max_threads
     input:
         tuple val(sample_id), 
@@ -83,7 +83,7 @@ process extract_barcodes{
 process cleanup_headers_1 {
     label "wfsockeye"
     cpus params.max_threads
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
          tuple val(sample_id), path(bam)
     output:
@@ -97,7 +97,7 @@ process cleanup_headers_1 {
 
 process generate_whitelist{
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     cpus params.max_threads
     input:
         tuple val(sample_id), path(counts)
@@ -115,7 +115,7 @@ process generate_whitelist{
 
 process split_bam_by_chroms{
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     cpus params.max_threads
     input:
         tuple val(sample_id), path(bam), path(bai)
@@ -131,7 +131,7 @@ process split_bam_by_chroms{
 
 process assign_barcodes{
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
          tuple val(sample_id), 
                val(kit_name),
@@ -170,7 +170,7 @@ process assign_barcodes{
 process cleanup_headers_2 {
     label "wfsockeye"
     cpus params.max_threads
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
          tuple val(sample_id), val(chr), path(bam)
     output:
@@ -188,7 +188,7 @@ process cleanup_headers_2 {
 
 process bam_to_bed {
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
         tuple val(chr), //emit chr first for doing cross on gtfs 
               val(sample_id),
@@ -216,7 +216,7 @@ process split_gtf_by_chroms {
 
 process assign_genes {
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
         tuple val(sample_id),
               val(chr),
@@ -236,7 +236,7 @@ process assign_genes {
 
 process add_gene_tags_to_bam {
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
         tuple val(sample_id),
               val(chr),
@@ -258,7 +258,7 @@ process add_gene_tags_to_bam {
 process cleanup_headers_3 {
     label "wfsockeye"
     cpus params.max_threads
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
          tuple val(sample_id), 
                val(chr), 
@@ -278,7 +278,7 @@ process cleanup_headers_3 {
 
 process cluster_umis {
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     cpus params.umi_cluster_max_threads
     input:
         tuple val(sample_id),
@@ -302,7 +302,7 @@ process cluster_umis {
 
 process cleanup_headers_4{
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     cpus params.max_threads
     input:
          tuple val(sample_id), 
@@ -321,7 +321,7 @@ process cleanup_headers_4{
 process combine_chrom_bams {
     // Merge all chromosome bams by sample_id
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
         tuple val(sample_id), 
               path(bams),
@@ -339,7 +339,7 @@ process combine_chrom_bams {
 
 process count_cell_gene_umi_reads {
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
         tuple val(sample_id),
               path(bam),
@@ -356,7 +356,7 @@ process count_cell_gene_umi_reads {
 
 process umi_gene_saturation {
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
         tuple val(sample_id),
               path(cell_umi_gene_tsv)
@@ -372,7 +372,7 @@ process umi_gene_saturation {
 
 process construct_expression_matrix {
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
         tuple val(sample_id),
               path(bam),
@@ -389,7 +389,7 @@ process construct_expression_matrix {
 
 process process_expression_matrix {
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
         tuple val(sample_id),
               path(matrix_counts_tsv)
@@ -409,7 +409,7 @@ process process_expression_matrix {
 
 process umap_reduce_expression_matrix {
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
         tuple val(sample_id),
               path(matrix_processed_tsv)
@@ -427,7 +427,7 @@ process umap_reduce_expression_matrix {
 
 process umap_plot_total_umis {
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
         tuple val(sample_id),
               path(matrix_umap_tsv),
@@ -446,7 +446,7 @@ process umap_plot_total_umis {
 process umap_plot_genes {
     // TODO: make a channle of input genes for thes process
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
         tuple val(sample_id),
               path(matrix_umap_tsv),
@@ -466,7 +466,7 @@ process umap_plot_genes {
 
 process umap_plot_mito_genes {
     label "wfsockeye"
-    conda "${projectDir}/envs/barcodes.yml"
+    conda "${projectDir}/environment.yml"
     input:
         tuple val(sample_id),
               path(matrix_umap_tsv),
