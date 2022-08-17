@@ -3,26 +3,12 @@ include:
     - project: "epi2melabs/ci-templates"
       file: "wf-containers.yaml"
 
-docker-run:
-    # Define a 1D job matrix to inject a variable named MATRIX_NAME into
-    #   the CI environment, we can use the value of MATRIX_NAME to determine
-    #   which options to apply as part of the rules block below
-    # NOTE There is a slightly cleaner way to define this matrix to include
-    #   the variables, but it is broken when using long strings! See CW-756
-    parallel:
-        matrix:
-            - MATRIX_NAME: [
-                "single_sample"
-            ]
-    rules:
-        # NOTE As we're overriding the rules block for the included docker-run
-        #   we must redefine this CI_COMMIT_BRANCH rule to prevent docker-run
-        #   being incorrectly scheduled for "detached merge request pipelines" etc.
-        - if: ($CI_COMMIT_BRANCH == null || $CI_COMMIT_BRANCH == "dev-template")
-          when: never
-        - if: $MATRIX_NAME == "differential_expression"
-          variables:
-              NF_BEFORE_SCRIPT: "wget -O test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/wf-single-cell-testdata-chr22.tar.gz && tar -xzvf test_data.tar.gz"
-              NF_WORKFLOW_OPTS: "--single_cell_sample_sheet wf-single-cell-testdata-chr22/samples.csv --ref_genome_dir wf-single-cell-testdata-chr22/refdata-gex-GRCh38-2020-A-chr22"
+variables:
+    # Workflow inputs given to nextflow.
+    # The workflow should define `--out_dir`, the CI template sets this.
+    # Only common file inputs and option values need to be given here
+    # (not things such as -profile)
 
-              # NF_IGNORE_PROCESSES: preprocess_reads,merge_transcriptomes
+    NF_BEFORE_SCRIPT: "wget -O test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/wf-single-cell-testdata-chr22.tar.gz && tar -xzvf test_data.tar.gz"
+    NF_WORKFLOW_OPTS: "--single_cell_sample_sheet wf-single-cell-testdata-chr22/samples.csv --ref_genome_dir wf-single-cell-testdata-chr22/refdata-gex-GRCh38-2020-A-chr22"
+
