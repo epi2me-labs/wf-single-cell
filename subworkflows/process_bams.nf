@@ -515,12 +515,24 @@ workflow process_bams {
         // [sample_id, chr, bam, bai]
         bam_bai_chromes = split_bam_by_chroms.out.bam.map({it ->
             pairs = []
-            for (i=0; i<it[1].size(); i++) {
-                chr = it[1][i].toString().tokenize('/')[-1] - '.sorted.bam'
-                pairs.add(tuple(it[0], chr, it[1][i], it[2][i]))
+            if (it.size() == 3){
+                // Only single chrom so we have:
+                // [sample_id, bam, bai]
+                chr = it[1].toString().tokenize('/')[-1] - '.sorted.bam'
+                pairs.add(tuple(it[0], chr, it[1], it[2])) 
+            }
+            else{
+                // Multiple chroms:
+                // [sample_id, [bam1, bam2], [bai1, bai2]]
+                for (i=0; i<it[1].size(); i++) {
+                    chr = it[1][i].toString().tokenize('/')[-1] - '.sorted.bam'
+                    pairs.add(tuple(it[0], chr, it[1][i], it[2][i]))
+                }
             }
             return pairs
         }).flatMap(it-> it)
+
+        bam_bai_chromes.view()
 
         // merge 
         chr_bam_kit = get_kit_info.out.kit_info

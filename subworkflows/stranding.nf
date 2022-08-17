@@ -78,6 +78,8 @@ process gather_fastq{
 }
 
 process summarize_adapter_table {
+    label "wfsockeye"
+    conda "${projectDir}/envs/barcodes.yml"
     input:
         tuple val(sample_id), path(read_config)
     output:

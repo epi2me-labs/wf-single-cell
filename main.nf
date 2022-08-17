@@ -172,6 +172,4 @@ workflow {
             return l
         }).concat(pack_images.out)
     )
-
-
 }

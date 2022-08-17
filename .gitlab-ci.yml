@@ -4,9 +4,11 @@ include:
       file: "wf-containers.yaml"
 
 variables:
-    # We'll use the single-file case for these runs
-    NF_WORKFLOW_OPTS: "--fastq test_data/reads.fastq.gz"
-
+              NF_BEFORE_SCRIPT: wget -O test_data.tar.gz https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-isoforms/wf-isoforms_test_data.tar.gz && tar -xzvf  test_data.tar.gz
+              NF_WORKFLOW_OPTS: "--fastq  ERR6053095_chr20.fastq \
+                  --ref_genome chr20/hg38_chr20.fa --ref_annotation chr20/gencode.v22.annotation.chr20.gtf \
+                  --jaffal_refBase chr20/ --jaffal_genome hg38_chr20 --jaffal_annotation genCode22"
+              NF_IGNORE_PROCESSES: preprocess_reads,merge_transcriptomes
 
 docker-run:
     # Define a 1D job matrix to inject a variable named MATRIX_NAME into
@@ -17,73 +19,20 @@ docker-run:
     parallel:
         matrix:
             - MATRIX_NAME: [
-                "single-file", "single-file-s3",
-                "case01", "case01-s3",
-                "case02", "case02-s3",
-                "case03", "case03-s3",
-                "case04", "case04-s3",
-                "case05", "case05-s3",
-                "case06", "case06-s3",
-                "case07", "case07-s3",
-                "case08", "case08-s3"]
+                "single_sample"
+            ]
     rules:
         # NOTE As we're overriding the rules block for the included docker-run
         #   we must redefine this CI_COMMIT_BRANCH rule to prevent docker-run
         #   being incorrectly scheduled for "detached merge request pipelines" etc.
         - if: ($CI_COMMIT_BRANCH == null || $CI_COMMIT_BRANCH == "dev-template")
           when: never
-        - if: $MATRIX_NAME == "single-file"
+        - if: $MATRIX_NAME == "differential_expression"
           variables:
-              NF_WORKFLOW_OPTS: "--fastq test_data/reads.fastq.gz"
-        - if: $MATRIX_NAME == "single-file-s3"
-          variables:
-              NF_WORKFLOW_OPTS: "--fastq s3://ont-exd-int-s3-euwst1-epi2me-labs/wf-template/test_data/reads.fastq.gz"
-
-        - if: $MATRIX_NAME == "case01"
-          variables:
-              NF_WORKFLOW_OPTS: "--fastq test_data/fastq_ingress/case01"
-        - if: $MATRIX_NAME == "case01-s3"
-          variables:
-              NF_WORKFLOW_OPTS: "--fastq s3://ont-exd-int-s3-euwst1-epi2me-labs/wf-template/test_data/fastq_ingress/case01"
-
-        - if: $MATRIX_NAME == "case02"
-          variables:
-              NF_WORKFLOW_OPTS: "--fastq test_data/fastq_ingress/case02"
-        - if: $MATRIX_NAME == "case02-s3"
-          variables:
-              NF_WORKFLOW_OPTS: "--fastq s3://ont-exd-int-s3-euwst1-epi2me-labs/wf-template/test_data/fastq_ingress/case02"
-
-        - if: $MATRIX_NAME == "case03"
-          variables:
-              NF_WORKFLOW_OPTS: "--fastq test_data/fastq_ingress/case03"
-        - if: $MATRIX_NAME == "case03-s3"
-          variables:
-              NF_WORKFLOW_OPTS: "--fastq s3://ont-exd-int-s3-euwst1-epi2me-labs/wf-template/test_data/fastq_ingress/case03"
-
-        - if: $MATRIX_NAME == "case04"
-          variables:
-              NF_WORKFLOW_OPTS: "--fastq test_data/fastq_ingress/case04"
-        - if: $MATRIX_NAME == "case04-s3"
-          variables:
-              NF_WORKFLOW_OPTS: "--fastq s3://ont-exd-int-s3-euwst1-epi2me-labs/wf-template/test_data/fastq_ingress/case04"
-
-        - if: $MATRIX_NAME == "case06"
-          variables:
-              NF_WORKFLOW_OPTS: "--fastq test_data/fastq_ingress/case06 --sample_sheet test_data/fastq_ingress/case06/sample_sheet.csv"
-        - if: $MATRIX_NAME == "case06-s3"
-          variables:
-              NF_WORKFLOW_OPTS: "--fastq s3://ont-exd-int-s3-euwst1-epi2me-labs/wf-template/test_data/fastq_ingress/case06 --sample_sheet s3://ont-exd-int-s3-euwst1-epi2me-labs/wf-template/test_data/fastq_ingress/case06/sample_sheet.csv"
-
-        - if: $MATRIX_NAME == "case07"
-          variables:
-              NF_WORKFLOW_OPTS: "--fastq test_data/fastq_ingress/case07 --sample_sheet test_data/fastq_ingress/case07/sample_sheet.csv"
-        - if: $MATRIX_NAME == "case07-s3"
-          variables:
-              NF_WORKFLOW_OPTS: "--fastq s3://ont-exd-int-s3-euwst1-epi2me-labs/wf-template/test_data/fastq_ingress/case07 --sample_sheet s3://ont-exd-int-s3-euwst1-epi2me-labs/wf-template/test_data/fastq_ingress/case07/sample_sheet.csv"
-
-        - if: $MATRIX_NAME == "case08"
-          variables:
-              NF_WORKFLOW_OPTS: "--fastq test_data/fastq_ingress/case08 --sample_sheet test_data/fastq_ingress/case08/sample_sheet.csv"
-        - if: $MATRIX_NAME == "case08-s3"
-          variables:
-              NF_WORKFLOW_OPTS: "--fastq s3://ont-exd-int-s3-euwst1-epi2me-labs/wf-template/test_data/fastq_ingress/case08 --sample_sheet s3://ont-exd-int-s3-euwst1-epi2me-labs/wf-template/test_data/fastq_ingress/case08/sample_sheet.csv"
+              NF_BEFORE_SCRIPT: wget -O differential_expression.tar.gz https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-isoforms/wf-isoforms_differential_expression.tar.gz && tar -xzvf  differential_expression.tar.gz
+              NF_WORKFLOW_OPTS: "--fastq  differential_expression_dataset/fastq \
+                  --de_analysis \
+                  --ref_genome differential_expression_dataset/chr1.fa \
+                --ref_annotation differential_expression_dataset/Homo_sapiens.GRCh38.91.Chr1.gtf \
+                --direct_rna"
+              NF_IGNORE_PROCESSES: preprocess_reads,merge_transcriptomes
