@@ -321,7 +321,7 @@ process cleanup_headers_4{
 process combine_chrom_bams {
     // Merge all chromosome bams by sample_id
     label "wfsockeye"
-    conda "${projectDir}/envs/samtools.yml"
+    conda "${projectDir}/envs/barcodes.yml"
     input:
         tuple val(sample_id), 
               path(bams),

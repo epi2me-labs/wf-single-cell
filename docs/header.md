@@ -1,7 +1,10 @@
-# Workflow template
+# Workflow single-cell
 
-This repository contains a [nextflow](https://www.nextflow.io/) workflow
-template that can be used as the basis for creating new workflows.
+wf-single-cell is a research pipeline designed to identify the cell barcode
+and UMI sequences present in nanopore sequencing reads generated from single-cell gene expression libraries. 
 
-> This workflow is not intended to be used by end users.
+It was initially created as a Nextflow port of [Sockeye](https://github.com/nanoporetech/sockeye).
+
+
+
 
