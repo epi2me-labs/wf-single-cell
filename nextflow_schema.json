@@ -201,7 +201,7 @@
             "$ref": "#/definitions/generic_options"
         },
         {
-            "ref": "#/definitions/advanced_options"
+            "$ref": "#/definitions/advanced_options"
         }
     ],
     "properties": {
