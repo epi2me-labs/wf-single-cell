@@ -50,13 +50,13 @@ wget -O test_data.tar.gz  \
 ```
 
 The single-cell-sample sheet defines the samples and 10x kits that were used to process them. 
-An exampke sheet with one sample is:
+An example sheet with one sample is:
 ```
 run_id,kit_name,kit_version
 run1,3prime,v3
 ```
 
-The `run_id` must match a sample given in the `--fastq` option
+The `run_id` must match a samples given in the `--fastq` option
 
 The workflow can be run with the demonstration data using:
 
