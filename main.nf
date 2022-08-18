@@ -22,7 +22,7 @@ include { process_bams } from './subworkflows/process_bams'
 process summariseAndCatReads {
     // concatenate fastq and fastq.gz in a dir
 
-    label "wfsockeye"
+    label "singlecell"
     cpus 1
     input:
         tuple path(directory), val(meta)
@@ -37,7 +37,7 @@ process summariseAndCatReads {
 
 
 process getVersions {
-    label "wfsockeye"
+    label "singlecell"
     cpus 1
     output:
         path "versions.txt"
@@ -50,7 +50,7 @@ process getVersions {
 
 
 process getParams {
-    label "wfsockeye"
+    label "singlecell"
     cpus 1
     output:
         path "params.json"
@@ -139,7 +139,7 @@ workflow pipeline {
 }
 
 process pack_images {
-    label "wfsockeye"
+    label "singlecell"
     input:
         tuple val(sample_id),
               path(imgs)  

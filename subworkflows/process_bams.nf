@@ -1,5 +1,5 @@
 process get_kit_info {
-    label "wfsockeye"
+    label "singlecell"
     conda "${projectDir}/environment.yaml"
     input:
         path kit_config
@@ -51,7 +51,7 @@ process extract_barcodes{
     /*
     Build minimap index from reference genome
     */
-    label "wfsockeye"
+    label "singlecell"
     conda "${projectDir}/environment.yaml"
     cpus params.max_threads
     input:
@@ -81,7 +81,7 @@ process extract_barcodes{
 }
 
 process cleanup_headers_1 {
-    label "wfsockeye"
+    label "singlecell"
     cpus params.max_threads
     conda "${projectDir}/environment.yaml"
     input:
@@ -96,7 +96,7 @@ process cleanup_headers_1 {
 }
 
 process generate_whitelist{
-    label "wfsockeye"
+    label "singlecell"
     conda "${projectDir}/environment.yaml"
     cpus params.max_threads
     input:
@@ -114,7 +114,7 @@ process generate_whitelist{
 }
 
 process split_bam_by_chroms{
-    label "wfsockeye"
+    label "singlecell"
     conda "${projectDir}/environment.yaml"
     cpus params.max_threads
     input:
@@ -130,7 +130,7 @@ process split_bam_by_chroms{
 
 
 process assign_barcodes{
-    label "wfsockeye"
+    label "singlecell"
     conda "${projectDir}/environment.yaml"
     input:
          tuple val(sample_id), 
@@ -168,7 +168,7 @@ process assign_barcodes{
 }
 
 process cleanup_headers_2 {
-    label "wfsockeye"
+    label "singlecell"
     cpus params.max_threads
     conda "${projectDir}/environment.yaml"
     input:
@@ -187,7 +187,7 @@ process cleanup_headers_2 {
 }
 
 process bam_to_bed {
-    label "wfsockeye"
+    label "singlecell"
     conda "${projectDir}/environment.yaml"
     input:
         tuple val(chr), //emit chr first for doing cross on gtfs 
@@ -215,7 +215,7 @@ process split_gtf_by_chroms {
 }   
 
 process assign_genes {
-    label "wfsockeye"
+    label "singlecell"
     conda "${projectDir}/environment.yaml"
     input:
         tuple val(sample_id),
@@ -235,7 +235,7 @@ process assign_genes {
 }
 
 process add_gene_tags_to_bam {
-    label "wfsockeye"
+    label "singlecell"
     conda "${projectDir}/environment.yaml"
     input:
         tuple val(sample_id),
@@ -256,7 +256,7 @@ process add_gene_tags_to_bam {
 }
 
 process cleanup_headers_3 {
-    label "wfsockeye"
+    label "singlecell"
     cpus params.max_threads
     conda "${projectDir}/environment.yaml"
     input:
@@ -277,7 +277,7 @@ process cleanup_headers_3 {
 }
 
 process cluster_umis {
-    label "wfsockeye"
+    label "singlecell"
     conda "${projectDir}/environment.yaml"
     cpus params.umi_cluster_max_threads
     input:
@@ -301,7 +301,7 @@ process cluster_umis {
 }
 
 process cleanup_headers_4{
-    label "wfsockeye"
+    label "singlecell"
     conda "${projectDir}/environment.yaml"
     cpus params.max_threads
     input:
@@ -320,7 +320,7 @@ process cleanup_headers_4{
 
 process combine_chrom_bams {
     // Merge all chromosome bams by sample_id
-    label "wfsockeye"
+    label "singlecell"
     conda "${projectDir}/environment.yaml"
     input:
         tuple val(sample_id), 
@@ -338,7 +338,7 @@ process combine_chrom_bams {
 }
 
 process count_cell_gene_umi_reads {
-    label "wfsockeye"
+    label "singlecell"
     conda "${projectDir}/environment.yaml"
     input:
         tuple val(sample_id),
@@ -355,7 +355,7 @@ process count_cell_gene_umi_reads {
 }
 
 process umi_gene_saturation {
-    label "wfsockeye"
+    label "singlecell"
     conda "${projectDir}/environment.yaml"
     input:
         tuple val(sample_id),
@@ -371,7 +371,7 @@ process umi_gene_saturation {
 }
 
 process construct_expression_matrix {
-    label "wfsockeye"
+    label "singlecell"
     conda "${projectDir}/environment.yaml"
     input:
         tuple val(sample_id),
@@ -388,7 +388,7 @@ process construct_expression_matrix {
 }
 
 process process_expression_matrix {
-    label "wfsockeye"
+    label "singlecell"
     conda "${projectDir}/environment.yaml"
     input:
         tuple val(sample_id),
@@ -408,7 +408,7 @@ process process_expression_matrix {
 }
 
 process umap_reduce_expression_matrix {
-    label "wfsockeye"
+    label "singlecell"
     conda "${projectDir}/environment.yaml"
     input:
         tuple val(sample_id),
@@ -426,7 +426,7 @@ process umap_reduce_expression_matrix {
 
 
 process umap_plot_total_umis {
-    label "wfsockeye"
+    label "singlecell"
     conda "${projectDir}/environment.yaml"
     input:
         tuple val(sample_id),
@@ -445,7 +445,7 @@ process umap_plot_total_umis {
 
 process umap_plot_genes {
     // TODO: make a channle of input genes for thes process
-    label "wfsockeye"
+    label "singlecell"
     conda "${projectDir}/environment.yaml"
     input:
         tuple val(sample_id),
@@ -465,7 +465,7 @@ process umap_plot_genes {
 }
 
 process umap_plot_mito_genes {
-    label "wfsockeye"
+    label "singlecell"
     conda "${projectDir}/environment.yaml"
     input:
         tuple val(sample_id),
