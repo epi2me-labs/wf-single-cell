@@ -36,34 +36,6 @@ process summariseAndCatReads {
 }
 
 
-process getVersions {
-    label "singlecell"
-    cpus 1
-    output:
-        path "versions.txt"
-    script:
-    """
-    python -c "import pysam; print(f'pysam,{pysam.__version__}')" >> versions.txt
-    fastcat --version | sed 's/^/fastcat,/' >> versions.txt
-    """
-}
-
-
-process getParams {
-    label "singlecell"
-    cpus 1
-    output:
-        path "params.json"
-    script:
-        def paramsJSON = new JsonBuilder(params).toPrettyString()
-    """
-    # Output nextflow params object to JSON
-    echo '$paramsJSON' > params.json
-    """
-}
-
-
-
 // See https://github.com/nextflow-io/nextflow/issues/1636
 // This is the only way to publish files from a workflow whilst
 // decoupling the publish from the process steps.
@@ -91,7 +63,7 @@ workflow pipeline {
         ref_genome_dir
         umap_genes
     main:
-
+        
         // Paths in sc_sample_sheet should be relative to sc_sample_sheet parent directoy
         sample_sheet_parent = file(sc_sample_sheet).getParent()
 
