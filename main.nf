@@ -40,6 +40,7 @@ process summariseAndCatReads {
 // This is the only way to publish files from a workflow whilst
 // decoupling the publish from the process steps.
 process output {
+    label "singlecell"
     // publish inputs to output directory
     publishDir "${params.out_dir}", mode: 'copy', pattern: "*", 
         saveAs: { filename -> "${sample_id}/$filename" }
