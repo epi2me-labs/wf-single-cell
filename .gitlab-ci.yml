@@ -10,5 +10,5 @@ variables:
     # (not things such as -profile)
 
     NF_BEFORE_SCRIPT: "wget -O test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/wf-single-cell-testdata-chr22.tar.gz && tar -xzvf test_data.tar.gz"
-    NF_WORKFLOW_OPTS: "--fastq wf-single-cell-testdata-chr22/fastq--single_cell_sample_sheet wf-single-cell-testdata-chr22/samples.csv --ref_genome_dir wf-single-cell-testdata-chr22/refdata-gex-GRCh38-2020-A-chr22"
+    NF_WORKFLOW_OPTS: "--fastq wf-single-cell-testdata-chr22/fastq --single_cell_sample_sheet wf-single-cell-testdata-chr22/samples.csv --ref_genome_dir wf-single-cell-testdata-chr22/refdata-gex-GRCh38-2020-A-chr22"
 

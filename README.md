@@ -73,6 +73,21 @@ nextflow run epi2me-labs/wf-template --help
 
 to see the options for the workflow.
 
+**Downloading reference data**
+The pipeline requires access to reference data files that are packaged and freely available from 10x Genomics. For human samples, the GRCh38 packaged reference files can be downloaded using either curl or wget using:
+
+```
+curl -O https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2020-A.tar.gz
+tar -xvf refdata-gex-GRCh38-2020-A.tar.gz
+```
+
+or 
+```
+cd /PATH/TO/10X/DOWNLOADS
+wget https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2020-A.tar.gz
+tar -xvf refdata-gex-GRCh38-2020-A.tar.gz
+```
+
 **Download demonstration data**
 ```
 A small test dataset is provided for the purposes of testing the workflow software,
@@ -83,6 +98,15 @@ wget -O test_data.tar.gz  \
   https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/wf-single-cell-testdata-chr22.tar.gz \
   && tar -xzvf test_data.tar.gz
 ```
+
+The single-cell-sample sheet defines the samples and 10x kits that were used to process them. 
+An exampke sheet with one sample is:
+```
+run_id,kit_name,kit_version
+run1,3prime,v3
+```
+
+The `run_id` must match a sample given in the `--fastq` option
 
 The workflow can be run with the demonstration data using:
 
