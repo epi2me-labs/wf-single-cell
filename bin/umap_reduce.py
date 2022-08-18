@@ -93,8 +93,7 @@ def main(args):
         n_neighbors=args.n_neighbors,
         min_dist=args.min_dist,
         n_components=args.dimensions,
-        verbose=2,
-        random_state=42  # For testing
+        verbose=2
     )
 
     X_embedded = reducer.fit_transform(X)
