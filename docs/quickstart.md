@@ -23,9 +23,34 @@ nextflow run epi2me-labs/wf-template --help
 
 to see the options for the workflow.
 
+**Download demonstration data**
+```
+A small test dataset is provided for the purposes of testing the workflow software,
+it consits of data from 10 cells and the 10x reference data for only chr22
+it can be downloaded using:
+
+wget -O test_data.tar.gz  \
+  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/wf-single-cell-testdata-chr22.tar.gz \
+  && tar -xzvf test_data.tar.gz
+```
+
+The workflow can be run with the demonstration data using:
+
+```
+OUTPUT=output
+nextflow run epi2me-labs/wf-single-cell \
+    -w ${OUTPUT}/workspace \
+    -profile standard \
+    --bam demo_data/chr6_chr20.bam \
+    --bed demo_data/chr6_chr20.bed \
+    --ref demo_data/chr6_chr20.fasta \
+    --out_dir ${OUTPUT}
+
+```
+
 **Workflow outputs**
 
-The pipeline output will be written to a directory defined by ``OUTPUT_BASE`` in the ``config/config.yml`` file. For instance, using the example ``config/config.yml`` and ``config/sample_sheet.csv`` files shown above, the pipeline output would be written to three separate directories, one for each ``run_id``:
+The pipeline output will be written to a directory defined by ``--out_dir``. For instance, using the example ``config/config.yml`` and ``config/sample_sheet.csv`` files shown above, the pipeline output would be written to three separate directories, one for each ``run_id``:
 
 ::
 

@@ -7,20 +7,16 @@ process chunk_files {
     // The orginal SM rule (call_cat_fastq) called chunk_fastqs.py, which did file concatenation and chuck creation, we need only the latter
     cpus params.max_threads
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     input:
         tuple val(sample_id),
-              val(kit_name),
-              val(kit_version), 
               path(fastq)
 
     output:
         tuple val(sample_id),
-              val(kit_name),
-              val(kit_version),
               path("chunks/*")
     """
-    seqkit split $fastq -p ${task.cpus} -O chunks
+    seqkit split $fastq -p "${task.cpus}" -O chunks
     """
 }
 
@@ -29,7 +25,7 @@ process call_adapter_scan {
     // Neil: Only one thread for this. Seems low
     // Do we need a batch number to add to output filenames?
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     input:
         tuple val(sample_id),
             val(kit_name),
@@ -40,7 +36,7 @@ process call_adapter_scan {
         tuple val(sample_id), path("*.tsv"), emit: read_config_chunked
     """
     # Get batch name from file to prevent name collisions
-    batch=\$(echo ${fastq_chunk}|awk -F'.' '{print \$(NF-2)}')
+    batch=\$(echo ${fastq_chunk}|awk -F'.' '{print \$(NF-1)}')
     echo \$batch
     
     adapter_scan_vsearch.py \
@@ -79,7 +75,7 @@ process gather_fastq{
 
 process summarize_adapter_table {
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     input:
         tuple val(sample_id), path(read_config)
     output:
@@ -126,48 +122,30 @@ process summarize_adapter_table {
 // workflow module
 workflow stranding {
     take:
-        inputs
-        sc_sample_sheet
+        reads
+        sample_kits
     main:
-        d = {it ->
-        /* Harmonize tuples
-        output:
-            tuple val(sample_id), path('*.gff')
-        When there are multiple paths, will emit:
-            [sample_id, [path, path ..]]
-        when there's a single path, this:
-            [sample_id, path]
-        This closure makes both cases:
-            [[sample_id, path][sample_id, path]].
-        */
+
+        chunk_files(reads)
+        
+        // chunk_files.out.view()
+        
+     
+        chunks_and_kits = sample_kits.cross(chunk_files.out.flatMap({it ->
+            // Rejig the outputs to be [sample_id, fatq_chunk]
+            // Then merge in kit info
             if (it[1].getClass() != java.util.ArrayList){
-                // If only one path, `it` will be [sample_id, path]
-                return [it]
+            // If only one path, `it` will be [sample_id, path]
+            return [it]
             }
             l = [];
             for (x in it[1]){
                 l.add(tuple(it[0], x))
             }
             return l
-        }
-
-        chunk_files(inputs)
+        })).map{it-> tuple(it[0][0], it[0][1], it[0][2], it[1][1])  }
         
-        chunk_files.out.flatMap(d)
-        
-        call_adapter_scan(
-            chunk_files.out.flatMap({
-                // TODO: look for a better way to emit files in tuples using wildcards
-                if (it[3].getClass() != java.util.ArrayList){
-                // If only one path, `it` will be [sample_id, path]
-                return [it]
-                }
-                l = [];
-                for (x in it[3]){
-                    l.add(tuple(it[0], it[1], it[2], x))
-                }
-                return l
-            }))
+        call_adapter_scan(chunks_and_kits)
         
         gather_fastq(call_adapter_scan.out.stranded_fq_chunked.groupTuple())
 

@@ -18,6 +18,12 @@
                     "format": "directory-path",
                     "description": "Directory for output of all user-facing files."
                 },
+                "fastq": {
+                    "type": "string",
+                    "format": "path",
+                    "description": "A fastq file or directory containing fastq input files or directories of input files.",
+                    "help_text": "If directories named \\\"barcode*\\\" are found under the `--fastq` directory the data is assumed to be multiplex and each barcode directory will be processed independently. If `.fastq(.gz)` files are found under the `--fastq` directory the sample is assumed to not be multiplexed. In this second case `--samples` should be a simple name rather than a CSV file."
+                },
                 "sample": {
                     "type": "string",
                     "description": "A sample name for non-multiplexed data. Permissible if passing a file or directory of .fastq(.gz)."

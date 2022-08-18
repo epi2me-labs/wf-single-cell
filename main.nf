@@ -31,7 +31,7 @@ process summariseAndCatReads {
         tuple val("${meta.sample_id}"), path("${meta.sample_id}.fastq"), emit: fastq
     shell:
     """
-    fastcat -s ${meta.sample_id} -r ${meta.sample_id}.stats -x ${directory} > ${sample_id}.fastq
+    fastcat -s ${meta.sample_id} -r ${meta.sample_id}.stats -x ${directory} > ${meta.sample_id}.fastq
     """
 }
 
@@ -86,6 +86,7 @@ process output {
 // workflow module
 workflow pipeline {
     take:
+        reads
         sc_sample_sheet
         ref_genome_dir
         umap_genes
@@ -94,18 +95,18 @@ workflow pipeline {
         // Paths in sc_sample_sheet should be relative to sc_sample_sheet parent directoy
         sample_sheet_parent = file(sc_sample_sheet).getParent()
 
-        inputs = Channel.fromPath(sc_sample_sheet)
+        sample_kits = Channel.fromPath(sc_sample_sheet)
                     .splitCsv(header:true)
                     .map { row -> tuple(
                               row.run_id, 
                               row.kit_name, 
-                              row.kit_version, 
-                              file("$sample_sheet_parent/$row.path"))}
-        
-        // Sockeye
+                              row.kit_version)}
+
+        summariseAndCatReads(reads)
+
         stranding(
-            inputs,
-            sc_sample_sheet)
+            summariseAndCatReads.out.fastq,
+            sample_kits)
         
         // 10x reference downloads have known names
         ref_genome_fasta = file("${ref_genome_dir}/fasta/genome.fa", checkIfExists: true)
@@ -113,7 +114,7 @@ workflow pipeline {
         ref_genome_idx = file("${ref_genome_fasta}.fai", checkIfExists: true)
         
         if (params.kit_config){
-            kit_configs = file("${params.kit_config}/kit_configs.csv", checkIfExists: true)
+            kit_configs = file(params.kit_config, checkIfExists: true)
         }else{
             kit_configs = file("${projectDir}/kit_configs.csv", checkIfExists: true)
         }
@@ -161,7 +162,16 @@ workflow {
     ref_genome_dir = file(params.ref_genome_dir, checkIfExists: true)
     umap_genes = file(params.umap_plot_genes, checkIfExists: true)
 
-    pipeline(sc_sample_sheet, ref_genome_dir, umap_genes)
+    fastq = file(params.fastq, type: "file")
+
+    reads = fastq_ingress([
+            "input":params.fastq,
+            "sample":params.sample,
+            "sample_sheet":params.sample_sheet,
+            "sanitize": params.sanitize_fastq,
+            "output":params.out_dir])
+
+    pipeline(reads, sc_sample_sheet, ref_genome_dir, umap_genes)
 
     pack_images(pipeline.out.umap_plots)
     

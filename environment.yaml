@@ -1,5 +1,6 @@
 name: wf-single-cell
 channels:
+  - epi2melabs
   - conda-forge
   - bioconda
   - defaults
@@ -22,3 +23,4 @@ dependencies:
   - pysam>=0.16.0
   - vsearch==2.15.1
   - umap-learn==0.5.2
+  - fastcat

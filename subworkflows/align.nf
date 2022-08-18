@@ -1,6 +1,6 @@
 process call_paftools {
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     input:
         path ref_genes_gtf
     output:
@@ -22,7 +22,7 @@ process get_chrom_sizes{
 
 process align_to_ref {
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     input:
         tuple val(sample_id),
               path(stranded_fq)

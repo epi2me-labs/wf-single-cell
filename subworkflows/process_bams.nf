@@ -1,6 +1,8 @@
+import java.util.ArrayList;
+
 process get_kit_info {
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     input:
         path kit_config
         path sc_sample_sheet
@@ -52,7 +54,7 @@ process extract_barcodes{
     Build minimap index from reference genome
     */
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     cpus params.max_threads
     input:
         tuple val(sample_id), 
@@ -83,7 +85,7 @@ process extract_barcodes{
 process cleanup_headers_1 {
     label "singlecell"
     cpus params.max_threads
-    conda "${projectDir}/environment.yaml"
+    
     input:
          tuple val(sample_id), path(bam)
     output:
@@ -97,7 +99,7 @@ process cleanup_headers_1 {
 
 process generate_whitelist{
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     cpus params.max_threads
     input:
         tuple val(sample_id), path(counts)
@@ -115,7 +117,7 @@ process generate_whitelist{
 
 process split_bam_by_chroms{
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     cpus params.max_threads
     input:
         tuple val(sample_id), path(bam), path(bai)
@@ -131,7 +133,7 @@ process split_bam_by_chroms{
 
 process assign_barcodes{
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     input:
          tuple val(sample_id), 
                val(kit_name),
@@ -170,7 +172,7 @@ process assign_barcodes{
 process cleanup_headers_2 {
     label "singlecell"
     cpus params.max_threads
-    conda "${projectDir}/environment.yaml"
+    
     input:
          tuple val(sample_id), val(chr), path(bam)
     output:
@@ -188,7 +190,7 @@ process cleanup_headers_2 {
 
 process bam_to_bed {
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     input:
         tuple val(chr), //emit chr first for doing cross on gtfs 
               val(sample_id),
@@ -216,7 +218,7 @@ process split_gtf_by_chroms {
 
 process assign_genes {
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     input:
         tuple val(sample_id),
               val(chr),
@@ -236,7 +238,7 @@ process assign_genes {
 
 process add_gene_tags_to_bam {
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     input:
         tuple val(sample_id),
               val(chr),
@@ -258,7 +260,7 @@ process add_gene_tags_to_bam {
 process cleanup_headers_3 {
     label "singlecell"
     cpus params.max_threads
-    conda "${projectDir}/environment.yaml"
+    
     input:
          tuple val(sample_id), 
                val(chr), 
@@ -278,7 +280,7 @@ process cleanup_headers_3 {
 
 process cluster_umis {
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     cpus params.umi_cluster_max_threads
     input:
         tuple val(sample_id),
@@ -302,7 +304,7 @@ process cluster_umis {
 
 process cleanup_headers_4{
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     cpus params.max_threads
     input:
          tuple val(sample_id), 
@@ -321,7 +323,7 @@ process cleanup_headers_4{
 process combine_chrom_bams {
     // Merge all chromosome bams by sample_id
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     input:
         tuple val(sample_id), 
               path(bams),
@@ -339,7 +341,7 @@ process combine_chrom_bams {
 
 process count_cell_gene_umi_reads {
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     input:
         tuple val(sample_id),
               path(bam),
@@ -356,7 +358,7 @@ process count_cell_gene_umi_reads {
 
 process umi_gene_saturation {
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     input:
         tuple val(sample_id),
               path(cell_umi_gene_tsv)
@@ -372,7 +374,7 @@ process umi_gene_saturation {
 
 process construct_expression_matrix {
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     input:
         tuple val(sample_id),
               path(bam),
@@ -389,7 +391,7 @@ process construct_expression_matrix {
 
 process process_expression_matrix {
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     input:
         tuple val(sample_id),
               path(matrix_counts_tsv)
@@ -409,7 +411,7 @@ process process_expression_matrix {
 
 process umap_reduce_expression_matrix {
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     input:
         tuple val(sample_id),
               path(matrix_processed_tsv)
@@ -427,7 +429,7 @@ process umap_reduce_expression_matrix {
 
 process umap_plot_total_umis {
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     input:
         tuple val(sample_id),
               path(matrix_umap_tsv),
@@ -446,7 +448,7 @@ process umap_plot_total_umis {
 process umap_plot_genes {
     // TODO: make a channle of input genes for thes process
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     input:
         tuple val(sample_id),
               path(matrix_umap_tsv),
@@ -466,7 +468,7 @@ process umap_plot_genes {
 
 process umap_plot_mito_genes {
     label "singlecell"
-    conda "${projectDir}/environment.yaml"
+    
     input:
         tuple val(sample_id),
               path(matrix_umap_tsv),
@@ -516,25 +518,26 @@ workflow process_bams {
         // Extract chr from filename and add to tuple to give: 
         // [sample_id, chr, bam, bai]
         bam_bai_chromes = split_bam_by_chroms.out.bam.map({it ->
-            pairs = []
-            if (it.size() == 3){
-                // Only single chrom so we have:
-                // [sample_id, bam, bai]
-                chr = it[1].toString().tokenize('/')[-1] - '.sorted.bam'
-                pairs.add(tuple(it[0], chr, it[1], it[2])) 
-            }
-            else{
+            sbi = []
+            if (it[1].getClass() == java.util.ArrayList){
                 // Multiple chroms:
                 // [sample_id, [bam1, bam2], [bai1, bai2]]
                 for (i=0; i<it[1].size(); i++) {
                     chr = it[1][i].toString().tokenize('/')[-1] - '.sorted.bam'
-                    pairs.add(tuple(it[0], chr, it[1][i], it[2][i]))
+                    sbi.add(tuple(it[0], chr, it[1][i], it[2][i]))
                 }
             }
-            return pairs
-        }).flatMap(it-> it)
-
-        // merge 
+            else{
+                println(it[1].getClass())
+                // Only single chrom so we have:
+                // [sample_id, bam, bai]
+                chr = it[1].toString().tokenize('/')[-1] - '.sorted.bam'
+                sbi.add(tuple(it[0], chr, it[1], it[2])) 
+            }
+            return sbi
+            }).flatMap(it-> it)
+        
+        // merge kit info to bams
         chr_bam_kit = get_kit_info.out.kit_info
             .splitCsv(header:false, skip:1)
             .join(generate_whitelist.out.whitelist)
