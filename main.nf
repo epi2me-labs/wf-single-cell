@@ -137,6 +137,7 @@ workflow pipeline {
     emit:
         results = process_bams.out.results
         umap_plots = process_bams.out.umap_plots
+        config_stats = stranding.out.config_stats
 }
 
 process pack_images {
@@ -183,6 +184,7 @@ workflow {
                 l.add(tuple(it[0], it[i]))
             }
             return l
-        }).concat(pack_images.out)
+        }).concat(pack_images.out,
+            pipeline.out.config_stats)
     )
 }

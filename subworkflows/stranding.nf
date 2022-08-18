@@ -113,7 +113,7 @@ process summarize_adapter_table {
     for label, n in df["lab"].value_counts().items():
         stats["{$sample_id}"]["summary_config"][label] = n
 
-    with open("${sample_id}_config_stats.json", "w") as f:
+    with open("${sample_id}.config_stats.json", "w") as f:
         json.dump(stats, f, indent=4)
     """
 }

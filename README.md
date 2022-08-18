@@ -91,39 +91,24 @@ OUTPUT=output
 nextflow run epi2me-labs/wf-single-cell \
     -w ${OUTPUT}/workspace \
     -profile standard \
-    --bam demo_data/chr6_chr20.bam \
-    --bed demo_data/chr6_chr20.bed \
-    --ref demo_data/chr6_chr20.fasta \
+    --fastq wf-single-cell-testdata-chr22/fastq \
+    --single_cell_sample_sheet wf-single-cell-testdata-chr22/samples.csv \
+    --ref_genome_dir wf-single-cell-testdata-chr22/refdata-gex-GRCh38-2020-A-chr22 \
     --out_dir ${OUTPUT}
-
 ```
+
+The output of the pipeline will be found in `./output` for the above
+example. 
 
 **Workflow outputs**
 
-The pipeline output will be written to a directory defined by ``--out_dir``. For instance, using the example ``config/config.yml`` and ``config/sample_sheet.csv`` files shown above, the pipeline output would be written to three separate directories, one for each ``run_id``:
+The pipeline output will be written to a directory defined by ``--out_dir``. 
+For each sample specifed in the `single_cell-sample_sheet`  an output folder is created containing the results:
 
-::
-
-   /PATH/TO/OUTPUT/BASE/DIRECTORY/run1
-   /PATH/TO/OUTPUT/BASE/DIRECTORY/run2
-   /PATH/TO/OUTPUT/BASE/DIRECTORY/run3
-   /PATH/TO/OUTPUT/BASE/DIRECTORY/run4
-
-Each run_id-specific output folder will contain the following subdirectories:
-
-::
-
-   /PATH/TO/OUTPUT/BASE/DIRECTORY/run1
-   |
-   |-- adapters   # contains output from the characterization of read structure based on adapters
-   |-- align      # output from the alignment to the reference
-   |-- demux      # demultiplexing results, primarily in the tagged.sorted.bam file
-   |-- matrix     # gene expression matrix and UMAP outputs
-   \-- saturation # plots describing the library sequencing saturation
 
 The most useful outputs of the pipeline are likely:
 
-* ``adapters/configs.stats.json``: provides a summary of sequencing statistics and observed read configurations, such as
+* ``configs.stats.json``: provides a summary of sequencing statistics and observed read configurations, such as
 
   - ``n_reads``: number of total reads in the input fastq(s)
   - ``rl_mean``: mean read length
@@ -131,7 +116,7 @@ The most useful outputs of the pipeline are likely:
   - ``n_plus``: number of reads with the read1-->TSO configuration
   - ``n_minus``: number of reads with the TSO'-->read1' configuration
 
-* ``demux/tagged.sorted.bam``: BAM file of alignments to the reference where each alignment contains the following sequence tags
+* ``tagged.sorted.bam``: BAM file of alignments to the reference where each alignment contains the following sequence tags
 
   - CB: corrected cell barcode sequence
   - CR: uncorrected cell barcode sequence
@@ -140,12 +125,12 @@ The most useful outputs of the pipeline are likely:
   - UR: uncorrected UMI sequence
   - UY: Phred quality scores of the uncorrected UMI sequence
 
-* ``matrix/gene_expression.processed.tsv``: TSV containing the gene (rows) x cell (columns) expression matrix, processed and normalized according to the parameters defined in the ``config/config.yml`` file:
+* ``gene_expression.processed.tsv``: TSV containing the gene (rows) x cell (columns) expression matrix, processed and normalized according to the folloing parameters:
 
-  - ``MATRIX_MIN_GENES``: cells with fewer than this number of expressed genes will be removed
-  - ``MATRIX_MIN_CELLS``: genes present in fewer than this number of cells will be removed
-  - ``MATRIX_MAX_MITO``: cells with more than this percentage of counts belonging to mitochondrial genes will be removed
-  - ``MATRIX_NORM_COUNT``: normalize all cells to this number of total counts per cell
+  - ``matrix_min_genes``: cells with fewer than this number of expressed genes will be removed
+  - ``matrix_min_cells``: genes present in fewer than this number of cells will be removed
+  - ``matrix_max_mito``: cells with more than this percentage of counts belonging to mitochondrial genes will be removed
+  - ``matrix_norm_count``: normalize all cells to this number of total counts per cell
 ## Useful links
 
 * [nextflow](https://www.nextflow.io/)

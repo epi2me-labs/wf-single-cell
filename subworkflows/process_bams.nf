@@ -110,7 +110,7 @@ process generate_whitelist{
     
     """
     knee_plot.py ${kneeflags} \
-        --output_whitelist "${sample_id}_whitelist.tsv" \
+        --output_whitelist "${sample_id}.whitelist.tsv" \
         --output_plot "${sample_id}.kneeplot.png" $counts
     """
 }
