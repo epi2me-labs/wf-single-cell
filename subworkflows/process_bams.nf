@@ -11,7 +11,6 @@ process get_kit_info {
         path 'sample_kit_info.csv', emit: kit_info
     
     script:
-    def bc_longlist_dir = "${projectDir}/data"
     """
     #!/usr/bin/env python
     import pandas as pd
@@ -19,6 +18,7 @@ process get_kit_info {
     sample_df = pd.read_csv("${sc_sample_sheet}", sep=",", comment="#").set_index("run_id", drop=True)
 
     kit_df = pd.read_csv("$kit_config", sep=",", comment="#")
+
 
     records = []
     for run_id, row in sample_df.iterrows():
@@ -31,11 +31,11 @@ process get_kit_info {
 
         # Get the appropriate cell barcode longlist based on the kit_name specified for this run_id.
         if kit_name == "3prime":
-            long_list = "${bc_longlist_dir}/3M-february-2018.txt.gz"
+            long_list = "3M-february-2018.txt.gz"
         elif kit_name == "5prime":
-            long_list = "${bc_longlist_dir}/737K-august-2016.txt.gz"
+            long_list = "737K-august-2016.txt.gz"
         elif kit_name == "multiome":
-            long_list = "${bc_longlist_dir}/737K-arc-v1.txt.gz"
+            long_list = "737K-arc-v1.txt.gz"
         else:
             raise Exception("Encountered an unexpected kit_name in samples.csv")
 
@@ -65,13 +65,14 @@ process extract_barcodes{
               val(bc_long_list),
               path(bam_sort),
               path(bam_sort_idx)
+        path bc_longlist_dir
 
     output:
         tuple val(sample_id), path("*.bam"), emit: bam_bc_uncorr_tmp
         tuple val(sample_id), path("*.tsv"), emit: barcode_counts
     """
     extract_barcode.py \
-    $bam_sort $bc_long_list\
+    $bam_sort ${bc_longlist_dir}/${bc_long_list}\
     -t $task.cpus \
     --kit $kit_name \
     --adapter1_suff_length $params.barcode_adapter1_suff_length \
@@ -141,7 +142,7 @@ process assign_barcodes{
                val(kit_version),
                val(barcode_length),
                val(umi_length),
-               path(bc_long_list),
+               val(bc_long_list),
                path(whitelist),
                val(_), // Redundant sample_id: remove
                val(chr), 
@@ -496,7 +497,10 @@ workflow process_bams {
         kit_config
         gtf
         umap_genes
+        bc_longlist_dir
+   
     main:
+        println(bc_longlist_dir)
         get_kit_info(
             kit_config,
             sc_sample_sheet)
@@ -504,7 +508,8 @@ workflow process_bams {
         extract_barcodes(
             get_kit_info.out.kit_info
             .splitCsv(header:false, skip:1)
-            .join(bam).join(bam_idx))
+            .join(bam).join(bam_idx),
+            bc_longlist_dir)
         
         cleanup_headers_1(
             extract_barcodes.out.bam_bc_uncorr_tmp

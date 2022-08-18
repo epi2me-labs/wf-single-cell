@@ -34,7 +34,7 @@
                 },
                 "single_cell_sample_sheet": {
                     "type": "string",
-                    "description": "A csv containing colums: sample_nam,kit_name,kit_version,path, sample_name should correspond to a folder of fastq files or the sample_name column in 1sample_shee`",
+                    "description": "The single-cell-sample sheet asoociates the samples with 10x kits that were used to process them. This is sperate to the basecaller sample sheet. the run_id should correspond to sample_name which is defined either in the `sample_sheet`, given by the `sample`parameter (for single sample runs) or if no `sample_sheet` or `sample` is given, is derived from the folder name containing the fastq files.",
                     "format": "file-path"
                 },
                 "kit_config": {
@@ -54,6 +54,7 @@
                 }
             },
             "required": [
+                "fastq",
                 "single_cell_sample_sheet",
                 "ref_genome_dir"
             ]
@@ -236,7 +237,7 @@
         }
     },
     "docs": {
-        "intro": "## Introduction\n\nThe following single-cell kits from 10x Genomics are currently supported:\n- Chromium Single Cell [3\u02b9 gene expression](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium3.html), versions 2 and 3\n- Chromium Single Cell [5\u02b9 gene expression](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium5.html), version 1\n- Chromium Single Cell [Multiome (ATAC + GEX)](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium_multiome.html), version 1\n\nOxford Nanopore has developed a protocol for sequencing single-cell libraries from 10X, which can be found on the Nanopore Community [website](https://community.nanoporetech.com/docs/prepare/library_prep_protocols/single-cell-transcriptomics-10x/v/sst_v9148_v111_revb_12jan2022).\n\nThe inputs to Sockeye are raw nanopore reads (FASTQ) generated from the sequencing\ninstrument and reference files that can be downloaded from [10X](https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest).\nThe pipeline outputs a gene x cell expression matrix, as well as a BAM file of\naligned reads tagged with cell barcode and UMI information.\n\nPackage dependencies\n--------------------\n\nThe wf-single-cell pipeline makes use of the following dependencies.\n\n- bedtools\n- bioframe\n- biopython\n- editdistance\n- matplotlib\n- minimap2\n- numpy\n- pandas\n- parasail-python\n- pysam\n- samtools\n- scikit-learn\n- seqkit\n- tqdm\n- umap-learn\n- vsearch\n\nAdditionally, while no explicit dependency exists for the\n[UMI-tools](https://github.com/CGATOxford/UMI-tools) package, the script\n``bin/cluster_umis.py`` makes significant use of several functions from\nthe package. More detailed acknowledgements can be found in the source code.\n",
+        "intro": "## Introduction\n\nThe following single-cell kits from 10x Genomics are currently supported:\n- Chromium Single Cell [3\u02b9 gene expression](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium3.html), versions 2 and 3\n- Chromium Single Cell [5\u02b9 gene expression](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium5.html), version 1\n- Chromium Single Cell [Multiome (ATAC + GEX)](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium_multiome.html), version 1\n\nOxford Nanopore has developed a protocol for sequencing single-cell libraries from 10x, which can be found on the Nanopore Community [website](https://community.nanoporetech.com/docs/prepare/library_prep_protocols/single-cell-transcriptomics-10x/v/sst_v9148_v111_revb_12jan2022).\n\nThe inputs to Sockeye are raw nanopore reads (FASTQ) generated from the sequencing\ninstrument and reference files that can be downloaded from [10x](https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest).\nThe pipeline outputs a gene x cell expression matrix, as well as a BAM file of\naligned reads tagged with cell barcode and UMI information.\n\nPackage dependencies\n--------------------\n\nThe wf-single-cell pipeline makes use of the following dependencies.\n\n- bedtools\n- bioframe\n- biopython\n- editdistance\n- matplotlib\n- minimap2\n- numpy\n- pandas\n- parasail-python\n- pysam\n- samtools\n- scikit-learn\n- seqkit\n- tqdm\n- umap-learn\n- vsearch\n\nAdditionally, while no explicit dependency exists for the\n[UMI-tools](https://github.com/CGATOxford/UMI-tools) package, the script\n``bin/cluster_umis.py`` makes significant use of several functions from\nthe package. More detailed acknowledgements can be found in the source code.\n",
         "links": "## Useful links\n\n* [nextflow](https://www.nextflow.io/)\n* [docker](https://www.docker.com/products/docker-desktop)\n* [conda](https://docs.conda.io/en/latest/miniconda.html)\n"
     }
 }

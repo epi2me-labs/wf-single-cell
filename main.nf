@@ -54,6 +54,22 @@ process output {
     """
 }
 
+process pack_images {
+    label "singlecell"
+    input:
+        tuple val(sample_id),
+              path(imgs)  
+        output:
+            tuple val(sample_id),
+                path('umap_plots')
+    """
+    mkdir umap_plots
+    for img in $imgs; do
+        cp \$img umap_plots
+    done;
+    """
+}
+
 
 // workflow module
 workflow pipeline {
@@ -62,7 +78,19 @@ workflow pipeline {
         sc_sample_sheet
         ref_genome_dir
         umap_genes
+    
     main:
+        ref_genome_fasta = file("${ref_genome_dir}/fasta/genome.fa", checkIfExists: true)
+        ref_genes_gtf = file("${ref_genome_dir}/genes/genes.gtf", checkIfExists: true)
+        ref_genome_idx = file("${ref_genome_fasta}.fai", checkIfExists: true)
+        
+        if (params.kit_config){
+            kit_configs = file(params.kit_config, checkIfExists: true)
+        }else{
+            kit_configs = file("${projectDir}/kit_configs.csv", checkIfExists: true)
+        }
+        
+        bc_longlist_dir = file("${projectDir}/data", checkIfExists: true)
         
         // Paths in sc_sample_sheet should be relative to sc_sample_sheet parent directoy
         sample_sheet_parent = file(sc_sample_sheet).getParent()
@@ -79,18 +107,7 @@ workflow pipeline {
         stranding(
             summariseAndCatReads.out.fastq,
             sample_kits)
-        
-        // 10x reference downloads have known names
-        ref_genome_fasta = file("${ref_genome_dir}/fasta/genome.fa", checkIfExists: true)
-        ref_genes_gtf = file("${ref_genome_dir}/genes/genes.gtf", checkIfExists: true)
-        ref_genome_idx = file("${ref_genome_fasta}.fai", checkIfExists: true)
-        
-        if (params.kit_config){
-            kit_configs = file(params.kit_config, checkIfExists: true)
-        }else{
-            kit_configs = file("${projectDir}/kit_configs.csv", checkIfExists: true)
-        }
-        
+
         align(
             stranding.out.stranded_fq,
             ref_genome_fasta,
@@ -104,7 +121,8 @@ workflow pipeline {
             sc_sample_sheet,
             kit_configs,
             ref_genes_gtf,
-            umap_genes
+            umap_genes,
+            bc_longlist_dir
         )
     emit:
         results = process_bams.out.results
@@ -112,21 +130,6 @@ workflow pipeline {
         config_stats = stranding.out.config_stats
 }
 
-process pack_images {
-    label "singlecell"
-    input:
-        tuple val(sample_id),
-              path(imgs)  
-        output:
-            tuple val(sample_id),
-                path('umap_plots')
-    """
-    mkdir umap_plots
-    for img in $imgs; do
-        cp \$img umap_plots
-    done;
-    """
-}
 
 // entrypoint workflow
 WorkflowMain.initialise(workflow, params, log)

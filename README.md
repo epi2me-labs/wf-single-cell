@@ -15,10 +15,10 @@ The following single-cell kits from 10x Genomics are currently supported:
 - Chromium Single Cell [5ʹ gene expression](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium5.html), version 1
 - Chromium Single Cell [Multiome (ATAC + GEX)](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium_multiome.html), version 1
 
-Oxford Nanopore has developed a protocol for sequencing single-cell libraries from 10X, which can be found on the Nanopore Community [website](https://community.nanoporetech.com/docs/prepare/library_prep_protocols/single-cell-transcriptomics-10x/v/sst_v9148_v111_revb_12jan2022).
+Oxford Nanopore has developed a protocol for sequencing single-cell libraries from 10x, which can be found on the Nanopore Community [website](https://community.nanoporetech.com/docs/prepare/library_prep_protocols/single-cell-transcriptomics-10x/v/sst_v9148_v111_revb_12jan2022).
 
 The inputs to Sockeye are raw nanopore reads (FASTQ) generated from the sequencing
-instrument and reference files that can be downloaded from [10X](https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest).
+instrument and reference files that can be downloaded from [10x](https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest).
 The pipeline outputs a gene x cell expression matrix, as well as a BAM file of
 aligned reads tagged with cell barcode and UMI information.
 
@@ -68,10 +68,26 @@ For more information on running EPI2ME Labs workflows [visit out website](https:
 To obtain the workflow, having installed `nextflow`, users can run:
 
 ```
-nextflow run epi2me-labs/wf-template --help
+nextflow run epi2me-labs/wf-single-cell --help
 ```
 
 to see the options for the workflow.
+
+
+The main options are:
+* `fastq`: A fastq file or directory containing fastq input files or directories of input files.
+* `ref_genome_dir` The path to the 10x reference genome directory (see `Downloading reference data` below)
+* `single_cell_sample_sheet`
+This is used to associate the samples with 10x kits that were used to process them, and
+is not to be confused with the optional `sample_sheet` from the basecaller. 
+The run_id should correspond to sample_id which is defined either in the `sample_sheet`, given by the `sample`
+parameter (for single sample runs) or if no `sample_sheet` or `sample` is given, is derived from the folder name containing the fastq files.
+
+An example sheet with one sample is:
+```
+run_id,kit_name,kit_version
+run1,3prime,v3
+```
 
 **Downloading reference data**
 The pipeline requires access to reference data files that are packaged and freely available from 10x Genomics. For human samples, the GRCh38 packaged reference files can be downloaded using either curl or wget using:
@@ -83,30 +99,20 @@ tar -xvf refdata-gex-GRCh38-2020-A.tar.gz
 
 or 
 ```
-cd /PATH/TO/10X/DOWNLOADS
 wget https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2020-A.tar.gz
 tar -xvf refdata-gex-GRCh38-2020-A.tar.gz
 ```
 
 **Download demonstration data**
 ```
-A small test dataset is provided for the purposes of testing the workflow software,
-it consits of data from 10 cells and the 10x reference data for only chr22
-it can be downloaded using:
+A small dataset is provided for the purposes of testing the workflow
+It consits of data from just 10 cells and the 10x reference data for only chr22.
+It can be downloaded using:
 
 wget -O test_data.tar.gz  \
   https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/wf-single-cell-testdata-chr22.tar.gz \
   && tar -xzvf test_data.tar.gz
 ```
-
-The single-cell-sample sheet defines the samples and 10x kits that were used to process them. 
-An example sheet with one sample is:
-```
-run_id,kit_name,kit_version
-run1,3prime,v3
-```
-
-The `run_id` must match a samples given in the `--fastq` option
 
 The workflow can be run with the demonstration data using:
 
