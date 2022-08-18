@@ -11,6 +11,8 @@ process call_paftools {
 }
 
 process get_chrom_sizes{
+    label "singlecell"
+    
     input:
         path ref_genome_idx
     output:

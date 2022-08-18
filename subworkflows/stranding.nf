@@ -53,6 +53,8 @@ process call_adapter_scan {
 //combine_stranded_fastqs: Do this woth a workflow operator
 
 process combine_adapter_tables {
+    label "singlecell"
+
     input:
         tuple val(sample_id), path(tsv_files)
     output:
@@ -64,6 +66,7 @@ process combine_adapter_tables {
 }
 
 process gather_fastq{
+    label "singlecell"
     input:
         tuple val(sample_id), path(fastq_files)
     output:

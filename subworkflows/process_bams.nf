@@ -84,6 +84,7 @@ process extract_barcodes{
 
 process cleanup_headers_1 {
     label "singlecell"
+
     cpus params.max_threads
     
     input:
@@ -171,6 +172,7 @@ process assign_barcodes{
 
 process cleanup_headers_2 {
     label "singlecell"
+
     cpus params.max_threads
     
     input:
@@ -207,6 +209,7 @@ process bam_to_bed {
 }
 
 process split_gtf_by_chroms {
+    label "singlecell"
     input:
         path(gtf)
     output:
