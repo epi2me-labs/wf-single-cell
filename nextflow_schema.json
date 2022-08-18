@@ -1,9 +1,9 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema",
     "$id": "https://raw.githubusercontent.com/./master/nextflow_schema.json",
-    "title": "epi2me-labs/wf-sockeye",
-    "description": "Nextflow workflow template repository.",
-    "url": "https://github.com/epi2me-labs/wf-sockeye",
+    "title": "epi2me-labs/wf-single-cell",
+    "description": "Identification of cell barcodend UMI sequences present in nanopore sequencing reads.",
+    "url": "https://github.com/epi2me-labs/wf-single-cell",
     "type": "object",
     "definitions": {
         "basic_input_output_options": {
@@ -140,12 +140,12 @@
                 },
                 "resources_mm2_mem_gb": {
                     "type": "integer",
-                    "description": "Maximum allowed memory in GB for the minimp2 stage. NOTE: Do we need this for wf-sockeye?",
+                    "description": "Maximum allowed memory in GB for the minimp2 stage.",
                     "default": 50
                 },
                 "resources_mm2_max_threads": {
                     "type": "integer",
-                    "description": "Maximum allowed threads for the minimp2 stage. NOTE: Do we need this for wf-sockeye?",
+                    "description": "Maximum allowed threads for the minimp2 stage.",
                     "default": 12
                 }
             }
@@ -203,7 +203,7 @@
             "type": "string",
             "description": "The main process label for template processes to use by default",
             "hidden": true,
-            "default": "wf-sockeye"
+            "default": "singlecell"
         },
         "aws_image_prefix": {
             "type": "string",
