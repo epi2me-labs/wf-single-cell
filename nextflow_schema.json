@@ -1,9 +1,9 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema",
     "$id": "https://raw.githubusercontent.com/./master/nextflow_schema.json",
-    "title": "epi2me-labs/wf-template",
-    "description": "Nextflow workflow template repository.",
-    "url": "https://github.com/epi2me-labs/wf-template",
+    "title": "epi2me-labs/wf-single-cell",
+    "description": "Identification of cell barcodend UMI sequences present in nanopore sequencing reads.",
+    "url": "https://github.com/epi2me-labs/wf-single-cell",
     "type": "object",
     "definitions": {
         "basic_input_output_options": {
@@ -30,7 +30,22 @@
                 },
                 "sample_sheet": {
                     "type": "string",
-                    "description": "CSV file with columns named `barcode`, `sample_name` and `type`. Permissible if passing a directory containing barcodeXX sub-directories."
+                    "description": "CSV file with columns named `barcode`, `sample_name` and `type`. Permissible if passing a directory containing barcodeXX sub-directories. Barcodes here referes to nanopore sample barcodes"
+                },
+                "single_cell_sample_sheet": {
+                    "type": "string",
+                    "description": "The single-cell-sample sheet asoociates the samples with 10x kits that were used to process them. This is sperate to the basecaller sample sheet. the run_id should correspond to sample_name which is defined either in the `sample_sheet`, given by the `sample`parameter (for single sample runs) or if no `sample_sheet` or `sample` is given, is derived from the folder name containing the fastq files.",
+                    "format": "file-path"
+                },
+                "kit_config": {
+                    "type": "string",
+                    "format": "path",
+                    "description": "10x git config"
+                },
+                "ref_genome_dir": {
+                    "type": "string",
+                    "format": "directory-path",
+                    "description": "The path to the reference directory as downloaded from 10x"
                 },
                 "sanitize_fastq": {
                     "type": "boolean",
@@ -39,8 +54,108 @@
                 }
             },
             "required": [
-                "fastq"
+                "fastq",
+                "single_cell_sample_sheet",
+                "ref_genome_dir"
             ]
+        },
+        "advanced_options": {
+            "title": "Advanced options",
+            "type": "object",
+            "fa_icon": "fas fa-terminal",
+            "description": "Define more advanced options for tweaking the workflow.",
+            "properties": {
+                "max_threads": {
+                    "type": "integer",
+                    "description": "Maximum number of threads to use",
+                    "default": 24
+                },
+                "read_structure_batch_size": {
+                    "type": "integer",
+                    "description": "?",
+                    "default": 40000
+                },
+                "read_structure_flags": {
+                    "type": "string",
+                    "description": "?",
+                    "default": ""
+                },
+                "barcode_adapter1_suff_length": {
+                    "type": "integer",
+                    "description": "?",
+                    "default": 10
+                },
+                "barcode_kneeplot_flags": {
+                    "type": "string",
+                    "description": "?",
+                    "default": null
+                },
+                "barcode_max_ed": {
+                    "type": "integer",
+                    "description": "maximum edit distance for barcode identification?",
+                    "default": 2
+                },
+                "barcode_min_ed_diff": {
+                    "type": "integer",
+                    "description": "minimum edit distance for barcode identification?",
+                    "default": 2
+                },
+                "gene_assigns_minqv": {
+                    "type": "integer",
+                    "description": "?",
+                    "default": 60
+                },
+                "umi_genomic_interval": {
+                    "type": "integer",
+                    "description": "?",
+                    "default": 1000
+                },
+                "umi_cell_gene_max_reads": {
+                    "type": "integer",
+                    "description": "?",
+                    "default": 20000
+                },
+                "umi_cluster_max_threads": {
+                    "type": "integer",
+                    "description": "Maximum number of threads to use in UMI clustering step",
+                    "default": 8
+                },
+                "matrix_min_genes": {
+                    "type": "integer",
+                    "description": "?",
+                    "default": 25
+                },
+                "matrix_min_cells": {
+                    "type": "integer",
+                    "description": "?",
+                    "default": 3
+                },
+                "matrix_max_mito": {
+                    "type": "integer",
+                    "description": "?",
+                    "default": 20
+                },
+                "matrix_norm_count": {
+                    "type": "integer",
+                    "description": "?",
+                    "default": 10000
+                },
+                "umap_plot_genes": {
+                    "type": "string",
+                    "format": "path",
+                    "description": "List of gene symbols to perform UMI clustering on."
+                },
+                "resources_mm2_mem_gb": {
+                    "type": "integer",
+                    "description": "Maximum allowed memory in GB for the minimp2 stage.",
+                    "default": 50
+                },
+                "resources_mm2_max_threads": {
+                    "type": "integer",
+                    "description": "Maximum allowed threads for the minimp2 stage.",
+                    "default": 12
+                }
+            }
         },
         "meta_data": {
             "title": "Meta Data",
@@ -85,6 +200,9 @@
         },
         {
             "$ref": "#/definitions/generic_options"
+        },
+        {
+            "$ref": "#/definitions/advanced_options"
         }
     ],
     "properties": {
@@ -92,7 +210,7 @@
             "type": "string",
             "description": "The main process label for template processes to use by default",
             "hidden": true,
-            "default": "wf-template"
+            "default": "singlecell"
         },
         "aws_image_prefix": {
             "type": "string",
@@ -119,7 +237,7 @@
         }
     },
     "docs": {
-        "intro": "## Introduction\n\nThis section of documentation typically contains an overview of the workflow in terms of motivation\nand bioinformatics methods, listing any key tools or algorithms employed, whilst also describing its\nrange of use-cases and what a suitable input dataset should look like.\n\n",
+        "intro": "## Introduction\n\nThe following single-cell kits from 10x Genomics are currently supported:\n- Chromium Single Cell [3\u02b9 gene expression](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium3.html), versions 2 and 3\n- Chromium Single Cell [5\u02b9 gene expression](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium5.html), version 1\n- Chromium Single Cell [Multiome (ATAC + GEX)](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium_multiome.html), version 1\n\nOxford Nanopore has developed a protocol for sequencing single-cell libraries from 10x, which can be found on the Nanopore Community [website](https://community.nanoporetech.com/docs/prepare/library_prep_protocols/single-cell-transcriptomics-10x/v/sst_v9148_v111_revb_12jan2022).\n\nThe inputs to Sockeye are raw nanopore reads (FASTQ) generated from the sequencing\ninstrument and reference files that can be downloaded from [10x](https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest).\nThe pipeline outputs a gene x cell expression matrix, as well as a BAM file of\naligned reads tagged with cell barcode and UMI information.\n\nPackage dependencies\n--------------------\n\nThe wf-single-cell pipeline makes use of the following dependencies.\n\n- bedtools\n- bioframe\n- biopython\n- editdistance\n- matplotlib\n- minimap2\n- numpy\n- pandas\n- parasail-python\n- pysam\n- samtools\n- scikit-learn\n- seqkit\n- tqdm\n- umap-learn\n- vsearch\n\nAdditionally, while no explicit dependency exists for the\n[UMI-tools](https://github.com/CGATOxford/UMI-tools) package, the script\n``bin/cluster_umis.py`` makes significant use of several functions from\nthe package. More detailed acknowledgements can be found in the source code.\n",
         "links": "## Useful links\n\n* [nextflow](https://www.nextflow.io/)\n* [docker](https://www.docker.com/products/docker-desktop)\n* [conda](https://docs.conda.io/en/latest/miniconda.html)\n"
     }
 }

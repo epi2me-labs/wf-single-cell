@@ -1,12 +1,26 @@
-name: epi2melabs-nf-template-workflow
+name: wf-single-cell
 channels:
-    - epi2melabs
-    - conda-forge
-    - bioconda
-    - defaults
+  - epi2melabs
+  - conda-forge
+  - bioconda
+  - defaults
 dependencies:
-    - python==3.8.*
-    - aplanat >=0.5.0
-    - pysam >=0.17.0
-    - fastcat
-    - epi2melabs
+  - python=3.8
+  - pandas
+  - tqdm
+  - numpy
+  - pysam>=0.16.0
+  - samtools>=1.14
+  - seqkit
+  - editdistance
+  - parasail-python==1.2.3
+  - bioframe==0.3.2
+  - matplotlib
+  - bedtools==2.30.0
+  - scikit-learn
+  - minimap2
+  - biopython
+  - pysam>=0.16.0
+  - vsearch==2.15.1
+  - umap-learn==0.5.2
+  - fastcat

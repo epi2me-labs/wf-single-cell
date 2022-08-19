@@ -1,0 +1,5 @@
+kit_name,kit_version,barcode_length,umi_length
+3prime,v2,16,10
+3prime,v3,16,12
+5prime,v1,16,10
+multiome,v1,16,12
