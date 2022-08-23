@@ -31,10 +31,19 @@ def parse_args():
     # Optional arguments
     parser.add_argument(
         "--knee_method",
-        help="Method (distance/density) to use for calculating \
-                        knee position [distance]",
+        help="Method (quantile/distance/density) to use for calculating \
+            knee position [quantile]",
         type=str,
-        default="distance",
+        default="quantile",
+    )
+
+    parser.add_argument(
+        "--exp_cells",
+        help="If using --knee_method=quantile, --exp_cells should be used to \
+            set the expected number of cells based on the 10X \
+            library. This value can be a very rough estimate [500]",
+        type=int,
+        default=500,
     )
 
     parser.add_argument(
@@ -117,16 +126,33 @@ def parse_args():
     return args
 
 
+def getKneeQuantile(count_array):
+    """Quantile-based method for thresholding the cell barcode whitelist.
+    
+    This method is adapted from the following preprint:
+    Yupei You, Yair D.J. Prawer, Ricardo De Paoli-Iseppi, Cameron P.J. Hunt, 
+    Clare L. Parish, Heejung Shim, Michael B. Clark. Identification of cell 
+    barcodes from long-read single-cell RNA-seq with BLAZE. biorxiv. 2022.
+    doi: https://doi.org/10.1101/2022.08.16.504056
+    """
+    top_count = np.sort(count_array)[::-1][:args.exp_cells]
+    read_count_threshold = np.quantile(top_count, 0.95) / 20
+    return read_count_threshold
+
+
 def getKneeDistance(values):
     """Get knee distance.
 
     This function is based on
-    https://stackoverflow.com/questions/2018178/finding-the-best-trade-off-point-on-a-curve 
-    and https://dataplatform.cloud.ibm.com/analytics/notebooks/54d79c2a-f155-40ec-93ec-ed05b58afa39/view?access_token=6d8ec910cf2a1b3901c721fcb94638563cd646fe14400fecbb76cea6aaae2fb1
+    https://stackoverflow.com/questions/2018178/finding-the-best-trade-off-
+    point-on-a-curve and https://dataplatform.cloud.ibm.com/analytics
+    /notebooks/54d79c2a-f155-40ec-93ec-ed05b58afa39/view?access_token=
+    6d8ec910cf2a1b3901c721fcb94638563cd646fe14400fecbb76cea6aaae2fb1
     The idea is to draw a line from the first to last point on the
     cumulative counts curve and then find the point on the curve
     which is the maximum distance away from this line
-    """ # noqa
+    """ 
+    # noqa
     # get coordinates of all the points
     nPoints = len(values)
     allCoord = np.vstack((range(nPoints), values)).T
@@ -277,6 +303,19 @@ def write_ont_barcodes(cutoff_ont_bcs, args):
         f.write("\n")
 
 
+def get_threshold_rank_index(read_count_threshold, ont_bc_sorted, args):
+    """Find cell rank cutoff based on a specified read count threshold."""
+    cutoff_ont_bcs = set(
+        [bc for bc, n in ont_bc_sorted.items() if n >= read_count_threshold]
+    )
+    idxOfBestPoint = len(cutoff_ont_bcs)
+    logger.info(
+        f"Writing {len(cutoff_ont_bcs)} cells with >= {read_count_threshold} \
+            reads to {args.output_whitelist}"
+    )
+    return cutoff_ont_bcs, idxOfBestPoint
+
+
 def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
     """Make kneeplot."""
     ont_bc_sorted = dict(
@@ -319,9 +358,16 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
     ymax = ax1.get_ylim()[1]
 
     # Calculate the knee index
+    ont_counts = list(ont_bc_sorted.values())
     if (args.cell_count is None) and (args.read_count_threshold is None):
         if args.knee_method == "distance":
             ont_counts = list(ont_bc_sorted.values())
+            if args.knee_method == "quantile":
+                read_count_threshold = getKneeQuantile(ont_counts)
+                cutoff_ont_bcs, idxOfBestPoint = get_threshold_rank_index(
+                read_count_threshold, ont_bc_sorted, args
+            )
+        elif args.knee_method == "distance":
             distToLine, idxOfBestPoint = getKneeDistance(ont_counts)
             cutoff_ont_bcs = apply_bc_cutoff(ont_bc_sorted, idxOfBestPoint)
         elif args.knee_method == "density":
@@ -331,7 +377,8 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
                     ont_bc_sorted.values()), key=lambda x: abs(
                     x[1] - threshold))
         else:
-            print("Invalid value for --knee_method (distance, density)")
+            print("Invalid value for --knee_method" 
+                  "(quantile, distance, density)")
             sys.exit()
         logger.info(
             f"Writing {len(cutoff_ont_bcs)} cells to \
@@ -345,15 +392,8 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
         logger.info(
             f"Writing top {cell_count} cells to {args.output_whitelist}")
     elif args.read_count_threshold is not None:
-        cutoff_ont_bcs = set(
-            [bc for bc, n in ont_bc_sorted.items()
-                if n >= args.read_count_threshold]
-        )
-        idxOfBestPoint = len(cutoff_ont_bcs)
-        logger.info(
-            f"Writing {len(cutoff_ont_bcs)} cells with >= \
-                {args.read_count_threshold} reads to {args.output_whitelist}"
-        )
+        cutoff_ont_bcs, idxOfBestPoint = get_threshold_rank_index(
+        args.read_count_threshold, ont_bc_sorted, args)
 
     write_ont_barcodes(cutoff_ont_bcs, args)
 

@@ -104,14 +104,18 @@ process generate_whitelist{
     
     cpus params.max_threads
     input:
-        tuple val(sample_id), path(counts)
+        tuple val(sample_id), 
+              path(counts),
+              val(expected_cells)
     output:
         tuple val(sample_id), path("*whitelist.tsv"), emit: whitelist
         tuple val(sample_id), path("*kneeplot.png"), emit: kneeplot
      def kneeflags = params.barcode_kneeplot_flags ?  params.barcode_kneeplot_flags : ''
     
     """
-    knee_plot.py ${kneeflags} \
+    knee_plot.py \
+        ${kneeflags} \
+        --exp_cells $expected_cells \
         --output_whitelist "${sample_id}.whitelist.tsv" \
         --output_plot "${sample_id}.kneeplot.png" $counts
     """
@@ -498,9 +502,10 @@ workflow process_bams {
         gtf
         umap_genes
         bc_longlist_dir
+        sample_kits
    
     main:
-        println(bc_longlist_dir)
+
         get_kit_info(
             kit_config,
             sc_sample_sheet)
@@ -519,8 +524,12 @@ workflow process_bams {
             cleanup_headers_1.out.bam_bc_uncorr
         )
 
+        extract_barcodes.out.barcode_counts
+            .join(sample_kits).map{it -> tuple(it[0], it[1], it[4])}.view()
+
         generate_whitelist(
             extract_barcodes.out.barcode_counts
+            .join(sample_kits).map{it -> tuple(it[0..2] )}
         )
         
         // Extract chr from filename and add to tuple to give: 

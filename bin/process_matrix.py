@@ -62,6 +62,14 @@ def parse_args():
         type=str,
         default="expression.processed.tsv",
     )
+    
+    parser.add_argument(
+        "--mito_output",
+        help="Output TSV file containing percentage of UMI counts coming from \
+            mitochondrial genes [expression.mito.tsv]",
+        type=str,
+        default="expression.mito.tsv",
+    )
 
     parser.add_argument(
         "--verbosity",
@@ -105,7 +113,8 @@ def filter_cells(df, args):
     mito_genes = [gene for gene in df.columns if gene.find("MT-") == 0]
     df["mito_total"] = df.loc[:, mito_genes].sum(axis=1)
     df["mito_pct"] = 100 * df["mito_total"] / df["total"]
-    n_mito = df[df["mito_pct"] > args.min_genes].shape[0]
+    df["mito_pct"].to_csv(args.mito_output, sep="\t")
+    n_mito = df[df["mito_pct"] > args.max_mito].shape[0]
     logger.info(
         f"Dropping {n_mito} cells with > {args.max_mito}% mitochondrial reads")
     df = df[df["mito_pct"] <= args.max_mito]

@@ -92,16 +92,14 @@ workflow pipeline {
         }
         
         bc_longlist_dir = file("${projectDir}/data", checkIfExists: true)
-        
-        // Paths in sc_sample_sheet should be relative to sc_sample_sheet parent directoy
-        sample_sheet_parent = file(sc_sample_sheet).getParent()
-
+    
         sample_kits = Channel.fromPath(sc_sample_sheet)
                     .splitCsv(header:true)
                     .map { row -> tuple(
                               row.run_id, 
                               row.kit_name, 
-                              row.kit_version)}
+                              row.kit_version,
+                              row.exp_cells)}
 
         summariseAndCatReads(reads)
 
@@ -123,7 +121,8 @@ workflow pipeline {
             kit_configs,
             ref_genes_gtf,
             umap_genes,
-            bc_longlist_dir
+            bc_longlist_dir,
+            sample_kits
         )
     emit:
         results = process_bams.out.results
