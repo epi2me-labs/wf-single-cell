@@ -184,7 +184,7 @@ def get_expression(args):
             # Make sure requested gene is in the matrix
             if args.gene not in df_f.columns:
                 logging.info(
-                    f"WARNING: gene {args.gene}" 
+                    f"WARNING: gene {args.gene}"
                     "not found in expression matrix!")
                 fig = plt.figure(figsize=[8, 8])
                 fig.add_axes([0.08, 0.08, 0.85, 0.85])
@@ -195,8 +195,8 @@ def get_expression(args):
         # Outputting mitochondrial UMI percentage
         df_f = pd.read_csv(
             args.full_matrix, delimiter="\t").rename(
-            columns={"Unnamed: 0":"barcode", 
-                     "mito_pct":"mitochondrial"}).set_index("barcode")
+            columns={"Unnamed: 0": "barcode",
+                     "mito_pct": "mitochondrial"}).set_index("barcode")
         df_annot = df_f
     return df_annot
 
@@ -208,7 +208,7 @@ def main(args):
     df = pd.read_csv(args.umap, delimiter="\t").set_index("barcode")
 
     df_annot = get_expression(args)
-    
+
     # Only include annotation barcodes that are in the UMAP matrix
     df_annot = df_annot.loc[df.index, :]
 
