@@ -116,7 +116,7 @@ def filter_cells(df, args):
     df["mito_pct"].to_csv(args.mito_output, sep="\t")
     n_mito = df[df["mito_pct"] > args.max_mito].shape[0]
     logger.info(
-        f"Dropping {n_mito} cells with > {args.max_mito}% mitochondrial reads")
+        f"Dropping {n_mito} cells with > {args.max_mito}% mitochondrial reads")idfueiueiu
     df = df[df["mito_pct"] <= args.max_mito]
 
     df = df.drop(["mito_total", "mito_pct"], axis=1)
