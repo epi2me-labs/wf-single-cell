@@ -405,15 +405,20 @@ process process_expression_matrix {
               path(matrix_counts_tsv)
     output:
         tuple val(sample_id), 
-        path("*gene_expression.processed.tsv"),
-        emit: matrix_processed_tsv
+              path("*gene_expression.processed.tsv"),
+              emit: matrix_processed_tsv
+        tuple val(sample_id),
+              path("*gene_expression.mito.tsv"),
+              emit: matrix_mito_tsv
     """
     process_matrix.py \
     --min_genes $params.matrix_min_genes \
     --min_cells $params.matrix_min_cells \
     --max_mito $params.matrix_max_mito \
     --norm_count $params.matrix_norm_count \
-    --output ${sample_id}.gene_expression.processed.tsv $matrix_counts_tsv
+    --output ${sample_id}.gene_expression.processed.tsv \
+    --mito_output ${sample_id}.gene_expression.mito.tsv \
+    $matrix_counts_tsv
     """
 }
 
@@ -480,7 +485,7 @@ process umap_plot_mito_genes {
     input:
         tuple val(sample_id),
               path(matrix_umap_tsv),
-              path(matrix_processed_tsv)
+              path(matrix_mito_tsv)
     output:
         tuple val(sample_id),
               path("*umap.mitochondrial.png"), 
@@ -489,7 +494,8 @@ process umap_plot_mito_genes {
     plot_umap.py \
         --mito_genes \
         --output ${sample_id}.umap.mitochondrial.png \
-        $matrix_umap_tsv $matrix_processed_tsv
+        $matrix_umap_tsv \ 
+        $matrix_mito_tsv
     """
 }
     
@@ -620,7 +626,7 @@ workflow process_bams {
 
          umap_plot_mito_genes(
             umap_reduce_expression_matrix.out.matrix_umap_tsv
-            .join(process_expression_matrix.out.matrix_processed_tsv))
+            .join(process_expression_matrix.out.matrix_mito_tsv))
         
      emit:
          umap_plots = umap_plot_genes.out.groupTuple()
