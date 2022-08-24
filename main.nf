@@ -42,7 +42,7 @@ process makeReport {
     script:
         report_name = "wf-single-cell-" + params.report_name + '.html'
     """
-    echo "<html><body>This report is jut a placeholder<br> \
+    echo "<html><body>This report is a placeholder<br> \
         a detailed report will be available in the next release</body></html>" \
         > wf-single-cell-report.html
     """
