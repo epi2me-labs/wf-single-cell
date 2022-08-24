@@ -35,6 +35,20 @@ process summariseAndCatReads {
     """
 }
 
+process makeReport {
+    label "wftemplate"
+    output:
+        path "wf-single-cell-*.html"
+    script:
+        report_name = "wf-single-cell-" + params.report_name + '.html'
+    """
+    echo "<html><body>This report is jut a placeholder<br> \
+        a detailed report will be available in the next release</body></html>" \
+        > wf-single-cell-report.html
+    """
+}
+
+
 
 // See https://github.com/nextflow-io/nextflow/issues/1636
 // This is the only way to publish files from a workflow whilst
@@ -54,6 +68,21 @@ process output {
     echo "Writing output files"
     """
 }
+
+
+process output_report {
+    // publish inputs to output directory
+    label "wftemplate"
+    publishDir "${params.out_dir}", mode: 'copy', pattern: "*"
+    input:
+        path fname
+    output:
+        path fname
+    """
+    echo "Writing output files."
+    """
+}
+
 
 process pack_images {
     label "singlecell"
@@ -162,4 +191,7 @@ workflow {
         }).concat(pack_images.out,
             pipeline.out.config_stats)
     )
+    // This is temporay until a detailed report is made
+    makeReport()
+    output_report(makeReport.out)
 }
