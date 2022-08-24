@@ -193,10 +193,10 @@ def get_expression(args):
             df_annot[args.gene] = df_f.loc[:, args.gene]
     else:
         # Outputting mitochondrial UMI percentage
-        df_f = pd.read_csv(
-            args.full_matrix, delimiter="\t").rename(
-            columns={"Unnamed: 0": "barcode",
-                     "mito_pct": "mitochondrial"}).set_index("barcode")
+        df_f = pd.read_csv(args.full_matrix, delimiter="\t").rename(
+            columns={
+                "Unnamed: 0": "barcode",
+                "mito_pct": "mitochondrial"}).set_index("barcode")
         df_annot = df_f
     return df_annot
 

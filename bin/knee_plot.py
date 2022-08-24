@@ -360,12 +360,11 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
     # Calculate the knee index
     ont_counts = list(ont_bc_sorted.values())
     if (args.cell_count is None) and (args.read_count_threshold is None):
-        if args.knee_method == "distance":
-            ont_counts = list(ont_bc_sorted.values())
-        elif args.knee_method == "quantile":
+        if args.knee_method == "quantile":
             read_count_threshold = getKneeQuantile(ont_counts)
             cutoff_ont_bcs, idxOfBestPoint = get_threshold_rank_index(
-                read_count_threshold, ont_bc_sorted, args)
+                read_count_threshold, ont_bc_sorted, args
+            )
         elif args.knee_method == "distance":
             distToLine, idxOfBestPoint = getKneeDistance(ont_counts)
             cutoff_ont_bcs = apply_bc_cutoff(ont_bc_sorted, idxOfBestPoint)
@@ -373,8 +372,8 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
             cutoff_ont_bcs, threshold = getKneeEstimateDensity(Counter(ont_bc))
             idxOfBestPoint, countOfBestPoint = min(
                 enumerate(
-                    ont_bc_sorted.values()), key=lambda x: abs(
-                    x[1] - threshold))
+                    ont_bc_sorted.values()),
+                key=lambda x: abs(x[1] - threshold))
         else:
             print(
                 "Invalid value for --knee_method(quantile, distance, density)")
@@ -397,7 +396,8 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
     write_ont_barcodes(cutoff_ont_bcs, args)
 
     ax1.vlines(idxOfBestPoint, ymin=1, ymax=ymax, linestyle="--", color="k")
-    ax1.set_title("Found {} cells using ONT barcodes".format(idxOfBestPoint))
+    ax1.set_title(
+        "Found {} cells using ONT barcodes".format(idxOfBestPoint + 1))
 
     if args.ilmn_barcodes is not None:
         pct_ilmn_in_ont = 100 * len(cutoff_ont_bcs & ilmn_bc) / len(ilmn_bc)

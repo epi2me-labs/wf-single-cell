@@ -147,8 +147,6 @@ workflow {
             "sanitize": params.sanitize_fastq,
             "output":params.out_dir])
 
-    reads.view()
-
     pipeline(reads, sc_sample_sheet, ref_genome_dir, umap_genes)
 
     pack_images(pipeline.out.umap_plots)

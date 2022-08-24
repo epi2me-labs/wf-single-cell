@@ -85,6 +85,11 @@
                     "description": "?",
                     "default": 10
                 },
+                "barcode_min_quality": {
+                    "type": "integer",
+                    "description": "x",
+                    "default": 15
+                },
                 "barcode_kneeplot_flags": {
                     "type": "string",
                     "description": "?",

@@ -76,6 +76,7 @@ process extract_barcodes{
     -t $task.cpus \
     --kit $kit_name \
     --adapter1_suff_length $params.barcode_adapter1_suff_length \
+    --barcode_min_qv $params.barcode_min_quality \
     --barcode_length $barcode_length \
     --umi_length $umi_length \
     --output_bam "tmp.bam" \
@@ -494,7 +495,8 @@ process umap_plot_mito_genes {
     plot_umap.py \
         --mito_genes \
         --output ${sample_id}.umap.mitochondrial.png \
-        $matrix_umap_tsv $matrix_mito_tsv
+        $matrix_umap_tsv \
+        $matrix_mito_tsv
     """
 }
     
