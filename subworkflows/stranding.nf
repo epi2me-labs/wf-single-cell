@@ -131,9 +131,6 @@ workflow stranding {
 
         chunk_files(reads)
         
-        // chunk_files.out.view()
-        
-     
         chunks_and_kits = sample_kits.cross(chunk_files.out.flatMap({it ->
             // Rejig the outputs to be [sample_id, fatq_chunk]
             // Then merge in kit info

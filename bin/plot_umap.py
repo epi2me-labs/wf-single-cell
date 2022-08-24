@@ -149,6 +149,10 @@ def scatterplot(df, values, args):
     n_cells = df.shape[0]
     if values.name == "highlight":
         title = f"{n_cells} cells: highlighted cells from {args.target_cells}"
+    elif values.name == "mitochondrial":
+        title = "Mitochondrial expression"
+        cbar = plt.colorbar(plot)
+        cbar.set_label("Percent mitochondrial", rotation=270, labelpad=15)
     else:
         # title = f"{n_cells} cells: {values.name}"
         title = f"{values.name}"
@@ -164,39 +168,36 @@ def scatterplot(df, values, args):
 
 def get_expression(args):
     """Get expression."""
-    df_f = (
-        pd.read_csv(args.full_matrix, delimiter="\t")
-        .rename(columns={"gene": "cell"})
-        .set_index("cell")
-    )
-    df_f = df_f.transpose()
-
-    # Create annotation dataframe with requested features
+    # Create annotation dataframe to populate with requested features
     df_annot = pd.DataFrame()
-    df_annot["total"] = np.exp(df_f).sum(axis=1) - 1
 
-    if args.gene:
-        # Make sure requested gene is in the matrix
-        if args.gene not in df_f.columns:
-            logging.info(
-                f"WARNING: gene {args.gene} not found in expression matrix!")
-            fig = plt.figure(figsize=[8, 8])
-            fig.add_axes([0.08, 0.08, 0.85, 0.85])
-            plt.savefig(args.output)
-            sys.exit()
-        df_annot[args.gene] = df_f.loc[:, args.gene]
-    elif args.mito_genes:
-        # Make sure at least one mitochondrial gene is in the matrix
-        mito_genes = [g for g in df_f.columns if g.startswith("MT-")]
-        if len(mito_genes) == 0:
-            logging.info(
-                "WARNING: No mitochondrial genes found in expression matrix!")
-            fig = plt.figure(figsize=[8, 8])
-            fig.add_axes([0.08, 0.08, 0.85, 0.85])
-            plt.savefig(args.output)
-            sys.exit()
-        df_annot["mitochondrial"] = df_f.loc[:, mito_genes].mean(axis=1)
-    df_annot.index.names = ["barcode"]
+    if not args.mito_genes:
+        df_f = (
+            pd.read_csv(args.full_matrix, delimiter="\t")
+            .rename(columns={"gene": "barcode"})
+            .set_index("barcode")
+        )
+        df_f = df_f.transpose()
+
+        df_annot["total"] = np.exp(df_f).sum(axis=1) - 1
+        if args.gene:
+            # Make sure requested gene is in the matrix
+            if args.gene not in df_f.columns:
+                logging.info(
+                    f"WARNING: gene {args.gene}"
+                    "not found in expression matrix!")
+                fig = plt.figure(figsize=[8, 8])
+                fig.add_axes([0.08, 0.08, 0.85, 0.85])
+                plt.savefig(args.output)
+                sys.exit()
+            df_annot[args.gene] = df_f.loc[:, args.gene]
+    else:
+        # Outputting mitochondrial UMI percentage
+        df_f = pd.read_csv(args.full_matrix, delimiter="\t").rename(
+            columns={
+                "Unnamed: 0": "barcode",
+                "mito_pct": "mitochondrial"}).set_index("barcode")
+        df_annot = df_f
     return df_annot
 
 
@@ -207,6 +208,9 @@ def main(args):
     df = pd.read_csv(args.umap, delimiter="\t").set_index("barcode")
 
     df_annot = get_expression(args)
+
+    # Only include annotation barcodes that are in the UMAP matrix
+    df_annot = df_annot.loc[df.index, :]
 
     df = df.loc[df_annot.index]
 

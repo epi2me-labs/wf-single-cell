@@ -15,21 +15,21 @@ process get_kit_info {
     #!/usr/bin/env python
     import pandas as pd
 
-    sample_df = pd.read_csv("${sc_sample_sheet}", sep=",", comment="#").set_index("run_id", drop=True)
+    sample_df = pd.read_csv("${sc_sample_sheet}", sep=",", comment="#").set_index("sample_id", drop=True)
 
     kit_df = pd.read_csv("$kit_config", sep=",", comment="#")
 
 
     records = []
-    for run_id, row in sample_df.iterrows():
-        kit_name = sample_df.loc[run_id, "kit_name"]
-        kit_version = sample_df.loc[run_id, "kit_version"]
+    for sample_id, row in sample_df.iterrows():
+        kit_name = sample_df.loc[sample_id, "kit_name"]
+        kit_version = sample_df.loc[sample_id, "kit_version"]
 
-        # Get barcode length based on the kit_name and kit_version specified for this run_id.
+        # Get barcode length based on the kit_name and kit_version specified for this sample_id.
         rows = (kit_df["kit_name"] == kit_name) & (kit_df["kit_version"] == kit_version)
         barcode_length = kit_df.loc[rows, "barcode_length"].values[0]
 
-        # Get the appropriate cell barcode longlist based on the kit_name specified for this run_id.
+        # Get the appropriate cell barcode longlist based on the kit_name specified for this sample_id.
         if kit_name == "3prime":
             long_list = "3M-february-2018.txt.gz"
         elif kit_name == "5prime":
@@ -39,9 +39,9 @@ process get_kit_info {
         else:
             raise Exception("Encountered an unexpected kit_name in samples.csv")
 
-        # Get UMI length based on the kit_name and kit_version specified for this run_id.
+        # Get UMI length based on the kit_name and kit_version specified for this sample_id.
         umi_length = kit_df.loc[rows, "umi_length"].values[0]
-        records.append([run_id, kit_name, kit_version, barcode_length, umi_length, long_list])
+        records.append([sample_id, kit_name, kit_version, barcode_length, umi_length, long_list])
     df_out = pd.DataFrame.from_records(records)
     df_out.columns = ["sample_id", "kit_name", "kit_version", "barcode_length", "umi_length", "long_list"]
     df_out.to_csv('sample_kit_info.csv', index=False)
@@ -76,6 +76,7 @@ process extract_barcodes{
     -t $task.cpus \
     --kit $kit_name \
     --adapter1_suff_length $params.barcode_adapter1_suff_length \
+    --min_barcode_qv $params.barcode_min_quality \
     --barcode_length $barcode_length \
     --umi_length $umi_length \
     --output_bam "tmp.bam" \
@@ -104,14 +105,18 @@ process generate_whitelist{
     
     cpus params.max_threads
     input:
-        tuple val(sample_id), path(counts)
+        tuple val(sample_id), 
+              path(counts),
+              val(expected_cells)
     output:
         tuple val(sample_id), path("*whitelist.tsv"), emit: whitelist
         tuple val(sample_id), path("*kneeplot.png"), emit: kneeplot
      def kneeflags = params.barcode_kneeplot_flags ?  params.barcode_kneeplot_flags : ''
     
     """
-    knee_plot.py ${kneeflags} \
+    knee_plot.py \
+        ${kneeflags} \
+        --exp_cells $expected_cells \
         --output_whitelist "${sample_id}.whitelist.tsv" \
         --output_plot "${sample_id}.kneeplot.png" $counts
     """
@@ -401,15 +406,20 @@ process process_expression_matrix {
               path(matrix_counts_tsv)
     output:
         tuple val(sample_id), 
-        path("*gene_expression.processed.tsv"),
-        emit: matrix_processed_tsv
+              path("*gene_expression.processed.tsv"),
+              emit: matrix_processed_tsv
+        tuple val(sample_id),
+              path("*gene_expression.mito.tsv"),
+              emit: matrix_mito_tsv
     """
     process_matrix.py \
     --min_genes $params.matrix_min_genes \
     --min_cells $params.matrix_min_cells \
     --max_mito $params.matrix_max_mito \
     --norm_count $params.matrix_norm_count \
-    --output ${sample_id}.gene_expression.processed.tsv $matrix_counts_tsv
+    --output ${sample_id}.gene_expression.processed.tsv \
+    --mito_output ${sample_id}.gene_expression.mito.tsv \
+    $matrix_counts_tsv
     """
 }
 
@@ -476,7 +486,7 @@ process umap_plot_mito_genes {
     input:
         tuple val(sample_id),
               path(matrix_umap_tsv),
-              path(matrix_processed_tsv)
+              path(matrix_mito_tsv)
     output:
         tuple val(sample_id),
               path("*umap.mitochondrial.png"), 
@@ -485,7 +495,8 @@ process umap_plot_mito_genes {
     plot_umap.py \
         --mito_genes \
         --output ${sample_id}.umap.mitochondrial.png \
-        $matrix_umap_tsv $matrix_processed_tsv
+        $matrix_umap_tsv \
+        $matrix_mito_tsv
     """
 }
     
@@ -498,9 +509,10 @@ workflow process_bams {
         gtf
         umap_genes
         bc_longlist_dir
+        sample_kits
    
     main:
-        println(bc_longlist_dir)
+
         get_kit_info(
             kit_config,
             sc_sample_sheet)
@@ -521,6 +533,8 @@ workflow process_bams {
 
         generate_whitelist(
             extract_barcodes.out.barcode_counts
+            .join(sample_kits)
+            .map{it -> tuple(it[0], it[1], it[4] )}
         )
         
         // Extract chr from filename and add to tuple to give: 
@@ -611,7 +625,7 @@ workflow process_bams {
 
          umap_plot_mito_genes(
             umap_reduce_expression_matrix.out.matrix_umap_tsv
-            .join(process_expression_matrix.out.matrix_processed_tsv))
+            .join(process_expression_matrix.out.matrix_mito_tsv))
         
      emit:
          umap_plots = umap_plot_genes.out.groupTuple()
@@ -627,7 +641,8 @@ workflow process_bams {
                 
         results = umi_gene_saturation.out
              .join(construct_expression_matrix.out)
-             .join(process_expression_matrix.out)
+             .join(process_expression_matrix.out.matrix_processed_tsv)
+             .join(process_expression_matrix.out.matrix_mito_tsv)
              .join(cleanup_headers_1.out.bam_bc_uncorr)
              .join(generate_whitelist.out.whitelist)
              .join(generate_whitelist.out.kneeplot)
