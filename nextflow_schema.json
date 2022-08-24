@@ -34,7 +34,7 @@
                 },
                 "single_cell_sample_sheet": {
                     "type": "string",
-                    "description": "The single-cell-sample sheet asoociates the samples with 10x kits that were used to process them. This is sperate to the basecaller sample sheet. the run_id should correspond to sample_name which is defined either in the `sample_sheet`, given by the `sample`parameter (for single sample runs) or if no `sample_sheet` or `sample` is given, is derived from the folder name containing the fastq files.",
+                    "description": "The single-cell-sample sheet asoociates the samples with 10x kits that were used to process them. This is sperate to the MinKNOW sample sheet. the sample_id should correspond to sample_name which is defined either in the `sample_sheet`, given by the `sample`parameter (for single sample runs) or if no `sample_sheet` or `sample` is given, is derived from the folder name containing the fastq files.",
                     "format": "file-path"
                 },
                 "kit_config": {

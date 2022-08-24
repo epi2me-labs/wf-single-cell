@@ -96,7 +96,7 @@ workflow pipeline {
         sample_kits = Channel.fromPath(sc_sample_sheet)
                     .splitCsv(header:true)
                     .map { row -> tuple(
-                              row.run_id, 
+                              row.sample_id, 
                               row.kit_name, 
                               row.kit_version,
                               row.exp_cells)}

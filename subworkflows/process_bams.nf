@@ -15,21 +15,21 @@ process get_kit_info {
     #!/usr/bin/env python
     import pandas as pd
 
-    sample_df = pd.read_csv("${sc_sample_sheet}", sep=",", comment="#").set_index("run_id", drop=True)
+    sample_df = pd.read_csv("${sc_sample_sheet}", sep=",", comment="#").set_index("sample_id", drop=True)
 
     kit_df = pd.read_csv("$kit_config", sep=",", comment="#")
 
 
     records = []
-    for run_id, row in sample_df.iterrows():
-        kit_name = sample_df.loc[run_id, "kit_name"]
-        kit_version = sample_df.loc[run_id, "kit_version"]
+    for sample_id, row in sample_df.iterrows():
+        kit_name = sample_df.loc[sample_id, "kit_name"]
+        kit_version = sample_df.loc[sample_id, "kit_version"]
 
-        # Get barcode length based on the kit_name and kit_version specified for this run_id.
+        # Get barcode length based on the kit_name and kit_version specified for this sample_id.
         rows = (kit_df["kit_name"] == kit_name) & (kit_df["kit_version"] == kit_version)
         barcode_length = kit_df.loc[rows, "barcode_length"].values[0]
 
-        # Get the appropriate cell barcode longlist based on the kit_name specified for this run_id.
+        # Get the appropriate cell barcode longlist based on the kit_name specified for this sample_id.
         if kit_name == "3prime":
             long_list = "3M-february-2018.txt.gz"
         elif kit_name == "5prime":
@@ -39,9 +39,9 @@ process get_kit_info {
         else:
             raise Exception("Encountered an unexpected kit_name in samples.csv")
 
-        # Get UMI length based on the kit_name and kit_version specified for this run_id.
+        # Get UMI length based on the kit_name and kit_version specified for this sample_id.
         umi_length = kit_df.loc[rows, "umi_length"].values[0]
-        records.append([run_id, kit_name, kit_version, barcode_length, umi_length, long_list])
+        records.append([sample_id, kit_name, kit_version, barcode_length, umi_length, long_list])
     df_out = pd.DataFrame.from_records(records)
     df_out.columns = ["sample_id", "kit_name", "kit_version", "barcode_length", "umi_length", "long_list"]
     df_out.to_csv('sample_kit_info.csv', index=False)
@@ -76,7 +76,7 @@ process extract_barcodes{
     -t $task.cpus \
     --kit $kit_name \
     --adapter1_suff_length $params.barcode_adapter1_suff_length \
-    --barcode_min_qv $params.barcode_min_quality \
+    --min_barcode_qv $params.barcode_min_quality \
     --barcode_length $barcode_length \
     --umi_length $umi_length \
     --output_bam "tmp.bam" \
