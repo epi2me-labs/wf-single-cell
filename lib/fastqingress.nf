@@ -301,7 +301,12 @@ def barcode_in_range(path, min_barcode, max_barcode)
 {
     pattern = ~/barcode(\d+)/
     matcher = "${path}" =~ pattern
-    value = matcher[0][1].toInteger()
+    def value = null
+    try{
+        value = matcher[0][1].toInteger()
+    }catch(ArrayIndexOutOfBoundsException ex){
+        print("${path} is not a barcoded directory")
+    }
     valid = ((value >= min_barcode) && (value <= max_barcode))
     return valid
 }
