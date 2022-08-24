@@ -1,5 +1,0 @@
-barcode,sample_id,type
-barcode01,sample1,test_sample
-barcode02,sample2,positive_control
-barcode03,sample3,no_template_control
-barcode04,sample4,test_sample

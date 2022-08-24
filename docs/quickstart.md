@@ -63,7 +63,7 @@ It consits of data from just 10 cells and the 10x reference data for only chr22.
 It can be downloaded using:
 
 wget -O test_data.tar.gz  \
-  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/wf-single-cell-testdata-chr22.tar.gz \
+   https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/wf-single-cell-testdata.tar.gz \
   && tar -xzvf test_data.tar.gz
 ```
 
@@ -74,9 +74,12 @@ OUTPUT=output
 nextflow run epi2me-labs/wf-single-cell \
     -w ${OUTPUT}/workspace \
     -profile standard \
-    --fastq wf-single-cell-testdata-chr22/fastq \
-    --single_cell_sample_sheet wf-single-cell-testdata-chr22/samples.csv \
-    --ref_genome_dir wf-single-cell-testdata-chr22/refdata-gex-GRCh38-2020-A-chr22 \
+    --fastq test_data/fastq/ \
+    --single_cell_sample_sheet test_data/samples.test.csv \
+    --ref_genome_dir test_data/refdata-gex-GRCh38-2020-A \
+    --matrix_min_genes 1 \
+    --matrix_min_cells 1 \
+    --matrix_max_mito 100 \
     --out_dir ${OUTPUT}
 ```
 
