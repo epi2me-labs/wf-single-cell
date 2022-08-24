@@ -36,7 +36,7 @@ process summariseAndCatReads {
 }
 
 process makeReport {
-    label "wftemplate"
+    label "singlecell"
     output:
         path "wf-single-cell-*.html"
     script:
@@ -72,7 +72,7 @@ process output {
 
 process output_report {
     // publish inputs to output directory
-    label "wftemplate"
+    label "singlecell"
     publishDir "${params.out_dir}", mode: 'copy', pattern: "*"
     input:
         path fname
