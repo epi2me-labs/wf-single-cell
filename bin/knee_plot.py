@@ -362,10 +362,10 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
     if (args.cell_count is None) and (args.read_count_threshold is None):
         if args.knee_method == "distance":
             ont_counts = list(ont_bc_sorted.values())
-            if args.knee_method == "quantile":
-                read_count_threshold = getKneeQuantile(ont_counts)
-                cutoff_ont_bcs, idxOfBestPoint = get_threshold_rank_index(
-                    read_count_threshold, ont_bc_sorted, args)
+        elif args.knee_method == "quantile":
+            read_count_threshold = getKneeQuantile(ont_counts)
+            cutoff_ont_bcs, idxOfBestPoint = get_threshold_rank_index(
+                read_count_threshold, ont_bc_sorted, args)
         elif args.knee_method == "distance":
             distToLine, idxOfBestPoint = getKneeDistance(ont_counts)
             cutoff_ont_bcs = apply_bc_cutoff(ont_bc_sorted, idxOfBestPoint)

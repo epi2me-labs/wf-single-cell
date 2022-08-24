@@ -494,8 +494,7 @@ process umap_plot_mito_genes {
     plot_umap.py \
         --mito_genes \
         --output ${sample_id}.umap.mitochondrial.png \
-        $matrix_umap_tsv \ 
-        $matrix_mito_tsv
+        $matrix_umap_tsv $matrix_mito_tsv
     """
 }
     
@@ -530,12 +529,10 @@ workflow process_bams {
             cleanup_headers_1.out.bam_bc_uncorr
         )
 
-        extract_barcodes.out.barcode_counts
-            .join(sample_kits).map{it -> tuple(it[0], it[1], it[4])}.view()
-
         generate_whitelist(
             extract_barcodes.out.barcode_counts
-            .join(sample_kits).map{it -> tuple(it[0..2] )}
+            .join(sample_kits)
+            .map{it -> tuple(it[0], it[1], it[4] )}
         )
         
         // Extract chr from filename and add to tuple to give: 
@@ -642,7 +639,8 @@ workflow process_bams {
                 
         results = umi_gene_saturation.out
              .join(construct_expression_matrix.out)
-             .join(process_expression_matrix.out)
+             .join(process_expression_matrix.out.matrix_processed_tsv)
+             .join(process_expression_matrix.out.matrix_mito_tsv)
              .join(cleanup_headers_1.out.bam_bc_uncorr)
              .join(generate_whitelist.out.whitelist)
              .join(generate_whitelist.out.kneeplot)
