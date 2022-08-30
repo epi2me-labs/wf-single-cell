@@ -3,7 +3,7 @@ process call_adapter_scan {
     // Neil: Only one thread for this. Seems low
     // Do we need a batch number to add to output filenames?
     label "singlecell"
-    
+    cpus 1
     input:
         tuple val(sample_id),
             val(kit_name),
@@ -32,7 +32,7 @@ process call_adapter_scan {
 
 process combine_adapter_tables {
     label "singlecell"
-
+    cpus 1
     input:
         tuple val(sample_id), path(tsv_files)
     output:
@@ -45,6 +45,7 @@ process combine_adapter_tables {
 
 process gather_fastq{
     label "singlecell"
+    cpus 1
     input:
         tuple val(sample_id), path(fastq_files)
     output:
@@ -56,7 +57,7 @@ process gather_fastq{
 
 process summarize_adapter_table {
     label "singlecell"
-    
+    cpus 1
     input:
         tuple val(sample_id), path(read_config)
     output:
