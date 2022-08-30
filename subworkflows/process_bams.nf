@@ -118,7 +118,7 @@ process generate_whitelist{
         ${kneeflags} \
         --exp_cells $expected_cells \
         --output_whitelist "${sample_id}.whitelist.tsv" \
-        --output_plot "${sample_id}.kneeplot.png" $counts
+        --output_plot "${sample_id}.kneeplot.png" "$counts"
     """
 }
 
