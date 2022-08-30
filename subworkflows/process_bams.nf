@@ -342,7 +342,7 @@ process combine_chrom_bams {
 
 process count_cell_gene_umi_reads {
     label "singlecell"
-    cpu 1
+    cpus 1
     input:
         tuple val(sample_id),
               path(bam),

@@ -124,8 +124,6 @@ workflow stranding {
         
         call_adapter_scan(chunks_and_kits)
 
-        call_adapter_scan.out.stranded_fq_chunked.view()
-
         gather_fastq(call_adapter_scan.out.stranded_fq_chunked.groupTuple())
 
         combine_adapter_tables(call_adapter_scan.out.read_config_chunked.groupTuple())
