@@ -2,7 +2,7 @@ import java.util.ArrayList;
 
 process get_kit_info {
     label "singlecell"
-    
+    cpus 1
     input:
         path kit_config
         path sc_sample_sheet
@@ -54,7 +54,6 @@ process extract_barcodes{
     Build minimap index from reference genome
     */
     label "singlecell"
-    
     cpus params.max_threads
     input:
         tuple val(sample_id), 
@@ -86,9 +85,7 @@ process extract_barcodes{
 
 process cleanup_headers_1 {
     label "singlecell"
-
-    cpus params.max_threads
-    
+    cpus 1
     input:
          tuple val(sample_id), path(bam)
     output:
@@ -102,8 +99,7 @@ process cleanup_headers_1 {
 
 process generate_whitelist{
     label "singlecell"
-    
-    cpus params.max_threads
+    cpus 1
     input:
         tuple val(sample_id), 
               path(counts),
@@ -118,7 +114,7 @@ process generate_whitelist{
         ${kneeflags} \
         --exp_cells $expected_cells \
         --output_whitelist "${sample_id}.whitelist.tsv" \
-        --output_plot "${sample_id}.kneeplot.png" $counts
+        --output_plot "${sample_id}.kneeplot.png" "$counts"
     """
 }
 
@@ -140,7 +136,7 @@ process split_bam_by_chroms{
 
 process assign_barcodes{
     label "singlecell"
-    
+    cpus 1
     input:
          tuple val(sample_id), 
                val(kit_name),
@@ -178,9 +174,7 @@ process assign_barcodes{
 
 process cleanup_headers_2 {
     label "singlecell"
-
-    cpus params.max_threads
-    
+    cpus 1
     input:
          tuple val(sample_id), val(chr), path(bam)
     output:
@@ -198,7 +192,7 @@ process cleanup_headers_2 {
 
 process bam_to_bed {
     label "singlecell"
-    
+    cpus 1
     input:
         tuple val(chr), //emit chr first for doing cross on gtfs 
               val(sample_id),
@@ -216,6 +210,7 @@ process bam_to_bed {
 
 process split_gtf_by_chroms {
     label "singlecell"
+    cpus 1
     input:
         path(gtf)
     output:
@@ -227,7 +222,7 @@ process split_gtf_by_chroms {
 
 process assign_genes {
     label "singlecell"
-    
+    cpus 1
     input:
         tuple val(sample_id),
               val(chr),
@@ -247,7 +242,7 @@ process assign_genes {
 
 process add_gene_tags_to_bam {
     label "singlecell"
-    
+    cpus 1
     input:
         tuple val(sample_id),
               val(chr),
@@ -268,8 +263,7 @@ process add_gene_tags_to_bam {
 
 process cleanup_headers_3 {
     label "singlecell"
-    cpus params.max_threads
-    
+    cpus 1
     input:
          tuple val(sample_id), 
                val(chr), 
@@ -289,7 +283,6 @@ process cleanup_headers_3 {
 
 process cluster_umis {
     label "singlecell"
-    
     cpus params.umi_cluster_max_threads
     input:
         tuple val(sample_id),
@@ -313,8 +306,7 @@ process cluster_umis {
 
 process cleanup_headers_4{
     label "singlecell"
-    
-    cpus params.max_threads
+    cpus 1
     input:
          tuple val(sample_id), 
                val(chr), 
@@ -332,7 +324,7 @@ process cleanup_headers_4{
 process combine_chrom_bams {
     // Merge all chromosome bams by sample_id
     label "singlecell"
-    
+    cpus 1
     input:
         tuple val(sample_id), 
               path(bams),
@@ -350,7 +342,7 @@ process combine_chrom_bams {
 
 process count_cell_gene_umi_reads {
     label "singlecell"
-    
+    cpus 1
     input:
         tuple val(sample_id),
               path(bam),
@@ -367,7 +359,7 @@ process count_cell_gene_umi_reads {
 
 process umi_gene_saturation {
     label "singlecell"
-    
+    cpus 1
     input:
         tuple val(sample_id),
               path(cell_umi_gene_tsv)
@@ -383,7 +375,7 @@ process umi_gene_saturation {
 
 process construct_expression_matrix {
     label "singlecell"
-    
+    cpus 1
     input:
         tuple val(sample_id),
               path(bam),
@@ -400,7 +392,7 @@ process construct_expression_matrix {
 
 process process_expression_matrix {
     label "singlecell"
-    
+    cpus 1
     input:
         tuple val(sample_id),
               path(matrix_counts_tsv)
@@ -425,7 +417,7 @@ process process_expression_matrix {
 
 process umap_reduce_expression_matrix {
     label "singlecell"
-    
+    cpus 1
     input:
         tuple val(sample_id),
               path(matrix_processed_tsv)
@@ -443,7 +435,7 @@ process umap_reduce_expression_matrix {
 
 process umap_plot_total_umis {
     label "singlecell"
-    
+    cpus 1
     input:
         tuple val(sample_id),
               path(matrix_umap_tsv),
@@ -462,7 +454,7 @@ process umap_plot_total_umis {
 process umap_plot_genes {
     // TODO: make a channle of input genes for thes process
     label "singlecell"
-    
+    cpus 1
     input:
         tuple val(sample_id),
               path(matrix_umap_tsv),
@@ -482,7 +474,7 @@ process umap_plot_genes {
 
 process umap_plot_mito_genes {
     label "singlecell"
-    
+    cpus 1
     input:
         tuple val(sample_id),
               path(matrix_umap_tsv),

@@ -1,6 +1,6 @@
 process call_paftools {
     label "singlecell"
-    
+    cpus 1
     input:
         path ref_genes_gtf
     output:
@@ -12,7 +12,7 @@ process call_paftools {
 
 process get_chrom_sizes{
     label "singlecell"
-    
+    cpus 1
     input:
         path ref_genome_idx
     output:
@@ -24,7 +24,7 @@ process get_chrom_sizes{
 
 process align_to_ref {
     label "singlecell"
-    
+    cpus params.resources_mm2_max_threads
     input:
         tuple val(sample_id),
               path(stranded_fq)
@@ -35,7 +35,7 @@ process align_to_ref {
         tuple val(sample_id), path("*sorted.bam"), emit: bam_sort
         tuple val(sample_id), path("*sorted.bam.bai"), emit: bam_sort_bai
     """
-     minimap2 -ax splice -uf --MD -t $params.resources_mm2_max_threads \
+     minimap2 -ax splice -uf --MD -t $task.cpus \
       --junc-bed ${ref_genes_bed} \
       --secondary=no \
       ${ref_genome_fasta} ${stranded_fq} > tmp.sam && \

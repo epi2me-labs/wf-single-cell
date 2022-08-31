@@ -1,31 +1,9 @@
-// This rule looks for all files in a input directory. No need to do that as fastcat
-// has already concatenated all reads
-//rule cp_batch_fastqs:
-
-
-process chunk_files {
-    // The orginal SM rule (call_cat_fastq) called chunk_fastqs.py, which did file concatenation and chuck creation, we need only the latter
-    cpus params.max_threads
-    label "singlecell"
-    
-    input:
-        tuple val(sample_id),
-              path(fastq)
-
-    output:
-        tuple val(sample_id),
-              path("chunks/*")
-    """
-    seqkit split $fastq -p "${task.cpus}" -O chunks
-    """
-}
-
 process call_adapter_scan {
     // Stranding of reads and ?
     // Neil: Only one thread for this. Seems low
     // Do we need a batch number to add to output filenames?
     label "singlecell"
-    
+    cpus 1
     input:
         tuple val(sample_id),
             val(kit_name),
@@ -36,7 +14,7 @@ process call_adapter_scan {
         tuple val(sample_id), path("*.tsv"), emit: read_config_chunked
     """
     # Get batch name from file to prevent name collisions
-    batch=\$(echo ${fastq_chunk}|awk -F'.' '{print \$(NF-1)}')
+    batch=\$(echo ${fastq_chunk}|awk -F'.' '{print \$(NF-2)}')
     echo \$batch
     
     adapter_scan_vsearch.py \
@@ -54,7 +32,7 @@ process call_adapter_scan {
 
 process combine_adapter_tables {
     label "singlecell"
-
+    cpus 1
     input:
         tuple val(sample_id), path(tsv_files)
     output:
@@ -67,6 +45,7 @@ process combine_adapter_tables {
 
 process gather_fastq{
     label "singlecell"
+    cpus 1
     input:
         tuple val(sample_id), path(fastq_files)
     output:
@@ -78,7 +57,7 @@ process gather_fastq{
 
 process summarize_adapter_table {
     label "singlecell"
-    
+    cpus 1
     input:
         tuple val(sample_id), path(read_config)
     output:
@@ -125,13 +104,11 @@ process summarize_adapter_table {
 // workflow module
 workflow stranding {
     take:
-        reads
+        read_chunks
         sample_kits
-    main:
-
-        chunk_files(reads)
-        
-        chunks_and_kits = sample_kits.cross(chunk_files.out.flatMap({it ->
+    
+    main:      
+        chunks_and_kits = sample_kits.cross(read_chunks.flatMap({it ->
             // Rejig the outputs to be [sample_id, fatq_chunk]
             // Then merge in kit info
             if (it[1].getClass() != java.util.ArrayList){
@@ -146,7 +123,7 @@ workflow stranding {
         })).map{it-> tuple(it[0][0], it[0][1], it[0][2], it[1][1])  }
         
         call_adapter_scan(chunks_and_kits)
-        
+
         gather_fastq(call_adapter_scan.out.stranded_fq_chunked.groupTuple())
 
         combine_adapter_tables(call_adapter_scan.out.read_config_chunked.groupTuple())

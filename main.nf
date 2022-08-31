@@ -19,8 +19,9 @@ include { align } from './subworkflows/align'
 include { process_bams } from './subworkflows/process_bams'
 
 
-process summariseAndCatReads {
-    // concatenate fastq and fastq.gz in a dir
+process summariseCatChunkReads {
+    // concatenate fastq and fastq.gz in a dir. 
+    // Split into p parts where p is num threads
 
     label "singlecell"
     cpus 1
@@ -28,10 +29,11 @@ process summariseAndCatReads {
         tuple path(directory), val(meta)
     output:
         tuple val("${meta.sample_id}"), path("${meta.sample_id}.stats"), emit: stats
-        tuple val("${meta.sample_id}"), path("${meta.sample_id}.fastq"), emit: fastq
+        tuple val("${meta.sample_id}"), path("chunks/*"), emit: fastq_chunks
     shell:
     """
-    fastcat -s ${meta.sample_id} -r ${meta.sample_id}.stats -x ${directory} > ${meta.sample_id}.fastq
+    fastcat -s ${meta.sample_id} -r ${meta.sample_id}.stats -x ${directory} | \
+        seqkit split2 -p ${params.max_threads} -O chunks -o ${meta.sample_id} -e .fastq
     """
 }
 
@@ -130,10 +132,10 @@ workflow pipeline {
                               row.kit_version,
                               row.exp_cells)}
 
-        summariseAndCatReads(reads)
+        summariseCatChunkReads(reads)
 
         stranding(
-            summariseAndCatReads.out.fastq,
+            summariseCatChunkReads.out.fastq_chunks,
             sample_kits)
 
         align(
