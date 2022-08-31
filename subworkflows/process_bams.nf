@@ -322,7 +322,7 @@ process cleanup_headers_4{
 process combine_chrom_bams {
     // Merge all chromosome bams by sample_id
     label "singlecell"
-    cpus = 1
+    cpus 1
     input:
         tuple val(sample_id), 
               path(bams),
