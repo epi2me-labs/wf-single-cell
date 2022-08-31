@@ -90,11 +90,6 @@
                     "description": "x",
                     "default": 15
                 },
-                "barcode_kneeplot_flags": {
-                    "type": "string",
-                    "description": "?",
-                    "default": null
-                },
                 "barcode_max_ed": {
                     "type": "integer",
                     "description": "maximum edit distance for barcode identification?",
@@ -227,7 +222,7 @@
         },
         "wfversion": {
             "type": "string",
-            "default": "v0.1.0",
+            "default": "v0.1.1",
             "hidden": true
         },
         "monochrome_logs": {

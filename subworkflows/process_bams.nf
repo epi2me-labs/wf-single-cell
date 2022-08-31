@@ -107,14 +107,12 @@ process generate_whitelist{
     output:
         tuple val(sample_id), path("*whitelist.tsv"), emit: whitelist
         tuple val(sample_id), path("*kneeplot.png"), emit: kneeplot
-     def kneeflags = params.barcode_kneeplot_flags ?  params.barcode_kneeplot_flags : ''
-    
     """
     knee_plot.py \
-        ${kneeflags} \
+        $counts \
         --exp_cells $expected_cells \
         --output_whitelist "${sample_id}.whitelist.tsv" \
-        --output_plot "${sample_id}.kneeplot.png" "$counts"
+        --output_plot "${sample_id}.kneeplot.png"
     """
 }
 
