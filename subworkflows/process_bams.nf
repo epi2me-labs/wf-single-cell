@@ -80,6 +80,7 @@ process extract_barcodes{
     --umi_length $umi_length \
     --output_bam "tmp.bam" \
     --output_barcodes "${sample_id}.uncorrected_bc_counts.tsv";
+
     """
 }
 
@@ -118,7 +119,6 @@ process generate_whitelist{
 
 process split_bam_by_chroms{
     label "singlecell"
-    
     cpus params.max_threads
     input:
         tuple val(sample_id), path(bam), path(bai)
@@ -128,6 +128,19 @@ process split_bam_by_chroms{
               path("splits/*.bai"), emit: bam
     """
     split_bam_by_chroms.py -t ${task.cpus} --output_dir splits $bam
+    """
+}
+
+process split_fasta_by_chroms {
+    label "singlecell"
+    cpus params.max_threads
+    input:
+        path(ref_genome)
+    output:
+        path("*.fasta")
+    """
+    awk '/^>/ {F=substr(\$0, 2, length(\$0))".fasta"; \
+         print >F;next;} {print >> F;}' < $ref_genome
     """
 }
 
@@ -167,6 +180,7 @@ process assign_barcodes{
         --barcode_length $barcode_length \
         --umi_length $umi_length \
         $bam $whitelist
+
 """
 }
 
@@ -192,7 +206,7 @@ process bam_to_bed {
     label "singlecell"
     cpus 1
     input:
-        tuple val(chr), //emit chr first for doing cross on gtfs 
+        tuple val(chr),
               val(sample_id),
               path(bam),
               path(bai) 
@@ -218,6 +232,45 @@ process split_gtf_by_chroms {
     """
 }   
 
+process assign_transcripts{
+    // Testing 
+    label 'singlecell'
+    cpus params.max_threads
+    input:
+        tuple val(sample_id), 
+              val(chr), 
+              path(bam), 
+              path(bai),
+              path(ref_gtf),
+              path(ref_genome)
+    output:
+        tuple val(sample_id),
+              val(chr),
+              path("*.read.transcript_assigns.tsv"),
+              emit: chrom_tsv_gene_assigns
+    script:
+    """
+    ## assemble transcripts
+    stringtie -L -v -p 5 -l $chr \
+        -G ${ref_gtf} -o stringtie.gff ${bam}
+
+    ## Make transcriptome
+    gffread -g $ref_genome -w transcriptome.fa stringtie.gff
+
+    # Getting dupes from bamtofastq. Fix
+    bedtools bamtofastq -i ${bam} -fq /dev/stdout |\
+        seqkit rmdup > reads.fq
+
+    # QNAME, MAPQ, status(Dummy for now), RNAME(transcript ID)
+    minimap2 -t ${task.cpus} -ax splice transcriptome.fa reads.fq |\
+        samtools view -q 40 -F 2304 -b > aln.bam
+        samtools view aln.bam | awk -v var="Assigned" 'BEGIN{OFS="\t";} {print \$1, var, \$5, \$3}' \
+        > ${sample_id}_${chr}.read.transcript_assigns.tsv
+    
+    #rm reads.fq 
+    """
+}
+
 process assign_genes {
     label "singlecell"
     cpus 1
@@ -229,7 +282,7 @@ process assign_genes {
     output:
         tuple val(sample_id),
               val(chr),
-              path("${sample_id}_${chr}.read.gene_assigns.tsv"),
+              path("*.read.gene_assigns.tsv"),
               emit: chrom_tsv_gene_assigns
     """
     assign_genes.py \
@@ -238,7 +291,7 @@ process assign_genes {
     """
 }
 
-process add_gene_tags_to_bam {
+process add_gene_transcript_tags_to_bam {
     label "singlecell"
     cpus 1
     input:
@@ -500,12 +553,17 @@ workflow process_bams {
         umap_genes
         bc_longlist_dir
         sample_kits
+        ref_genome_fasta
    
     main:
 
         get_kit_info(
             kit_config,
             sc_sample_sheet)
+
+        get_kit_info.out.kit_info
+            .splitCsv(header:false, skip:1)
+            .join(bam).join(bam_idx)
 
         extract_barcodes(
             get_kit_info.out.kit_info
@@ -519,6 +577,10 @@ workflow process_bams {
         
         split_bam_by_chroms(
             cleanup_headers_1.out.bam_bc_uncorr
+        )
+
+        split_fasta_by_chroms(
+            ref_genome_fasta
         )
 
         generate_whitelist(
@@ -568,20 +630,36 @@ workflow process_bams {
              tuple(file.toString().tokenize('/')[-1], file)}
         
         // combine all chr bams with chr gtfs
-        chr_bams_gtf = chr_gtf.cross(
+        chr_beds_gtf = chr_gtf.cross(
             bam_to_bed.out.chrom_bed_bc)
             .map({it ->
             //  rejig the tuple to [sample_id, chr, bed, gtf]
              tuple(it[1][1], it[0][0], it[1][2], it[0][1])})
+        
 
-         assign_genes(chr_bams_gtf)
+        // Make tuples: sample_id, chr, bam, bai, ref_gtf, ref_genome 
+        chr_gtf_bam = chr_gtf.join(
+            split_fasta_by_chroms.out.flatten()
+            .map(it -> tuple(it.toString()
+            .tokenize('/')[-1].strip('.fasta'), it))
+            )
+            .cross(
+                 cleanup_headers_2.out.chrom_bam_bc_bai
+                 .map(it -> [it[1], it[0], it[2], it[3]])
+            )
+            // Rejig for next process
+            .map(it -> [it[1][1], it[0][0], it[1][2], it[1][3], it[0][1], it[0][2]])
 
-         add_gene_tags_to_bam(
+        assign_transcripts(chr_gtf_bam)
+
+        assign_genes(chr_beds_gtf)
+
+         add_gene_transcript_tags_to_bam(
              cleanup_headers_2.out.chrom_bam_bc_bai
               // join on sample_id + chr
              .join(assign_genes.out.chrom_tsv_gene_assigns, by:[0, 1]))
 
-         cleanup_headers_3(add_gene_tags_to_bam.out.chrom_bam_bc_gene_tmp)
+         cleanup_headers_3(add_gene_transcript_tags_to_bam.out.chrom_bam_bc_gene_tmp)
 
          cluster_umis(cleanup_headers_3.out.chrom_bam_bc_bai)
 

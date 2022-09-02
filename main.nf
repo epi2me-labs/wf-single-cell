@@ -153,7 +153,8 @@ workflow pipeline {
             ref_genes_gtf,
             umap_genes,
             bc_longlist_dir,
-            sample_kits
+            sample_kits,
+            ref_genome_fasta
         )
     emit:
         results = process_bams.out.results
