@@ -313,10 +313,9 @@ process cluster_umis {
               path(bai)
     output:
          tuple val(sample_id),
-              val(chr),
               path("*.tagged.bam"),
-              path(".tagged.bam.bai"),
-              emit: chrom_bam_bc_bai
+              path("*.tagged.bam.bai"),
+              emit: bam_bc_bai
     """
     cluster_umis.py \
     $bam \
@@ -618,7 +617,7 @@ workflow process_bams {
 
          // group by sample_id
          combine_chrom_bams(
-             cluster_umis.out.chrom_bam_bc_bai.groupTuple())
+             cluster_umis.out.bam_bc_bai.groupTuple())
 
          count_cell_gene_umi_reads(combine_chrom_bams.out.bam_fully_tagged)
 

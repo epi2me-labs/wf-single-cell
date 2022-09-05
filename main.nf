@@ -134,7 +134,6 @@ workflow pipeline {
     
     main:
         error_msg = ""
-        // reads.view()
         ref_genome_fasta = file("${ref_genome_dir}/fasta/genome.fa", checkIfExists: true)
         ref_genes_gtf = file("${ref_genome_dir}/genes/genes.gtf", checkIfExists: true)
         ref_genome_idx = file("${ref_genome_fasta}.fai", checkIfExists: true)

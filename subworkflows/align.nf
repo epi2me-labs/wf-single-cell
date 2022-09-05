@@ -44,7 +44,6 @@ process align_to_ref {
     samtools sort --no-PG unsort.bam -o ${sample_id}_sorted.bam;
     samtools index ${sample_id}_sorted.bam
     rm tmp.sam
-    
     """
 }
 
