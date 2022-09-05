@@ -102,23 +102,19 @@ process pack_images {
     """
 }
 
-process check_samples_process{
+process check_samples{
     input:
         path sc_sample_sheet_ids
         path fast_ingress_ids
     output:
         // env CHECK_SAMPLES_PASSED, emit: passed
-        path 'passed', optional: true
+        path 'diff'
     """
     # Note: this is a quick fix to get the workflow to fail when the 
     # Sample ids are incorrect. Will make a better version very soon
-    if diff <(sort $sc_sample_sheet_ids) <(sort $fast_ingress_ids); then
-        touch passed
-    else
-        echo "Sample_ids in single_cell_sample_sheet and the fastq sample_ids do not match"
-        echo "Please fix the single_Cell_sample_sheet sample ids"
-        exit 1
-    fi
+    diff -w <(sort $sc_sample_sheet_ids) <(sort $fast_ingress_ids) \
+        > diff
+        
     """
 }
 
@@ -152,7 +148,15 @@ workflow pipeline {
         sample_kit_ids = sample_kits.map{it -> it[0]}
             .collectFile(name: 'sc_sample_sheet_ids.csv', newLine: true)
 
-        check_samples_process(sample_kit_ids, fastqingress_ids)
+        check_samples(sample_kit_ids, fastqingress_ids)
+
+        f = check_samples.out.collect()
+        
+        if (f.isEmpty()){
+            println('empty')
+        }else{
+            println('not empty')
+        }
 
 
         summariseCatChunkReads(reads)
