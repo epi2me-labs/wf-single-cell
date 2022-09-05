@@ -102,6 +102,26 @@ process pack_images {
     """
 }
 
+process check_samples_process{
+    input:
+        path sc_sample_sheet_ids
+        path fast_ingress_ids
+    output:
+        // env CHECK_SAMPLES_PASSED, emit: passed
+        path 'passed', optional: true
+    """
+    # Note: this is a quick fix to get the workflow to fail when the 
+    # Sample ids are incorrect. Will make a better version very soon
+    if diff <(sort $sc_sample_sheet_ids) <(sort $fast_ingress_ids); then
+        touch passed
+    else
+        echo "Sample_ids in single_cell_sample_sheet and the fastq sample_ids do not match"
+        echo "Please fix the single_Cell_sample_sheet sample ids"
+        exit 1
+    fi
+    """
+}
+
 
 // workflow module
 workflow pipeline {
@@ -110,8 +130,11 @@ workflow pipeline {
         sc_sample_sheet
         ref_genome_dir
         umap_genes
+        sample_kits
     
     main:
+        error_msg = ""
+        // reads.view()
         ref_genome_fasta = file("${ref_genome_dir}/fasta/genome.fa", checkIfExists: true)
         ref_genes_gtf = file("${ref_genome_dir}/genes/genes.gtf", checkIfExists: true)
         ref_genome_idx = file("${ref_genome_fasta}.fai", checkIfExists: true)
@@ -123,14 +146,15 @@ workflow pipeline {
         }
         
         bc_longlist_dir = file("${projectDir}/data", checkIfExists: true)
-    
-        sample_kits = Channel.fromPath(sc_sample_sheet)
-                    .splitCsv(header:true)
-                    .map { row -> tuple(
-                              row.sample_id, 
-                              row.kit_name, 
-                              row.kit_version,
-                              row.exp_cells)}
+
+        fastqingress_ids = reads.map{it -> it[1]['sample_id']}
+            .collectFile(name: 'fastingress_read_ids.csv', newLine: true)
+        
+        sample_kit_ids = sample_kits.map{it -> it[0]}
+            .collectFile(name: 'sc_sample_sheet_ids.csv', newLine: true)
+
+        check_samples_process(sample_kit_ids, fastqingress_ids)
+
 
         summariseCatChunkReads(reads)
 
@@ -160,6 +184,7 @@ workflow pipeline {
         results = process_bams.out.results
         umap_plots = process_bams.out.umap_plots
         config_stats = stranding.out.config_stats
+        
 }
 
 
@@ -178,8 +203,17 @@ workflow {
             "sample_sheet":params.sample_sheet,
             "sanitize": params.sanitize_fastq,
             "output":params.out_dir])
+    
+    sample_kits = Channel.fromPath(sc_sample_sheet)
+                    .splitCsv(header:true)
+                    .map { row -> tuple(
+                              row.sample_id, 
+                              row.kit_name, 
+                              row.kit_version,
+                              row.exp_cells)}
+    
 
-    pipeline(reads, sc_sample_sheet, ref_genome_dir, umap_genes)
+    pipeline(reads, sc_sample_sheet, ref_genome_dir, umap_genes, sample_kits)
 
     pack_images(pipeline.out.umap_plots)
     
