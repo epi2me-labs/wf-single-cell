@@ -39,9 +39,8 @@ process align_to_ref {
       --junc-bed ${ref_genes_bed} \
       --secondary=no \
       ${ref_genome_fasta} ${stranded_fq} > tmp.sam && \
-    samtools view --no-PG tmp.sam \
-      -t ref_chrom_sizes -o unsort.bam;
-    samtools sort --no-PG unsort.bam -o ${sample_id}_sorted.bam;
+    samtools view -b --no-PG tmp.sam -t ref_chrom_sizes | \
+        samtools sort --no-PG -o ${sample_id}_sorted.bam - ;
     samtools index ${sample_id}_sorted.bam
     #rm tmp.sam
     """

@@ -217,44 +217,6 @@ process split_gtf_by_chroms {
     """
 }   
 
-process assign_transcripts{
-    // Testing 
-    label 'singlecell'
-    cpus params.max_threads
-    input:
-        tuple val(sample_id), 
-              val(chr), 
-              path(bam), 
-              path(bai),
-              path(ref_gtf),
-              path(ref_genome)
-    output:
-        tuple val(sample_id),
-              val(chr),
-              path("*.read.transcript_assigns.tsv"),
-              emit: chrom_tsv_gene_assigns
-    script:
-    """
-    ## assemble transcripts
-    stringtie -L -v -p 5 -l $chr \
-        -G ${ref_gtf} -o stringtie.gff ${bam}
-
-    ## Make transcriptome
-    gffread -g $ref_genome -w transcriptome.fa stringtie.gff
-
-    # Getting dupes from bamtofastq. Fix
-    bedtools bamtofastq -i ${bam} -fq /dev/stdout |\
-        seqkit rmdup > reads.fq
-
-    # QNAME, MAPQ, status(Dummy for now), RNAME(transcript ID)
-    minimap2 -t ${task.cpus} -ax splice transcriptome.fa reads.fq |\
-        samtools view -q 40 -F 2304 -b > aln.bam
-        samtools view aln.bam | awk -v var="Assigned" 'BEGIN{OFS="\t";} {print \$1, var, \$5, \$3}' \
-        > ${sample_id}_${chr}.read.transcript_assigns.tsv
-    
-    #rm reads.fq 
-    """
-}
 
 process assign_genes {
     label "singlecell"
@@ -603,8 +565,6 @@ workflow process_bams {
             )
             // Rejig for next process
             .map(it -> [it[1][1], it[0][0], it[1][2], it[1][3], it[0][1], it[0][2]])
-
-        assign_transcripts(chr_gtf_bam)
 
         assign_genes(chr_beds_gtf)
 

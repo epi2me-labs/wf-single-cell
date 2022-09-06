@@ -27,7 +27,7 @@ process summariseCatChunkReads {
     cpus 1
     input:
         tuple path(directory), val(meta)
-        path check  // This will not exist if the sample_id check fails and will halt the pipleine.
+        val check  // This will not exist if the sample_id check fails and will halt the pipleine.
     output:
         tuple val("${meta.sample_id}"), path("${meta.sample_id}.stats"), emit: stats
         tuple val("${meta.sample_id}"), path("chunks/*"), emit: fastq_chunks
@@ -222,9 +222,10 @@ workflow {
         """
         The sample_ids in the single_cell_sample_sheet do not match those
         of the fastq inputs. Please see the README for instructions """.stripIndent()}
-  
+
+    // first() converts the queue channel to a value channel.
     pipeline(reads, sc_sample_sheet, ref_genome_dir, umap_genes, sample_kits,
-        check_sampleids.out)
+        check_sampleids.out.first())
 
     pack_images(pipeline.out.umap_plots)
     
