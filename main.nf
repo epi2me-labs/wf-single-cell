@@ -226,10 +226,10 @@ workflow {
     check_sampleids(fastqingress_ids, sample_kit_ids)
 
     check_sampleids.out.ifEmpty{
-        exit 1, 
+        exit 1,
         """
         The sample_ids in the single_cell_sample_sheet do not match those
-        of the fastq inputs. Please see the README for instructions """.stripIndent()}
+        of the fastq inputs. Please see the README for instructions.""".stripIndent()}
 
     // first() converts the queue channel to a value channel.
     pipeline(reads, sc_sample_sheet, ref_genome_dir, umap_genes, sample_kits,
