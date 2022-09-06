@@ -106,6 +106,7 @@ process pack_images {
 process check_sampleids{
     // Check that sample_ids gicven in the single_cell_sample_sheet are 
     // identical to the sample_ids of the fastq inputs
+    label "singlecell"
     input:
         path fastqingress_ids
         path sc_sample_sheet_ids
@@ -250,23 +251,21 @@ workflow {
     // This is temporay until a detailed report is made
     makeReport()
     output_report(makeReport.out)
+}
 
-    if (params.disable_ping == false) {
-    workflow.onComplete {
+if (params.disable_ping == false) {
+workflow.onComplete {
+    try{
+        Pinguscript.ping_post(workflow, "end", "none", params.out_dir, params)
+    }catch(RuntimeException e1) {
+    }
+}
+
+    workflow.onError {
         try{
-            Pinguscript.ping_post(workflow, "end", "none", params.out_dir, params)
+            Pinguscript.ping_post(workflow, "error", "$workflow.errorMessage", params.out_dir, params)
         }catch(RuntimeException e1) {
         }
     }
-    
-        workflow.onError {
-            try{
-                Pinguscript.ping_post(workflow, "error", "$workflow.errorMessage", params.out_dir, params)
-            }catch(RuntimeException e1) {
-            }
-        }
 
-    }
-    
-    
 }
