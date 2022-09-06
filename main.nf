@@ -27,7 +27,7 @@ process summariseCatChunkReads {
     cpus 1
     input:
         tuple path(directory), val(meta)
-        path check
+        path check  // This will not exist if the sample_id check fails and will halt the pipleine.
     output:
         tuple val("${meta.sample_id}"), path("${meta.sample_id}.stats"), emit: stats
         tuple val("${meta.sample_id}"), path("chunks/*"), emit: fastq_chunks
@@ -137,7 +137,7 @@ workflow pipeline {
         ref_genome_dir
         umap_genes
         sample_kits
-        check
+        sample_ids_check
     
     main:
         error_msg = ""
@@ -153,7 +153,7 @@ workflow pipeline {
         
         bc_longlist_dir = file("${projectDir}/data", checkIfExists: true)
 
-        summariseCatChunkReads(reads, check)
+        summariseCatChunkReads(reads, sample_ids_check)
 
         stranding(
             summariseCatChunkReads.out.fastq_chunks,
@@ -217,7 +217,11 @@ workflow {
 
     check_sampleids(fastqingress_ids, sample_kit_ids)
 
-    check_sampleids.out.ifEmpty(file("$projectDir/data/OPTIONAL_FILE"))
+    check_sampleids.out.ifEmpty{
+        exit 1, 
+        """
+        The sample_ids in the single_cell_sample_sheet do not match those
+        of the fastq inputs. Please see the README for instructions """.stripIndent()}
   
     pipeline(reads, sc_sample_sheet, ref_genome_dir, umap_genes, sample_kits,
         check_sampleids.out)

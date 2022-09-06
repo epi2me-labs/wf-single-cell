@@ -43,7 +43,7 @@ process align_to_ref {
       -t ref_chrom_sizes -o unsort.bam;
     samtools sort --no-PG unsort.bam -o ${sample_id}_sorted.bam;
     samtools index ${sample_id}_sorted.bam
-    rm tmp.sam
+    #rm tmp.sam
     """
 }
 
