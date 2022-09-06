@@ -188,6 +188,14 @@ workflow pipeline {
 // entrypoint workflow
 WorkflowMain.initialise(workflow, params, log)
 workflow {
+
+    if (params.disable_ping == false) {
+        try { 
+            Pinguscript.ping_post(workflow, "start", "none", params.out_dir, params)
+        } catch(RuntimeException e1) {
+        }
+    }
+
     sc_sample_sheet = file(params.single_cell_sample_sheet, checkIfExists: true)
     ref_genome_dir = file(params.ref_genome_dir, checkIfExists: true)
     umap_genes = file(params.umap_plot_genes, checkIfExists: true)
@@ -243,6 +251,23 @@ workflow {
     // This is temporay until a detailed report is made
     makeReport()
     output_report(makeReport.out)
+
+    if (params.disable_ping == false) {
+    workflow.onComplete {
+        try{
+            Pinguscript.ping_post(workflow, "end", "none", params.out_dir, params)
+        }catch(RuntimeException e1) {
+        }
+    }
+    
+        workflow.onError {
+            try{
+                Pinguscript.ping_post(workflow, "error", "$workflow.errorMessage", params.out_dir, params)
+            }catch(RuntimeException e1) {
+            }
+        }
+
+    }
     
     
 }
