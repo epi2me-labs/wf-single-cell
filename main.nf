@@ -153,18 +153,6 @@ workflow pipeline {
         
         bc_longlist_dir = file("${projectDir}/data", checkIfExists: true)
 
-        // check_sampleids(sample_kit_ids, fastqingress_ids)
-
-        // f = check_sampleids.out.collect()
-        
-        // if (f.isEmpty()){
-        //     println('empty')
-        // }else{
-        //     println('not empty')
-        // }
-        
-
-
         summariseCatChunkReads(reads, check)
 
         stranding(
@@ -228,7 +216,7 @@ workflow {
         .collectFile(name: 'sc_sample_sheet_ids.csv', newLine: true)    
 
     check_sampleids(fastqingress_ids, sample_kit_ids)
-
+  
     pipeline(reads, sc_sample_sheet, ref_genome_dir, umap_genes, sample_kits,
         check_sampleids.out)
 
