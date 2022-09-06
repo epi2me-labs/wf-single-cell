@@ -27,6 +27,7 @@ process summariseCatChunkReads {
     cpus 1
     input:
         tuple path(directory), val(meta)
+        val check
     output:
         tuple val("${meta.sample_id}"), path("${meta.sample_id}.stats"), emit: stats
         tuple val("${meta.sample_id}"), path("chunks/*"), emit: fastq_chunks
@@ -104,17 +105,23 @@ process pack_images {
 
 process check_samples{
     input:
+        path fastqingress_ids
         path sc_sample_sheet_ids
-        path fast_ingress_ids
     output:
         // env CHECK_SAMPLES_PASSED, emit: passed
-        path 'diff'
+        path 'diff', optional: true, emit: diff
     """
-    # Note: this is a quick fix to get the workflow to fail when the 
-    # Sample ids are incorrect. Will make a better version very soon
-    diff -w <(sort $sc_sample_sheet_ids) <(sort $fast_ingress_ids) \
-        > diff
-        
+    #!/usr/bin/env python
+    import pandas as pd
+    import sys
+    df_s = pd.read_csv("$fastqingress_ids", index_col=None)
+    df_f = pd.read_csv("$sc_sample_sheet_ids", index_col=None)
+
+    if set(df_s.iloc[:, 0].values) == set(df_f.iloc[:, 0].values):
+        print('the smae')
+    else:
+        print("The smaples are different")
+        sys.stdout.write('ksfhdskhjfsdkjhksjdaskjd')
     """
 }
 
@@ -127,6 +134,7 @@ workflow pipeline {
         ref_genome_dir
         umap_genes
         sample_kits
+        check
     
     main:
         error_msg = ""
@@ -142,24 +150,19 @@ workflow pipeline {
         
         bc_longlist_dir = file("${projectDir}/data", checkIfExists: true)
 
-        fastqingress_ids = reads.map{it -> it[1]['sample_id']}
-            .collectFile(name: 'fastingress_read_ids.csv', newLine: true)
+        // check_samples(sample_kit_ids, fastqingress_ids)
+
+        // f = check_samples.out.collect()
         
-        sample_kit_ids = sample_kits.map{it -> it[0]}
-            .collectFile(name: 'sc_sample_sheet_ids.csv', newLine: true)
-
-        check_samples(sample_kit_ids, fastqingress_ids)
-
-        f = check_samples.out.collect()
+        // if (f.isEmpty()){
+        //     println('empty')
+        // }else{
+        //     println('not empty')
+        // }
         
-        if (f.isEmpty()){
-            println('empty')
-        }else{
-            println('not empty')
-        }
 
 
-        summariseCatChunkReads(reads)
+        summariseCatChunkReads(reads, check)
 
         stranding(
             summariseCatChunkReads.out.fastq_chunks,
@@ -214,9 +217,17 @@ workflow {
                               row.kit_name, 
                               row.kit_version,
                               row.exp_cells)}
-    
 
-    pipeline(reads, sc_sample_sheet, ref_genome_dir, umap_genes, sample_kits)
+    fastqingress_ids = reads.map{it -> it[1]['sample_id']}
+    .collectFile(name: 'fastingress_read_ids.csv', newLine: true)
+        
+    sample_kit_ids = sample_kits.map{it -> it[0]}
+        .collectFile(name: 'sc_sample_sheet_ids.csv', newLine: true)    
+
+    check_samples(fastqingress_ids, sample_kit_ids)
+
+    pipeline(reads, sc_sample_sheet, ref_genome_dir, umap_genes, sample_kits,
+        check_samples.out)
 
     pack_images(pipeline.out.umap_plots)
     
@@ -234,4 +245,6 @@ workflow {
     // This is temporay until a detailed report is made
     makeReport()
     output_report(makeReport.out)
+    
+    
 }
