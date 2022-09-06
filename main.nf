@@ -27,7 +27,7 @@ process summariseCatChunkReads {
     cpus 1
     input:
         tuple path(directory), val(meta)
-        val check
+        path check
     output:
         tuple val("${meta.sample_id}"), path("${meta.sample_id}.stats"), emit: stats
         tuple val("${meta.sample_id}"), path("chunks/*"), emit: fastq_chunks
@@ -216,6 +216,8 @@ workflow {
         .collectFile(name: 'sc_sample_sheet_ids.csv', newLine: true)    
 
     check_sampleids(fastqingress_ids, sample_kit_ids)
+
+    check_sampleids.out.ifEmpty(file("$projectDir/data/OPTIONAL_FILE"))
   
     pipeline(reads, sc_sample_sheet, ref_genome_dir, umap_genes, sample_kits,
         check_sampleids.out)
