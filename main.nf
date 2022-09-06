@@ -103,12 +103,14 @@ process pack_images {
     """
 }
 
-process check_samples{
+process check_sampleids{
+    // Check that sample_ids gicven in the single_cell_sample_sheet are 
+    // identical to the sample_ids of the fastq inputs
     input:
         path fastqingress_ids
         path sc_sample_sheet_ids
     output:
-        // env CHECK_SAMPLES_PASSED, emit: passed
+        // env check_sampleids_PASSED, emit: passed
         path 'diff', optional: true, emit: diff
     """
     #!/usr/bin/env python
@@ -118,7 +120,8 @@ process check_samples{
     df_f = pd.read_csv("$sc_sample_sheet_ids", index_col=None)
 
     if set(df_s.iloc[:, 0].values) == set(df_f.iloc[:, 0].values):
-        print('the smae')
+        print('Success. The sample_ids are the same')
+        open('diff', 'w').close()
     else:
         print("The smaples are different")
         sys.stdout.write('ksfhdskhjfsdkjhksjdaskjd')
@@ -150,9 +153,9 @@ workflow pipeline {
         
         bc_longlist_dir = file("${projectDir}/data", checkIfExists: true)
 
-        // check_samples(sample_kit_ids, fastqingress_ids)
+        // check_sampleids(sample_kit_ids, fastqingress_ids)
 
-        // f = check_samples.out.collect()
+        // f = check_sampleids.out.collect()
         
         // if (f.isEmpty()){
         //     println('empty')
@@ -224,10 +227,10 @@ workflow {
     sample_kit_ids = sample_kits.map{it -> it[0]}
         .collectFile(name: 'sc_sample_sheet_ids.csv', newLine: true)    
 
-    check_samples(fastqingress_ids, sample_kit_ids)
+    check_sampleids(fastqingress_ids, sample_kit_ids)
 
     pipeline(reads, sc_sample_sheet, ref_genome_dir, umap_genes, sample_kits,
-        check_samples.out)
+        check_sampleids.out)
 
     pack_images(pipeline.out.umap_plots)
     

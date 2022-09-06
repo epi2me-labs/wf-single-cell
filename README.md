@@ -84,7 +84,7 @@ The main options are:
 The single_cell_sample_sheet contains details about the input sample_ids, the 10X kits used (e.g. `3prime` or `5prime`), the kit versions used (`v2` or `v3` for the 3' kit, `v1` for the 5' kit), a rough estimate of the number of cells in the library. The cell count estimate specified with `exp_cells` and can be a very rough estimate (500 is a robust default value if the number is not known).
 
 
-The sample_id field should correspond to sample_id which is defined either in the `sample_sheet`,  given by the `sample` parameter (for single sample runs) or, if no `sample_sheet` or `sample` is given, is derived from each folder containing the fastq files.
+The sample_id field should correspond to sample_id which is defined either in the `sample_sheet`,  given by the `sample` parameter (for single sample runs). If no `sample_sheet` or `sample` is given, sample_id is derived from each folder containing the fastq files or if a single file is given, the sample_id is the basename of the file (data.fastq.gz -> data).
 
 An example sheet with one sample is:
 ```
