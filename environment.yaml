@@ -24,3 +24,5 @@ dependencies:
   - vsearch==2.15.1
   - umap-learn==0.5.2
   - fastcat
+  - stringtie==2.2.1
+  - gffread

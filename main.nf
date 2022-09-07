@@ -27,6 +27,7 @@ process summariseCatChunkReads {
     cpus 1
     input:
         tuple path(directory), val(meta)
+        val check  // This will not exist if the sample_id check fails and will halt the pipleine.
     output:
         tuple val("${meta.sample_id}"), path("${meta.sample_id}.stats"), emit: stats
         tuple val("${meta.sample_id}"), path("chunks/*"), emit: fastq_chunks
@@ -102,6 +103,32 @@ process pack_images {
     """
 }
 
+process check_sampleids{
+    // Check that sample_ids gicven in the single_cell_sample_sheet are 
+    // identical to the sample_ids of the fastq inputs
+    label "singlecell"
+    input:
+        path fastqingress_ids
+        path sc_sample_sheet_ids
+    output:
+        // env check_sampleids_PASSED, emit: passed
+        path 'diff', optional: true, emit: diff
+    """
+    #!/usr/bin/env python
+    import pandas as pd
+    import sys
+    df_s = pd.read_csv("$fastqingress_ids", index_col=None)
+    df_f = pd.read_csv("$sc_sample_sheet_ids", index_col=None)
+
+    if set(df_s.iloc[:, 0].values) == set(df_f.iloc[:, 0].values):
+        print('Success. The sample_ids are the same')
+        open('diff', 'w').close()
+    else:
+        print("The smaples are different")
+        sys.stdout.write('ksfhdskhjfsdkjhksjdaskjd')
+    """
+}
+
 
 // workflow module
 workflow pipeline {
@@ -110,6 +137,8 @@ workflow pipeline {
         sc_sample_sheet
         ref_genome_dir
         umap_genes
+        sample_kits
+        sample_ids_check
     
     main:
         ref_genome_fasta = file("${ref_genome_dir}/fasta/genome.fa", checkIfExists: true)
@@ -123,16 +152,8 @@ workflow pipeline {
         }
         
         bc_longlist_dir = file("${projectDir}/data", checkIfExists: true)
-    
-        sample_kits = Channel.fromPath(sc_sample_sheet)
-                    .splitCsv(header:true)
-                    .map { row -> tuple(
-                              row.sample_id, 
-                              row.kit_name, 
-                              row.kit_version,
-                              row.exp_cells)}
 
-        summariseCatChunkReads(reads)
+        summariseCatChunkReads(reads, sample_ids_check)
 
         stranding(
             summariseCatChunkReads.out.fastq_chunks,
@@ -153,18 +174,28 @@ workflow pipeline {
             ref_genes_gtf,
             umap_genes,
             bc_longlist_dir,
-            sample_kits
+            sample_kits,
+            ref_genome_fasta
         )
     emit:
         results = process_bams.out.results
         umap_plots = process_bams.out.umap_plots
         config_stats = stranding.out.config_stats
+        
 }
 
 
 // entrypoint workflow
 WorkflowMain.initialise(workflow, params, log)
 workflow {
+
+    if (params.disable_ping == false) {
+        try { 
+            Pinguscript.ping_post(workflow, "start", "none", params.out_dir, params)
+        } catch(RuntimeException e1) {
+        }
+    }
+
     sc_sample_sheet = file(params.single_cell_sample_sheet, checkIfExists: true)
     ref_genome_dir = file(params.ref_genome_dir, checkIfExists: true)
     umap_genes = file(params.umap_plot_genes, checkIfExists: true)
@@ -177,8 +208,32 @@ workflow {
             "sample_sheet":params.sample_sheet,
             "sanitize": params.sanitize_fastq,
             "output":params.out_dir])
+    
+    sample_kits = Channel.fromPath(sc_sample_sheet)
+                    .splitCsv(header:true)
+                    .map { row -> tuple(
+                              row.sample_id, 
+                              row.kit_name, 
+                              row.kit_version,
+                              row.exp_cells)}
 
-    pipeline(reads, sc_sample_sheet, ref_genome_dir, umap_genes)
+    fastqingress_ids = reads.map{it -> it[1]['sample_id']}
+    .collectFile(name: 'fastingress_read_ids.csv', newLine: true)
+        
+    sample_kit_ids = sample_kits.map{it -> it[0]}
+        .collectFile(name: 'sc_sample_sheet_ids.csv', newLine: true)    
+
+    check_sampleids(fastqingress_ids, sample_kit_ids)
+
+    check_sampleids.out.ifEmpty{
+        exit 1,
+        """
+        The sample_ids in the single_cell_sample_sheet do not match those
+        of the fastq inputs. Please see the README for instructions.""".stripIndent()}
+
+    // first() converts the queue channel to a value channel.
+    pipeline(reads, sc_sample_sheet, ref_genome_dir, umap_genes, sample_kits,
+        check_sampleids.out.first())
 
     pack_images(pipeline.out.umap_plots)
     
@@ -196,4 +251,21 @@ workflow {
     // This is temporay until a detailed report is made
     makeReport()
     output_report(makeReport.out)
+}
+
+if (params.disable_ping == false) {
+workflow.onComplete {
+    try{
+        Pinguscript.ping_post(workflow, "end", "none", params.out_dir, params)
+    }catch(RuntimeException e1) {
+    }
+}
+
+    workflow.onError {
+        try{
+            Pinguscript.ping_post(workflow, "error", "$workflow.errorMessage", params.out_dir, params)
+        }catch(RuntimeException e1) {
+        }
+    }
+
 }

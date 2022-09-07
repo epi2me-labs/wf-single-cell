@@ -67,8 +67,14 @@ process extract_barcodes{
         path bc_longlist_dir
 
     output:
-        tuple val(sample_id), path("*.bam"), emit: bam_bc_uncorr_tmp
-        tuple val(sample_id), path("*.tsv"), emit: barcode_counts
+        // tuple val(sample_id), path("*.bam"), emit: bam_bc_uncorr_tmp
+        tuple val(sample_id), 
+              path("*.bc_extract.sorted.bam"), 
+              path("*.bc_extract.sorted.bam.bai"), 
+              emit: bam_bc_uncorr
+        tuple val(sample_id), 
+              path("*.tsv"), 
+              emit: barcode_counts
     """
     extract_barcode.py \
     $bam_sort ${bc_longlist_dir}/${bc_long_list}\
@@ -80,20 +86,11 @@ process extract_barcodes{
     --umi_length $umi_length \
     --output_bam "tmp.bam" \
     --output_barcodes "${sample_id}.uncorrected_bc_counts.tsv";
-    """
-}
 
-process cleanup_headers_1 {
-    label "singlecell"
-    cpus 1
-    input:
-         tuple val(sample_id), path(bam)
-    output:
-        tuple val(sample_id), path("*.bam"), path("*.bam.bai"), 
-        emit: bam_bc_uncorr
-    """
-    samtools reheader --no-PG -c 'grep -v ^@PG' $bam > "${sample_id}.bc_extract.sorted.bam"
+    # Cleanup headers
+    samtools reheader --no-PG -c 'grep -v ^@PG' tmp.bam > "${sample_id}.bc_extract.sorted.bam"
     samtools index "${sample_id}.bc_extract.sorted.bam"
+    rm tmp.bam
     """
 }
 
@@ -118,7 +115,6 @@ process generate_whitelist{
 
 process split_bam_by_chroms{
     label "singlecell"
-    
     cpus params.max_threads
     input:
         tuple val(sample_id), path(bam), path(bai)
@@ -128,6 +124,19 @@ process split_bam_by_chroms{
               path("splits/*.bai"), emit: bam
     """
     split_bam_by_chroms.py -t ${task.cpus} --output_dir splits $bam
+    """
+}
+
+process split_fasta_by_chroms {
+    label "singlecell"
+    cpus params.max_threads
+    input:
+        path(ref_genome)
+    output:
+        path("*.fasta")
+    """
+    awk '/^>/ {F=substr(\$0, 2, length(\$0))".fasta"; \
+         print >F;next;} {print >> F;}' < $ref_genome
     """
 }
 
@@ -150,8 +159,9 @@ process assign_barcodes{
     output:
         tuple val(sample_id), 
             val(chr),
-            path("tmp.bam"),
-            emit: chrom_bam_bc
+            path("*.bc_assign.bam"),
+            path("*.bc_assign.bam.bai"),
+            emit: chrom_bam_bc_bai
         tuple val(sample_id),
               val(chr),
               path("*.bc_assign_counts.tsv"), 
@@ -167,32 +177,21 @@ process assign_barcodes{
         --barcode_length $barcode_length \
         --umi_length $umi_length \
         $bam $whitelist
+    
+    samtools reheader --no-PG -c 'grep -v ^@PG' tmp.bam \
+        > "${sample_id}_${chr}.bc_assign.bam";
+    samtools index "${sample_id}_${chr}.bc_assign.bam"
+    rm tmp.bam
+
 """
 }
 
-process cleanup_headers_2 {
-    label "singlecell"
-    cpus 1
-    input:
-         tuple val(sample_id), val(chr), path(bam)
-    output:
-        tuple val(sample_id), 
-              val(chr), 
-              path("*.bam"), 
-              path("*.bam.bai"), 
-        emit: chrom_bam_bc_bai
-    """
-    samtools reheader --no-PG -c 'grep -v ^@PG' $bam \
-        > "${sample_id}_${chr}.bc_assign.bam";
-    samtools index "${sample_id}_${chr}.bc_assign.bam"
-    """
-}
 
 process bam_to_bed {
     label "singlecell"
     cpus 1
     input:
-        tuple val(chr), //emit chr first for doing cross on gtfs 
+        tuple val(chr),
               val(sample_id),
               path(bam),
               path(bai) 
@@ -218,6 +217,7 @@ process split_gtf_by_chroms {
     """
 }   
 
+
 process assign_genes {
     label "singlecell"
     cpus 1
@@ -229,7 +229,7 @@ process assign_genes {
     output:
         tuple val(sample_id),
               val(chr),
-              path("${sample_id}_${chr}.read.gene_assigns.tsv"),
+              path("*.read.gene_assigns.tsv"),
               emit: chrom_tsv_gene_assigns
     """
     assign_genes.py \
@@ -238,7 +238,7 @@ process assign_genes {
     """
 }
 
-process add_gene_tags_to_bam {
+process add_gene_transcript_tags_to_bam {
     label "singlecell"
     cpus 1
     input:
@@ -250,32 +250,18 @@ process add_gene_tags_to_bam {
     output:
         tuple val(sample_id),
               val(chr),
-              path("tmp.bam"), 
-              emit: chrom_bam_bc_gene_tmp
+              path("*bc_assign.gene.bam"), 
+              path("*bc_assign.gene.bam.bai"),
+              emit: chrom_bam_bc_bai
     """
     add_gene_tags.py \
         --output tmp.bam \
         $chrom_bam_bc $chrom_tsv_gene_assigns
-    """
-}
-
-process cleanup_headers_3 {
-    label "singlecell"
-    cpus 1
-    input:
-         tuple val(sample_id), 
-               val(chr), 
-               path(bam)
-    output:
-        tuple val(sample_id), 
-              val(chr),
-              path("*.bam"), 
-              path("*.bam.bai"), 
-              emit: chrom_bam_bc_bai
-    """
-    samtools reheader --no-PG -c 'grep -v ^@PG' $bam \
+    
+    samtools reheader --no-PG -c 'grep -v ^@PG' tmp.bam \
         > ${sample_id}_${chr}_bc_assign.gene.bam;
     samtools index ${sample_id}_${chr}_bc_assign.gene.bam
+    rm tmp.bam
     """
 }
 
@@ -289,9 +275,9 @@ process cluster_umis {
               path(bai)
     output:
          tuple val(sample_id),
-              val(chr),
-              path("tmp.bam"),
-              emit: bam
+              path("*.tagged.bam"),
+              path("*.tagged.bam.bai"),
+              emit: bam_bc_bai
     """
     cluster_umis.py \
     $bam \
@@ -299,25 +285,14 @@ process cluster_umis {
     --ref_interval $params.umi_genomic_interval \
     --cell_gene_max_reads $params.umi_cell_gene_max_reads \
     --output tmp.bam 
+
+    samtools reheader --no-PG -c 'grep -v ^@PG' tmp.bam \
+        >  ${sample_id}_${chr}.tagged.bam;
+    samtools index ${sample_id}_${chr}.tagged.bam
+    rm tmp.bam
     """
 }
 
-process cleanup_headers_4{
-    label "singlecell"
-    cpus 1
-    input:
-         tuple val(sample_id), 
-               val(chr), 
-               path(bam)
-    output:
-        tuple val(sample_id), path("*.bam"), path("*.bam.bai"), 
-        emit: chrom_bam_bc_bai
-    """
-    samtools reheader --no-PG -c 'grep -v ^@PG' $bam \
-        >  ${sample_id}_${chr}.tagged.bam;
-    samtools index ${sample_id}_${chr}.tagged.bam
-    """
-}
 
 process combine_chrom_bams {
     // Merge all chromosome bams by sample_id
@@ -500,6 +475,7 @@ workflow process_bams {
         umap_genes
         bc_longlist_dir
         sample_kits
+        ref_genome_fasta
    
     main:
 
@@ -507,18 +483,22 @@ workflow process_bams {
             kit_config,
             sc_sample_sheet)
 
+        get_kit_info.out.kit_info
+            .splitCsv(header:false, skip:1)
+            .join(bam).join(bam_idx)
+
         extract_barcodes(
             get_kit_info.out.kit_info
             .splitCsv(header:false, skip:1)
             .join(bam).join(bam_idx),
             bc_longlist_dir)
         
-        cleanup_headers_1(
-            extract_barcodes.out.bam_bc_uncorr_tmp
-        )
-        
         split_bam_by_chroms(
-            cleanup_headers_1.out.bam_bc_uncorr
+            extract_barcodes.out.bam_bc_uncorr
+        )
+
+        split_fasta_by_chroms(
+            ref_genome_fasta
         )
 
         generate_whitelist(
@@ -557,9 +537,7 @@ workflow process_bams {
 
         assign_barcodes(chr_bam_kit)
 
-        cleanup_headers_2(assign_barcodes.out.chrom_bam_bc)
-
-        bam_to_bed(cleanup_headers_2.out.chrom_bam_bc_bai)
+        bam_to_bed(assign_barcodes.out.chrom_bam_bc_bai)
 
         chr_gtf = split_gtf_by_chroms(gtf)
         .flatten()
@@ -568,28 +546,38 @@ workflow process_bams {
              tuple(file.toString().tokenize('/')[-1], file)}
         
         // combine all chr bams with chr gtfs
-        chr_bams_gtf = chr_gtf.cross(
+        chr_beds_gtf = chr_gtf.cross(
             bam_to_bed.out.chrom_bed_bc)
             .map({it ->
             //  rejig the tuple to [sample_id, chr, bed, gtf]
              tuple(it[1][1], it[0][0], it[1][2], it[0][1])})
+        
 
-         assign_genes(chr_bams_gtf)
+        // Make tuples: sample_id, chr, bam, bai, ref_gtf, ref_genome 
+        chr_gtf_bam = chr_gtf.join(
+            split_fasta_by_chroms.out.flatten()
+            .map(it -> tuple(it.toString()
+            .tokenize('/')[-1].strip('.fasta'), it))
+            )
+            .cross(
+                 assign_barcodes.out.chrom_bam_bc_bai
+                 .map(it -> [it[1], it[0], it[2], it[3]])
+            )
+            // Rejig for next process
+            .map(it -> [it[1][1], it[0][0], it[1][2], it[1][3], it[0][1], it[0][2]])
 
-         add_gene_tags_to_bam(
-             cleanup_headers_2.out.chrom_bam_bc_bai
+        assign_genes(chr_beds_gtf)
+
+         add_gene_transcript_tags_to_bam(
+             assign_barcodes.out.chrom_bam_bc_bai
               // join on sample_id + chr
              .join(assign_genes.out.chrom_tsv_gene_assigns, by:[0, 1]))
 
-         cleanup_headers_3(add_gene_tags_to_bam.out.chrom_bam_bc_gene_tmp)
-
-         cluster_umis(cleanup_headers_3.out.chrom_bam_bc_bai)
-
-         cleanup_headers_4(cluster_umis.out.bam)
+         cluster_umis(add_gene_transcript_tags_to_bam.out.chrom_bam_bc_bai)
 
          // group by sample_id
          combine_chrom_bams(
-             cleanup_headers_4.out.chrom_bam_bc_bai.groupTuple())
+             cluster_umis.out.bam_bc_bai.groupTuple())
 
          count_cell_gene_umi_reads(combine_chrom_bams.out.bam_fully_tagged)
 
@@ -633,7 +621,7 @@ workflow process_bams {
              .join(construct_expression_matrix.out)
              .join(process_expression_matrix.out.matrix_processed_tsv)
              .join(process_expression_matrix.out.matrix_mito_tsv)
-             .join(cleanup_headers_1.out.bam_bc_uncorr)
+             .join(extract_barcodes.out.bam_bc_uncorr)
              .join(generate_whitelist.out.whitelist)
              .join(generate_whitelist.out.kneeplot)
              .join(combine_chrom_bams.out.bam_fully_tagged)
