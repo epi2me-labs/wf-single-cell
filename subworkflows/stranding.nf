@@ -1,7 +1,4 @@
 process call_adapter_scan {
-    // Stranding of reads and ?
-    // Neil: Only one thread for this. Seems low
-    // Do we need a batch number to add to output filenames?
     label "singlecell"
     cpus 1
     input:
@@ -112,8 +109,8 @@ workflow stranding {
             // Rejig the outputs to be [sample_id, fatq_chunk]
             // Then merge in kit info
             if (it[1].getClass() != java.util.ArrayList){
-            // If only one path, `it` will be [sample_id, path]
-            return [it]
+                // If only one path, `it` will be [sample_id, path]
+                return [it]
             }
             l = [];
             for (x in it[1]){

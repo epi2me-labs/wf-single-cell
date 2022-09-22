@@ -19,7 +19,7 @@ Oxford Nanopore has developed a protocol for sequencing single-cell libraries fr
 
 The inputs to Sockeye are raw nanopore reads (FASTQ) generated from the sequencing
 instrument and reference files that can be downloaded from [10x](https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest).
-The pipeline outputs a gene x cell expression matrix, as well as a BAM file of
+The pipeline output a gene x cell, and transcript x cell expression matrices, as well as a BAM file of
 aligned reads tagged with cell barcode and UMI information.
 
 Package dependencies
@@ -43,6 +43,8 @@ The wf-single-cell pipeline makes use of the following dependencies.
 - tqdm
 - umap-learn
 - vsearch
+- stringtie
+- gffcomapare
 
 Additionally, while no explicit dependency exists for the
 [UMI-tools](https://github.com/CGATOxford/UMI-tools) package, the script
@@ -139,7 +141,7 @@ example.
 **Workflow outputs**
 
 The pipeline output will be written to a directory defined by ``--out_dir``. 
-For each sample specifed in the `single_cell-sample_sheet`  an output folder is created containing the results:
+For each sample specifed in the `single_cell-sample_sheet`  an output folder is created containing the results.
 
 
 The most useful outputs of the pipeline are likely:
@@ -161,13 +163,22 @@ The most useful outputs of the pipeline are likely:
   - UR: uncorrected UMI sequence
   - UY: Phred quality scores of the uncorrected UMI sequence
 
-* ``gene_expression.processed.tsv``: TSV containing the gene (rows) x cell (columns) expression matrix, processed and normalized according to the folloing parameters:
+ * ``gene_expression.processed.tsv``:  TSV containing the gene (rows) x cell (columns) expression matrix, processed and normalized according to: 
 
   - ``matrix_min_genes``: cells with fewer than this number of expressed genes will be removed
   - ``matrix_min_cells``: genes present in fewer than this number of cells will be removed
   - ``matrix_max_mito``: cells with more than this percentage of counts belonging to mitochondrial genes will be removed
   - ``matrix_norm_count``: normalize all cells to this number of total counts per cell
-## Useful links
+
+
+* ``processed_transcript_matrix.tsv``: TSV containing the transcript (rows) x cell (columns) expression matrix in transcript per million (TPM): 
+These expression values are determined by applying [stringtie](https://ccb.jhu.edu/software/stringtie/) and 
+[gffcompare](https://ccb.jhu.edu/software/stringtie/gffcompare.shtml) to reads with the same barcodes (each cell). 
+The assembled transcripts with the following gffcompare class codes
+are excluded: `i`, `p`, `s` or `u`.
+See the [gffcompare](https://ccb.jhu.edu/software/stringtie/gffcompare.shtml)
+and [this image](https://ccb.jhu.edu/software/stringtie/gffcompare_codes.png), and
+only cells and genes that pass the gene filtering described above are included.## Useful links
 
 * [nextflow](https://www.nextflow.io/)
 * [docker](https://www.docker.com/products/docker-desktop)

@@ -67,7 +67,6 @@ process extract_barcodes{
         path bc_longlist_dir
 
     output:
-        // tuple val(sample_id), path("*.bam"), emit: bam_bc_uncorr_tmp
         tuple val(sample_id), 
               path("*.bc_extract.sorted.bam"), 
               path("*.bc_extract.sorted.bam.bai"), 
@@ -133,10 +132,15 @@ process split_fasta_by_chroms {
     input:
         path(ref_genome)
     output:
-        path("*.fasta")
+        path("fasta/*")
     """
-    awk '/^>/ {F=substr(\$0, 2, length(\$0))".fasta"; \
-         print >F;next;} {print >> F;}' < $ref_genome
+    samtools faidx $ref_genome
+    seqkit split $ref_genome --by-id --two-pass -O fasta
+    cd fasta
+    for file in *; do
+        newname=\${file#*part_};
+        mv \$file \$newname;
+    done
     """
 }
 
@@ -213,10 +217,9 @@ process split_gtf_by_chroms {
     output:
         path("*"), emit: chrom_gtf
     """
-    awk '/^[^#]/ {print>\$1}' $gtf 
+    gawk '/^[^#]/ {print>\$1".gtf"}' $gtf 
     """
 }   
-
 
 process assign_genes {
     label "singlecell"
@@ -238,7 +241,7 @@ process assign_genes {
     """
 }
 
-process add_gene_transcript_tags_to_bam {
+process add_gene_tags_to_bam {
     label "singlecell"
     cpus 1
     input:
@@ -261,7 +264,6 @@ process add_gene_transcript_tags_to_bam {
     samtools reheader --no-PG -c 'grep -v ^@PG' tmp.bam \
         > ${sample_id}_${chr}_bc_assign.gene.bam;
     samtools index ${sample_id}_${chr}_bc_assign.gene.bam
-    rm tmp.bam
     """
 }
 
@@ -297,7 +299,7 @@ process cluster_umis {
 process combine_chrom_bams {
     // Merge all chromosome bams by sample_id
     label "singlecell"
-    cpus 1
+    cpus params.max_threads
     input:
         tuple val(sample_id), 
               path(bams),
@@ -308,10 +310,105 @@ process combine_chrom_bams {
               path("*tagged.sorted.bam.bai"),
               emit: bam_fully_tagged
     """
-    samtools merge -o "${sample_id}.tagged.sorted.bam" $bams; 
-    samtools index "${sample_id}.tagged.sorted.bam";
+    samtools merge -@ ${task.cpus} -o "${sample_id}.tagged.sorted.bam" $bams; 
+    samtools index -@ ${task.cpus} "${sample_id}.tagged.sorted.bam";
     """
 }
+
+process preprocess_bams_for_stringtie {
+    // A termporary workaround for the reads being in the reverse orientation
+    // Also split bam by barcode, keeping only the largest read per umi
+    // TODO: Create a consensus instead
+    label "singlecell"
+    cpus 1
+    input:
+        tuple val(sample_id), 
+              path(bam), 
+              path(bai)
+    output:
+        tuple val(sample_id),
+              path('*.bam'),
+              emit: flipped_bc_bams
+    """
+    process_bam_for_stringtie.py $bam
+    """
+}
+
+process split_bam_by_barcode {
+    label "singlecell"
+    cpus 1
+    input:
+        tuple val(sample_id), 
+              val(chr),
+              path(bam),
+    output:
+        tuple val(sample_id), 
+              path("*.sam"), 
+              emit: sams
+    """
+    # Split by corrected barcode (CB:Z). 
+    samtools view --no-header ${bam} | gawk 'match(\$0, /CB:Z:(\\w+)/, m) {print \$0> m[1]".sam"}'
+    # Prepend header
+    header=\$(samtools view -H ${bam})
+    for f in *.sam; do
+        echo "\$header" > tmp;
+        cat \$f >> tmp;
+        cp tmp \$f;
+    done;
+    """
+}
+
+process stringtie {
+    label "singlecell"
+    cpus 1
+    input:
+        path(ref_gtf)
+        tuple val(sample_id), 
+              path(bam)
+    output:
+        tuple val(sample_id), 
+              path("barcode.tmap"), 
+              emit: tmap
+    """
+    samtools sort $bam -o sorted.bam 
+    stringtie -L -v -p ${task.cpus}  -G ${ref_gtf} -l test \
+        -o stringtie.gff \
+        sorted.bam
+  
+    barcode=\$(echo $bam | sed 's/.bam//')
+    gffcompare -o gffcompare -r $ref_gtf stringtie.gff
+    # Add barcode column to tmap file
+    sed "1s/\$/\tbarcode/; 1 ! s/\$/\t\${barcode}/" gffcompare.stringtie.gff.tmap \
+        > barcode.tmap
+    """
+}
+
+process build_transcript_matrix {
+    label "singlecell"
+    cpus 1
+    input:
+        tuple val(sample_id), 
+              path(gffcompare_tmap),
+              path(gene_matrix)
+    output:
+        tuple val(sample_id), 
+              path("*matrix.tsv"), 
+              emit: transcript_matrix
+    """
+    # remove the headers that were mixed in.
+    cat $gffcompare_tmap | gawk '/^[^ref_gene_id]/' > tmap_cleaned
+
+    transcript_expression_matrix.py \
+        --min_genes $params.matrix_min_genes \
+        --min_cells $params.matrix_min_cells \
+        --max_mito $params.matrix_max_mito \
+        --norm_count $params.matrix_norm_count \
+        --gene_matrix $gene_matrix \
+        --output ${sample_id}_processed_transcript_matrix.tsv \
+        tmap_cleaned
+    """
+}
+
 
 process count_cell_gene_umi_reads {
     label "singlecell"
@@ -355,11 +452,12 @@ process construct_expression_matrix {
               path(bai)
     output:
         tuple val(sample_id), 
-              path("*gene_expression.counts.tsv"), 
+              path("*gene_expression.counts.tsv"),
               emit: matrix_counts_tsv
     """
     gene_expression.py \
         --output ${sample_id}.gene_expression.counts.tsv $bam
+
     """
 }
 
@@ -385,6 +483,7 @@ process process_expression_matrix {
     --output ${sample_id}.gene_expression.processed.tsv \
     --mito_output ${sample_id}.gene_expression.mito.tsv \
     $matrix_counts_tsv
+
     """
 }
 
@@ -396,7 +495,7 @@ process umap_reduce_expression_matrix {
               path(matrix_processed_tsv)
     output:
          tuple val(sample_id),
-              path("*gene_expression.umap.tsv"), 
+              path("*gene_expression.umap.tsv"),
               emit: matrix_umap_tsv
     """
     umap_reduce.py \
@@ -417,10 +516,12 @@ process umap_plot_total_umis {
           tuple val(sample_id),
               path("*umap.total.png"), 
               emit: matrix_umap_plot_total
+
     """
-    plot_umap.py \
+   plot_umap.py \
         --output ${sample_id}.umap.total.png \
         $matrix_umap_tsv $matrix_processed_tsv
+
     """
 }
 
@@ -437,11 +538,13 @@ process umap_plot_genes {
         tuple val(sample_id),
               path("*umap.gene.${gene}.png"), 
               emit: matrix_umap_plot_gene
+
     """
     plot_umap.py \
         --gene $gene \
         --output ${sample_id}.umap.gene.${gene}.png \
         $matrix_umap_tsv $matrix_processed_tsv
+
     """
 }
 
@@ -515,15 +618,14 @@ workflow process_bams {
                 // Multiple chroms:
                 // [sample_id, [bam1, bam2], [bai1, bai2]]
                 for (i=0; i<it[1].size(); i++) {
-                    chr = it[1][i].toString().tokenize('/')[-1] - '.sorted.bam'
+                    chr = it[1][i].name.strip('sorted.bam')
                     sbi.add(tuple(it[0], chr, it[1][i], it[2][i]))
                 }
             }
             else{
-                println(it[1].getClass())
                 // Only single chrom so we have:
                 // [sample_id, bam, bai]
-                chr = it[1].toString().tokenize('/')[-1] - '.sorted.bam'
+                chr = it[1].name.strip('sorted.bam')
                 sbi.add(tuple(it[0], chr, it[1], it[2])) 
             }
             return sbi
@@ -540,10 +642,10 @@ workflow process_bams {
         bam_to_bed(assign_barcodes.out.chrom_bam_bc_bai)
 
         chr_gtf = split_gtf_by_chroms(gtf)
-        .flatten()
-        .map {file -> 
-            // create [chr, gtf]
-             tuple(file.toString().tokenize('/')[-1], file)}
+            .flatten()
+            .map {file -> 
+                // create [chr, gtf]
+                tuple(file.baseName, file)}
         
         // combine all chr bams with chr gtfs
         chr_beds_gtf = chr_gtf.cross(
@@ -554,10 +656,10 @@ workflow process_bams {
         
 
         // Make tuples: sample_id, chr, bam, bai, ref_gtf, ref_genome 
+        split_fasta_by_chroms.out
         chr_gtf_bam = chr_gtf.join(
             split_fasta_by_chroms.out.flatten()
-            .map(it -> tuple(it.toString()
-            .tokenize('/')[-1].strip('.fasta'), it))
+            .map(it -> tuple(it.baseName, it))
             )
             .cross(
                  assign_barcodes.out.chrom_bam_bc_bai
@@ -568,16 +670,17 @@ workflow process_bams {
 
         assign_genes(chr_beds_gtf)
 
-         add_gene_transcript_tags_to_bam(
+         add_gene_tags_to_bam(
              assign_barcodes.out.chrom_bam_bc_bai
               // join on sample_id + chr
              .join(assign_genes.out.chrom_tsv_gene_assigns, by:[0, 1]))
 
-         cluster_umis(add_gene_transcript_tags_to_bam.out.chrom_bam_bc_bai)
+         cluster_umis(add_gene_tags_to_bam.out.chrom_bam_bc_bai)
 
          // group by sample_id
          combine_chrom_bams(
              cluster_umis.out.bam_bc_bai.groupTuple())
+
 
          count_cell_gene_umi_reads(combine_chrom_bams.out.bam_fully_tagged)
 
@@ -585,9 +688,36 @@ workflow process_bams {
 
          construct_expression_matrix(combine_chrom_bams.out.bam_fully_tagged)
 
-         process_expression_matrix(construct_expression_matrix.out.matrix_counts_tsv)
+         process_expression_matrix(
+            construct_expression_matrix.out.matrix_counts_tsv)
 
-         umap_reduce_expression_matrix(process_expression_matrix.out.matrix_processed_tsv)
+        preprocess_bams_for_stringtie(
+            combine_chrom_bams.out.bam_fully_tagged
+        )
+
+        stringtie(
+            gtf, 
+            preprocess_bams_for_stringtie.out.flipped_bc_bams
+            .flatMap{it ->
+                l =[]
+                // make [sample_id, bam] channel
+                for (i=1; i<it[1].size(); i++) {
+                    l.add( [it[0], it[1][i]] )
+                }
+                return l
+            })
+
+        build_transcript_matrix(
+            stringtie.out.tmap
+            // Collect all the tmap files by sample_id
+            // Note: KeepHeader: false does not work here
+            .collectFile()
+            .map {it ->
+                tuple(it.getBaseName(), it)}
+            .join(process_expression_matrix.out.matrix_processed_tsv))
+
+         umap_reduce_expression_matrix(
+            process_expression_matrix.out.matrix_processed_tsv)
 
          umap_plot_total_umis(
              umap_reduce_expression_matrix.out.matrix_umap_tsv
@@ -604,13 +734,19 @@ workflow process_bams {
          umap_plot_mito_genes(
             umap_reduce_expression_matrix.out.matrix_umap_tsv
             .join(process_expression_matrix.out.matrix_mito_tsv))
-        
+
      emit:
-         umap_plots = umap_plot_genes.out.groupTuple()
+         umap_plots = umap_plot_genes.out
+            .concat(
+                umap_plot_total_umis.out.matrix_umap_plot_total
+            )
+            .groupTuple()
             .flatMap({it -> 
                 l = []
                 for (i=0; i<it[1].size(); i++)
-                    l.add(tuple(it[0], it[1][i]))
+                    if(l){
+                        l.add(tuple(it[0], it[1][i]))
+                    }
                 return l
                 })
                 .concat(umap_plot_total_umis.out)
@@ -621,7 +757,6 @@ workflow process_bams {
              .join(construct_expression_matrix.out)
              .join(process_expression_matrix.out.matrix_processed_tsv)
              .join(process_expression_matrix.out.matrix_mito_tsv)
-             .join(extract_barcodes.out.bam_bc_uncorr)
              .join(generate_whitelist.out.whitelist)
              .join(generate_whitelist.out.kneeplot)
              .join(combine_chrom_bams.out.bam_fully_tagged)

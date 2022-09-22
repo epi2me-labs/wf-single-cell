@@ -124,8 +124,7 @@ process check_sampleids{
         print('Success. The sample_ids are the same')
         open('diff', 'w').close()
     else:
-        print("The smaples are different")
-        sys.stdout.write('ksfhdskhjfsdkjhksjdaskjd')
+        print("The samples are different")
     """
 }
 

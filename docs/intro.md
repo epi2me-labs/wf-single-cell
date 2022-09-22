@@ -9,7 +9,7 @@ Oxford Nanopore has developed a protocol for sequencing single-cell libraries fr
 
 The inputs to Sockeye are raw nanopore reads (FASTQ) generated from the sequencing
 instrument and reference files that can be downloaded from [10x](https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest).
-The pipeline outputs a gene x cell expression matrix, as well as a BAM file of
+The pipeline output a gene x cell, and transcript x cell expression matrices, as well as a BAM file of
 aligned reads tagged with cell barcode and UMI information.
 
 Package dependencies
@@ -33,6 +33,8 @@ The wf-single-cell pipeline makes use of the following dependencies.
 - tqdm
 - umap-learn
 - vsearch
+- stringtie
+- gffcomapare
 
 Additionally, while no explicit dependency exists for the
 [UMI-tools](https://github.com/CGATOxford/UMI-tools) package, the script
