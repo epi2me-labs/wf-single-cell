@@ -36,13 +36,11 @@ process align_to_ref {
         tuple val(sample_id), path("*sorted.bam.bai"), emit: bam_sort_bai
     """
      minimap2 -ax splice -uf --MD -t $task.cpus \
-      --junc-bed ${ref_genes_bed} \
-      --secondary=no \
-      ${ref_genome_fasta} ${stranded_fq} > tmp.sam && \
-    samtools view -b --no-PG tmp.sam -t ref_chrom_sizes | \
+      --junc-bed ${ref_genes_bed} $params.resources_mm2_flags  \
+      ${ref_genome_fasta} ${stranded_fq} \
+        | samtools view -F 2304 -b --no-PG -t ref_chrom_sizes - | \
         samtools sort --no-PG -o ${sample_id}_sorted.bam - ;
     samtools index ${sample_id}_sorted.bam
-    #rm tmp.sam
     """
 }
 

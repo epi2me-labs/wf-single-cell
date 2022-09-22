@@ -124,10 +124,9 @@ def breadth_first_search(node, adj_list):
 
 def get_adj_list_directional(umis, counts, threshold=2):
     """
-    Neil: LEVENSTEIN distance is an instance of the edit distance.
+    Identify all umis within the LEVENSHTEIN distance threshold.
 
-    Identify all umis within the LEVENSHTEIN distance threshold
-    and where the counts of the first umi is > (2 * second umi counts)-1.
+    Also where the counts of the first umi is > (2 * second umi counts)-1.
 
     This function from UMI-tools has been modified to use Levenshtein distance
     instead of hamming distance.
@@ -445,7 +444,6 @@ def process_bam_records(input_bam, chrom, args):
 def main(args):
     """Run entry point."""
     init_logger(args)
-    n_aligns, chroms = get_bam_info(args.bam)
 
     # The chromosome name should be the prefix of BAM filename
     REGEX = r"([A-Za-z0-9.]+).bc_assign.gene.bam"

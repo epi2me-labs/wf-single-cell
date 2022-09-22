@@ -64,6 +64,8 @@ def load_bam_entries(n_aligns, args):
 
         # Annotated gene name = GN:Z
         gene = align.get_tag("GN")
+        # Annotated transcript name = GN:Z
+        # transcript = align.get_tag("TN")
         # Corrected cell barcode = CB:Z
         bc = align.get_tag("CB")
         # Corrected UMI = UB:Z

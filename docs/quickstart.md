@@ -89,7 +89,7 @@ example.
 **Workflow outputs**
 
 The pipeline output will be written to a directory defined by ``--out_dir``. 
-For each sample specifed in the `single_cell-sample_sheet`  an output folder is created containing the results:
+For each sample specifed in the `single_cell-sample_sheet`  an output folder is created containing the results.
 
 
 The most useful outputs of the pipeline are likely:
@@ -111,9 +111,19 @@ The most useful outputs of the pipeline are likely:
   - UR: uncorrected UMI sequence
   - UY: Phred quality scores of the uncorrected UMI sequence
 
-* ``gene_expression.processed.tsv``: TSV containing the gene (rows) x cell (columns) expression matrix, processed and normalized according to the folloing parameters:
+ * ``gene_expression.processed.tsv``:  TSV containing the gene (rows) x cell (columns) expression matrix, processed and normalized according to: 
 
   - ``matrix_min_genes``: cells with fewer than this number of expressed genes will be removed
   - ``matrix_min_cells``: genes present in fewer than this number of cells will be removed
   - ``matrix_max_mito``: cells with more than this percentage of counts belonging to mitochondrial genes will be removed
   - ``matrix_norm_count``: normalize all cells to this number of total counts per cell
+
+
+* ``processed_transcript_matrix.tsv``: TSV containing the transcript (rows) x cell (columns) expression matrix in transcript per million (TPM): 
+These expression values are determined by applying [stringtie](https://ccb.jhu.edu/software/stringtie/) and 
+[gffcompare](https://ccb.jhu.edu/software/stringtie/gffcompare.shtml) to reads with the same barcodes (each cell). 
+The assembled transcripts with the following gffcompare class codes
+are excluded: `i`, `p`, `s` or `u`.
+See the [gffcompare](https://ccb.jhu.edu/software/stringtie/gffcompare.shtml)
+and [this image](https://ccb.jhu.edu/software/stringtie/gffcompare_codes.png), and
+only cells and genes that pass the gene filtering described above are included.
