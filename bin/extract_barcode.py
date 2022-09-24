@@ -459,6 +459,9 @@ def align_adapter(tup):
 
         # Require minimum read1 edit distance
         if adapter1_ed <= args.max_adapter1_ed:
+            # Require informative characters in identified barcode
+            if barcode.__eq__("-" * args.barcode_length):
+                continue
             qscores, min_qv = find_feature_qscores(
                 barcode, p_alignment, prefix_seq, prefix_qv)
 
