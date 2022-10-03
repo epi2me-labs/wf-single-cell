@@ -31,7 +31,12 @@ process get_kit_info {
 
         # Get the appropriate cell barcode longlist based on the kit_name specified for this sample_id.
         if kit_name == "3prime":
-            long_list = "3M-february-2018.txt.gz"
+            if kit_version == "v2":
+                long_list = "737K-august-2016.txt.gz"
+            elif kit_version == "v3":
+                long_list = "3M-february-2018.txt.gz"
+            else:
+                raise Exception("Encountered an unexpected kit version for 3prime kit (v2 or v3)")
         elif kit_name == "5prime":
             long_list = "737K-august-2016.txt.gz"
         elif kit_name == "multiome":
