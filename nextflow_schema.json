@@ -34,18 +34,18 @@
                 },
                 "single_cell_sample_sheet": {
                     "type": "string",
-                    "description": "The single-cell-sample sheet asoociates the samples with 10x kits that were used to process them. This is sperate to the MinKNOW sample sheet. the sample_id should correspond to sample_name which is defined either in the `sample_sheet`, given by the `sample`parameter (for single sample runs) or if no `sample_sheet` or `sample` is given, is derived from the folder name containing the fastq files.",
+                    "description": "The single-cell-sample sheet associates the samples with 10x kits that were used to process them. This is separate to the MinKNOW sample sheet. The sample_id should correspond to sample_name which is defined either in the `sample_sheet`, given by the `sample` parameter (for single sample runs) or if no `sample_sheet` or `sample` is given, is derived from the folder name containing the fastq files.",
                     "format": "file-path"
                 },
                 "kit_config": {
                     "type": "string",
                     "format": "path",
-                    "description": "10x kit config"
+                    "description": "Path to file defining the configurations associated with the various supported 10x kits."
                 },
                 "ref_genome_dir": {
                     "type": "string",
                     "format": "directory-path",
-                    "description": "The path to the reference directory as downloaded from 10x"
+                    "description": "The path to the reference directory as downloaded from 10x (e.g. /path/to/refdata-gex-GRCh38-2020-A)"
                 },
                 "sanitize_fastq": {
                     "type": "boolean",
@@ -72,87 +72,77 @@
                 },
                 "read_structure_batch_size": {
                     "type": "integer",
-                    "description": "?",
+                    "description": "Batch size when processing reads using adapter_scan_vsearch.py (changing not recommended).",
                     "default": 40000
-                },
-                "read_structure_flags": {
-                    "type": "string",
-                    "description": "?",
-                    "default": ""
                 },
                 "barcode_adapter1_suff_length": {
                     "type": "integer",
-                    "description": "?",
+                    "description": "Suffix length of the read1 adapter to use in creating the probe sequence for identifying barcode/UMI bases.",
                     "default": 10
                 },
                 "barcode_min_quality": {
                     "type": "integer",
-                    "description": "x",
+                    "description": "Minimum allowed nucleotide-level quality score in the extracted/uncorrected barcode sequence for the barcode to be considered 'high-quality' (i.e. used in generating the knee plot).",
                     "default": 15
                 },
                 "barcode_max_ed": {
                     "type": "integer",
-                    "description": "maximum edit distance for barcode identification?",
+                    "description": "Maximum allowable edit distance between uncorrected barcode and the best matching corrected barcode from the sample whitelist.",
                     "default": 2
                 },
                 "barcode_min_ed_diff": {
                     "type": "integer",
-                    "description": "minimum edit distance for barcode identification?",
+                    "description": "Minimum allowable edit distance difference between the first- and second-best matching corrected barcodes from the sample whitelist.",
                     "default": 2
                 },
                 "gene_assigns_minqv": {
                     "type": "integer",
-                    "description": "?",
+                    "description": "Minimum alignment qscore allowed for a read to be assigned to a gene or genomic region.",
                     "default": 60
                 },
                 "umi_genomic_interval": {
                     "type": "integer",
-                    "description": "?",
+                    "description": "Size of genomic window (bp) to assign to a read if alignment falls outside of an annotated gene.",
                     "default": 1000
                 },
                 "umi_cell_gene_max_reads": {
                     "type": "integer",
-                    "description": "?",
+                    "description": "Maximum number of reads to cluster for a particular barcode/gene combination.",
                     "default": 20000
                 },
                 "umi_cluster_max_threads": {
                     "type": "integer",
-                    "description": "Maximum number of threads to use in UMI clustering step",
+                    "description": "Maximum number of threads to use per-chromosome in UMI clustering step.",
                     "default": 4
                 },
                 "matrix_min_genes": {
                     "type": "integer",
-                    "description": "?",
+                    "description": "Filter cells from the gene expression matrix if they contain fewer than <matrix_min_genes> genes.",
                     "default": 25
                 },
                 "matrix_min_cells": {
                     "type": "integer",
-                    "description": "?",
+                    "description": "Filter genes from the gene expression matrix that are observed in fewer than <matrix_min_cells> cells.",
                     "default": 3
                 },
                 "matrix_max_mito": {
                     "type": "integer",
-                    "description": "?",
+                    "description": "Filter cells from the gene expression matrix if more than <matrix_max_mito> percent of UMI counts come from mitochondrial genes.",
                     "default": 20
                 },
                 "matrix_norm_count": {
                     "type": "integer",
-                    "description": "?",
+                    "description": "Normalize expression matrix to <matrix_norm_count> counts per cell.",
                     "default": 10000
                 },
                 "umap_plot_genes": {
                     "type": "string",
                     "format": "path",
-                    "description": "List of gene symbols to perform UMI clustering on."
-                },
-                "resources_mm2_mem_gb": {
-                    "type": "integer",
-                    "description": "Maximum allowed memory in GB for the minimp2 stage.",
-                    "default": 50
+                    "description": "File containing a list of gene symbols (one symbol per line) to annotate with expression values in the UMAP projections."
                 },
                 "resources_mm2_max_threads": {
                     "type": "integer",
-                    "description": "Maximum allowed threads for the minimp2 stage.",
+                    "description": "Maximum allowed threads for the minimap2 stage.",
                     "default": 4
                 },
                 "resources_mm2_flags": {
