@@ -27,14 +27,20 @@ to see the options for the workflow.
 The main options are:
 * `fastq`: A fastq file or directory containing fastq input files or directories of input files.
 * `ref_genome_dir` The path to the 10x reference genome directory (see `Downloading reference data` below)
-* `single_cell_sample_sheet`
+* 10x sample data, which can be supplied per sample with either of:
+  *  `single_cell_sample_sheet`
   (__not to be confused with the optional MinKNOW `sample_sheet`__)
+  * The following parameters which are applied to all samples:
+    * kit_name [3prime] 
+    * kit_version [v3]
+    * expected_cells [500]
+
 
 
 The single_cell_sample_sheet contains details about the input sample_ids, the 10X kits used (e.g. `3prime` or `5prime`), the kit versions used (`v2` or `v3` for the 3' kit, `v1` for the 5' kit), a rough estimate of the number of cells in the library. The cell count estimate specified with `exp_cells` and can be a very rough estimate (500 is a robust default value if the number is not known).
 
 
-The sample_id field should correspond to sample_id which is defined either in the `sample_sheet`,  given by the `sample` parameter (for single sample runs). If no `sample_sheet` or `sample` is given, sample_id is derived from each folder containing the fastq files or if a single file is given, the sample_id is the basename of the file (data.fastq.gz -> data).
+The sample_id field should correspond to sample_id which is defined either in the `sample_sheet`,  given by the `sample` parameter (for single sample runs). If no `sample_sheet` or `sample` is given, sample_id is derived from each folder containing the fastq files or if a single file is given, the sample_id is the basename of the file (data.fastq.gz -> data.fastq).
 
 An example sheet with one sample is:
 ```

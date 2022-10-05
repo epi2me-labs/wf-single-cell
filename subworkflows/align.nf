@@ -32,8 +32,10 @@ process align_to_ref {
         path ref_genome_fasta
         path ref_chrom_sizes
     output:
-        tuple val(sample_id), path("*sorted.bam"), emit: bam_sort
-        tuple val(sample_id), path("*sorted.bam.bai"), emit: bam_sort_bai
+        tuple val(sample_id), 
+            path("*sorted.bam"), 
+            path("*sorted.bam.bai"), 
+            emit: bam_sort
     """
      minimap2 -ax splice -uf --MD -t $task.cpus \
       --junc-bed ${ref_genes_bed} $params.resources_mm2_flags  \
@@ -64,6 +66,4 @@ workflow align {
    
     emit:
         bam_sort = align_to_ref.out.bam_sort
-        bam_sort_bai = align_to_ref.out.bam_sort_bai
-
 }

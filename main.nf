@@ -24,17 +24,19 @@ process summariseCatChunkReads {
     // Split into p parts where p is num threads
 
     label "singlecell"
-    cpus 1
+    cpus 2
     input:
         tuple path(directory), val(meta)
-        val check  // This will not exist if the sample_id check fails and will halt the pipleine.
     output:
-        tuple val("${meta.sample_id}"), path("${meta.sample_id}.stats"), emit: stats
-        tuple val("${meta.sample_id}"), path("chunks/*"), emit: fastq_chunks
-    shell:
+        tuple val("${meta.sample_id}"), 
+              path("${meta.sample_id}.stats"), 
+              emit: stats
+        tuple val("${meta.sample_id}"), 
+              path("chunks/*"),
+              emit: fastq_chunks
     """
     fastcat -s ${meta.sample_id} -r ${meta.sample_id}.stats -x ${directory} | \
-        seqkit split2 -p ${params.max_threads} -O chunks -o ${meta.sample_id} -e .fastq
+        seqkit split2 -s 100000 -O chunks -o ${meta.sample_id} -e .gz
     """
 }
 
@@ -103,79 +105,43 @@ process pack_images {
     """
 }
 
-process check_sampleids{
-    // Check that sample_ids gicven in the single_cell_sample_sheet are 
-    // identical to the sample_ids of the fastq inputs
-    label "singlecell"
-    input:
-        path fastqingress_ids
-        path sc_sample_sheet_ids
-    output:
-        // env check_sampleids_PASSED, emit: passed
-        path 'diff', optional: true, emit: diff
-    """
-    #!/usr/bin/env python
-    import pandas as pd
-    import sys
-    df_s = pd.read_csv("$fastqingress_ids", index_col=None)
-    df_f = pd.read_csv("$sc_sample_sheet_ids", index_col=None)
-
-    if set(df_s.iloc[:, 0].values) == set(df_f.iloc[:, 0].values):
-        print('Success. The sample_ids are the same')
-        open('diff', 'w').close()
-    else:
-        print("The samples are different")
-    """
-}
-
 
 // workflow module
 workflow pipeline {
     take:
         reads
-        sc_sample_sheet
         ref_genome_dir
         umap_genes
-        sample_kits
-        sample_ids_check
-    
+        meta
     main:
         ref_genome_fasta = file("${ref_genome_dir}/fasta/genome.fa", checkIfExists: true)
         ref_genes_gtf = file("${ref_genome_dir}/genes/genes.gtf", checkIfExists: true)
         ref_genome_idx = file("${ref_genome_fasta}.fai", checkIfExists: true)
         
-        if (params.kit_config){
-            kit_configs = file(params.kit_config, checkIfExists: true)
-        }else{
-            kit_configs = file("${projectDir}/kit_configs.csv", checkIfExists: true)
-        }
-        
         bc_longlist_dir = file("${projectDir}/data", checkIfExists: true)
-
-        summariseCatChunkReads(reads, sample_ids_check)
+        
+        summariseCatChunkReads(reads)
 
         stranding(
-            summariseCatChunkReads.out.fastq_chunks,
-            sample_kits)
+            summariseCatChunkReads.out.fastq_chunks, meta)
 
         align(
             stranding.out.stranded_fq,
             ref_genome_fasta,
             ref_genes_gtf,
-            ref_genome_idx
-        )
+            ref_genome_idx)
 
+        // Add the kit and sample meta to the bams
+        bam_meta = align.out.bam_sort
+            .cross(meta)
+            .map {it -> tuple(it[0][0], it[0][1], it[0][2], it[1][1])}
+        
         process_bams(
-            align.out.bam_sort,
-            align.out.bam_sort_bai,
-            sc_sample_sheet,
-            kit_configs,
+            bam_meta,
             ref_genes_gtf,
             umap_genes,
             bc_longlist_dir,
-            sample_kits,
-            ref_genome_fasta
-        )
+            ref_genome_fasta)
     emit:
         results = process_bams.out.results
         umap_plots = process_bams.out.umap_plots
@@ -195,9 +161,15 @@ workflow {
         }
     }
 
-    sc_sample_sheet = file(params.single_cell_sample_sheet, checkIfExists: true)
+    
     ref_genome_dir = file(params.ref_genome_dir, checkIfExists: true)
     umap_genes = file(params.umap_plot_genes, checkIfExists: true)
+
+    if (params.kit_config){
+        kit_configs_file = file(params.kit_config, checkIfExists: true)
+    }else{
+        kit_configs_file = file("${projectDir}/kit_configs.csv", checkIfExists: true)
+    }
 
     fastq = file(params.fastq, type: "file")
 
@@ -208,31 +180,73 @@ workflow {
             "sanitize": params.sanitize_fastq,
             "output":params.out_dir])
     
-    sample_kits = Channel.fromPath(sc_sample_sheet)
-                    .splitCsv(header:true)
-                    .map { row -> tuple(
-                              row.sample_id, 
-                              row.kit_name, 
-                              row.kit_version,
-                              row.exp_cells)}
-
+    reads.map {it -> it[1]['sample_id']}  // delete
     fastqingress_ids = reads.map{it -> it[1]['sample_id']}
-    .collectFile(name: 'fastingress_read_ids.csv', newLine: true)
-        
-    sample_kit_ids = sample_kits.map{it -> it[0]}
-        .collectFile(name: 'sc_sample_sheet_ids.csv', newLine: true)    
 
-    check_sampleids(fastqingress_ids, sample_kit_ids)
+    if (!params.single_cell_sample_sheet) {
+        //build_a single_cell_sample_sheet channel applying the same kit values to each sample
+        kit_string = Channel.value("${params.kit_name},${params.kit_version},${params.expected_cells}")
+        .splitCsv() 
+        sample_kits = fastqingress_ids
+            .combine(kit_string)
+            .map{ it -> 
+                [it[1], it[2], 
+                ["sample_id": it[0], 
+                'kit_name': it[1], 
+                'kit_version:': it[2], 
+                'exp_cells': it[3]]] }
 
-    check_sampleids.out.ifEmpty{
-        exit 1,
-        """
-        The sample_ids in the single_cell_sample_sheet do not match those
-        of the fastq inputs. Please see the README for instructions.""".stripIndent()}
+    } else {
+        // Read single_cell_sample_sheet
+        sc_sample_sheet = file(params.single_cell_sample_sheet, checkIfExists: true)
+        sample_kits = Channel.fromPath(sc_sample_sheet)
+            .splitCsv(header:true)
+            .map {it -> [it['kit_name'], it['kit_version'], it]}
+    }
 
-    // first() converts the queue channel to a value channel.
-    pipeline(reads, sc_sample_sheet, ref_genome_dir, umap_genes, sample_kits,
-        check_sampleids.out.first())
+    kit_configs = Channel.fromPath(kit_configs_file)
+        .splitCsv(header:true)
+        .map {it -> [it['kit_name'], it['kit_version'], it]}
+    
+    // Do a check for mismatching sample_ids in the data and single cell sample sheet
+    sample_kits.map {it -> it[2]['sample_id']}
+    .join(fastqingress_ids, failOnMismatch:true)
+    
+    // Merge the kit info and user-supplied data meta on kit name and version
+    sample_info = kit_configs.join(sample_kits, by: [0, 1])
+        .map {it ->
+            meta = it[2] + it[3] // Join the 2 meta maps  
+            kit_name = meta['kit_name']
+            kit_version = meta['kit_version']
+            // and Get the appropriate cell barcode longlist based on the kit_name specified for this sample_id.
+            switch(kit_name){
+                case '3prime':
+                    switch(kit_version){
+                        case 'v2':
+                            long_list = "737K-august-2016.txt.gz"
+                            break
+                        case 'v3':
+                            long_list = "3M-february-2018.txt.gz"
+                            break
+                        default:
+                            throw new Exception(
+                                "Encountered an unexpected kit version for 3prime kit (v2 or v3): ${kit_version}")
+                    }
+                    break;
+                case '5prime':
+                    long_list = "737K-august-2016.txt.gz"
+                    break
+                case 'multiome':
+                    long_list = "737K-arc-v1.txt.gz"
+                    break
+                default:
+                    throw new Exception("Encountered an unexpected kit_name in samples.csv")
+            }
+            meta['bc_long_list'] = long_list
+
+            [it[3]['sample_id'], meta]}
+
+    pipeline(reads, ref_genome_dir, umap_genes, sample_info)
 
     pack_images(pipeline.out.umap_plots)
     
