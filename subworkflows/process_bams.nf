@@ -234,7 +234,7 @@ process cluster_umis {
 process combine_chrom_bams {
     // Merge all chromosome bams by sample_id
     label "singlecell"
-    cpus params.max_threads
+    cpus Math.min(8, params.max_threads)
     input:
         tuple val(sample_id), 
               path(bams),
