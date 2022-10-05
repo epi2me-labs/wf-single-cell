@@ -1,59 +1,5 @@
 import java.util.ArrayList;
 
-process get_kit_info {
-    label "singlecell"
-    cpus 1
-    input:
-        path kit_config
-        path sc_sample_sheet
-              
-    output:
-        path 'sample_kit_info.csv', emit: kit_info
-    
-    script:
-    """
-    #!/usr/bin/env python
-    import pandas as pd
-
-    sample_df = pd.read_csv("${sc_sample_sheet}", sep=",", comment="#").set_index("sample_id", drop=True)
-
-    kit_df = pd.read_csv("$kit_config", sep=",", comment="#")
-
-
-    records = []
-    for sample_id, row in sample_df.iterrows():
-        kit_name = sample_df.loc[sample_id, "kit_name"]
-        kit_version = sample_df.loc[sample_id, "kit_version"]
-
-        # Get barcode length based on the kit_name and kit_version specified for this sample_id.
-        rows = (kit_df["kit_name"] == kit_name) & (kit_df["kit_version"] == kit_version)
-        barcode_length = kit_df.loc[rows, "barcode_length"].values[0]
-
-        # Get the appropriate cell barcode longlist based on the kit_name specified for this sample_id.
-        if kit_name == "3prime":
-            if kit_version == "v2":
-                long_list = "737K-august-2016.txt.gz"
-            elif kit_version == "v3":
-                long_list = "3M-february-2018.txt.gz"
-            else:
-                raise Exception("Encountered an unexpected kit version for 3prime kit (v2 or v3)")
-        elif kit_name == "5prime":
-            long_list = "737K-august-2016.txt.gz"
-        elif kit_name == "multiome":
-            long_list = "737K-arc-v1.txt.gz"
-        else:
-            raise Exception("Encountered an unexpected kit_name in samples.csv")
-
-        # Get UMI length based on the kit_name and kit_version specified for this sample_id.
-        umi_length = kit_df.loc[rows, "umi_length"].values[0]
-        records.append([sample_id, kit_name, kit_version, barcode_length, umi_length, long_list])
-    df_out = pd.DataFrame.from_records(records)
-    df_out.columns = ["sample_id", "kit_name", "kit_version", "barcode_length", "umi_length", "long_list"]
-    df_out.to_csv('sample_kit_info.csv', index=False)
-    """
-}
-
-
 process extract_barcodes{
     /*
     Build minimap index from reference genome
@@ -62,13 +8,9 @@ process extract_barcodes{
     cpus params.max_threads
     input:
         tuple val(sample_id), 
-              val(kit_name),
-              val(kit_version),
-              val(barcode_length),
-              val(umi_length),
-              val(bc_long_list),
               path(bam_sort),
-              path(bam_sort_idx)
+              path(bam_sort_idx),
+              val(meta)
         path bc_longlist_dir
 
     output:
@@ -78,23 +20,21 @@ process extract_barcodes{
               emit: bam_bc_uncorr
         tuple val(sample_id), 
               path("*.tsv"), 
+              val(meta),
               emit: barcode_counts
     """
     extract_barcode.py \
-    $bam_sort ${bc_longlist_dir}/${bc_long_list}\
+    $bam_sort ${bc_longlist_dir}/${meta['bc_long_list']}\
     -t $task.cpus \
-    --kit $kit_name \
+    --kit ${meta['kit_name']} \
     --adapter1_suff_length $params.barcode_adapter1_suff_length \
     --min_barcode_qv $params.barcode_min_quality \
-    --barcode_length $barcode_length \
-    --umi_length $umi_length \
-    --output_bam "tmp.bam" \
+    --barcode_length ${meta['barcode_length']} \
+    --umi_length ${meta['umi_length']} \
+    --output_bam "${sample_id}.bc_extract.sorted.bam" \
     --output_barcodes "${sample_id}.uncorrected_bc_counts.tsv";
 
-    # Cleanup headers
-    samtools reheader --no-PG -c 'grep -v ^@PG' tmp.bam > "${sample_id}.bc_extract.sorted.bam"
     samtools index "${sample_id}.bc_extract.sorted.bam"
-    rm tmp.bam
     """
 }
 
@@ -104,14 +44,17 @@ process generate_whitelist{
     input:
         tuple val(sample_id), 
               path(counts),
-              val(expected_cells)
+              val(meta)
     output:
-        tuple val(sample_id), path("*whitelist.tsv"), emit: whitelist
+        tuple val(sample_id), 
+              path("*whitelist.tsv"), 
+              val(meta),
+              emit: whitelist
         tuple val(sample_id), path("*kneeplot.png"), emit: kneeplot
     """
     knee_plot.py \
         $counts \
-        --exp_cells $expected_cells \
+        --exp_cells ${meta['exp_cells']} \
         --output_whitelist "${sample_id}.whitelist.tsv" \
         --output_plot "${sample_id}.kneeplot.png"
     """
@@ -119,7 +62,7 @@ process generate_whitelist{
 
 process split_bam_by_chroms{
     label "singlecell"
-    cpus params.max_threads
+    cpus Math.min(8, params.max_threads)
     input:
         tuple val(sample_id), path(bam), path(bai)
     output:
@@ -133,7 +76,7 @@ process split_bam_by_chroms{
 
 process split_fasta_by_chroms {
     label "singlecell"
-    cpus params.max_threads
+    cpus 1
     input:
         path(ref_genome)
     output:
@@ -155,13 +98,8 @@ process assign_barcodes{
     cpus 1
     input:
          tuple val(sample_id), 
-               val(kit_name),
-               val(kit_version),
-               val(barcode_length),
-               val(umi_length),
-               val(bc_long_list),
                path(whitelist),
-               val(_), // Redundant sample_id: remove
+               val(meta),
                val(chr), 
                path(bam),
                path(bai)
@@ -176,21 +114,18 @@ process assign_barcodes{
               path("*.bc_assign_counts.tsv"), 
               emit: chrom_assigned_barcode_counts
     """
-    assign_barcodes.py -t 1 \
-        --output_bam tmp.bam \
+    assign_barcodes.py -t ${task.cpus} \
+        --output_bam "${sample_id}_${chr}.bc_assign.bam" \
         --output_counts ${sample_id}_${chr}.bc_assign_counts.tsv \
         --max_ed $params.barcode_max_ed \
         --min_ed_diff $params.barcode_min_ed_diff \
-        --kit $kit_name \
+        --kit ${meta['kit_name']} \
         --adapter1_suff_length $params.barcode_adapter1_suff_length \
-        --barcode_length $barcode_length \
-        --umi_length $umi_length \
+        --barcode_length ${meta['barcode_length']} \
+        --umi_length ${meta['umi_length']} \
         $bam $whitelist
     
-    samtools reheader --no-PG -c 'grep -v ^@PG' tmp.bam \
-        > "${sample_id}_${chr}.bc_assign.bam";
     samtools index "${sample_id}_${chr}.bc_assign.bam"
-    rm tmp.bam
 
 """
 }
@@ -263,11 +198,9 @@ process add_gene_tags_to_bam {
               emit: chrom_bam_bc_bai
     """
     add_gene_tags.py \
-        --output tmp.bam \
+        --output ${sample_id}_${chr}_bc_assign.gene.bam \
         $chrom_bam_bc $chrom_tsv_gene_assigns
     
-    samtools reheader --no-PG -c 'grep -v ^@PG' tmp.bam \
-        > ${sample_id}_${chr}_bc_assign.gene.bam;
     samtools index ${sample_id}_${chr}_bc_assign.gene.bam
     """
 }
@@ -291,12 +224,9 @@ process cluster_umis {
     --threads $task.cpus \
     --ref_interval $params.umi_genomic_interval \
     --cell_gene_max_reads $params.umi_cell_gene_max_reads \
-    --output tmp.bam 
+    --output ${sample_id}_${chr}.tagged.bam 
 
-    samtools reheader --no-PG -c 'grep -v ^@PG' tmp.bam \
-        >  ${sample_id}_${chr}.tagged.bam;
     samtools index ${sample_id}_${chr}.tagged.bam
-    rm tmp.bam
     """
 }
 
@@ -576,29 +506,15 @@ process umap_plot_mito_genes {
 workflow process_bams {
     take:
         bam
-        bam_idx
-        sc_sample_sheet
-        kit_config
         gtf
         umap_genes
         bc_longlist_dir
-        sample_kits
         ref_genome_fasta
    
     main:
 
-        get_kit_info(
-            kit_config,
-            sc_sample_sheet)
-
-        get_kit_info.out.kit_info
-            .splitCsv(header:false, skip:1)
-            .join(bam).join(bam_idx)
-
         extract_barcodes(
-            get_kit_info.out.kit_info
-            .splitCsv(header:false, skip:1)
-            .join(bam).join(bam_idx),
+            bam,
             bc_longlist_dir)
         
         split_bam_by_chroms(
@@ -610,10 +526,7 @@ workflow process_bams {
         )
 
         generate_whitelist(
-            extract_barcodes.out.barcode_counts
-            .join(sample_kits)
-            .map{it -> tuple(it[0], it[1], it[4] )}
-        )
+            extract_barcodes.out.barcode_counts)
         
         // Extract chr from filename and add to tuple to give: 
         // [sample_id, chr, bam, bai]
@@ -635,14 +548,14 @@ workflow process_bams {
             }
             return sbi
             }).flatMap(it-> it)
-        
-        // merge kit info to bams
-        chr_bam_kit = get_kit_info.out.kit_info
-            .splitCsv(header:false, skip:1)
-            .join(generate_whitelist.out.whitelist)
-            .cross(bam_bai_chromes).map({it -> it.flatten()})
 
-        assign_barcodes(chr_bam_kit)
+        generate_whitelist.out.whitelist
+            .cross(bam_bai_chromes)
+            .map {it -> it.flatten()}
+
+        assign_barcodes(generate_whitelist.out.whitelist
+            .cross(bam_bai_chromes)
+            .map {it -> it.flatten()[0, 1, 2, 4, 5, 6]})
 
         bam_to_bed(assign_barcodes.out.chrom_bam_bc_bai)
 
@@ -685,7 +598,6 @@ workflow process_bams {
          // group by sample_id
          combine_chrom_bams(
              cluster_umis.out.bam_bc_bai.groupTuple())
-
 
          count_cell_gene_umi_reads(combine_chrom_bams.out.bam_fully_tagged)
 
@@ -748,23 +660,27 @@ workflow process_bams {
             .groupTuple()
             .flatMap({it -> 
                 l = []
-                for (i=0; i<it[1].size(); i++)
+                for (i=0; i<it[1].size(); i++){
                     if(l){
                         l.add(tuple(it[0], it[1][i]))
                     }
+                }
                 return l
                 })
                 .concat(umap_plot_total_umis.out)
                 .concat(umap_plot_mito_genes.out)
                 .groupTuple()
+
                 
         results = umi_gene_saturation.out
              .join(construct_expression_matrix.out)
              .join(process_expression_matrix.out.matrix_processed_tsv)
              .join(process_expression_matrix.out.matrix_mito_tsv)
-             .join(generate_whitelist.out.whitelist)
+             .join(generate_whitelist.out.whitelist
+                .map {it -> [it[0], it[1]] } )
              .join(generate_whitelist.out.kneeplot)
              .join(combine_chrom_bams.out.bam_fully_tagged)
-             .join(extract_barcodes.out.barcode_counts)
+             .join(extract_barcodes.out.barcode_counts
+                .map {it -> [it[0], it[1]] } )
              .join(umap_reduce_expression_matrix.out.matrix_umap_tsv)
 }

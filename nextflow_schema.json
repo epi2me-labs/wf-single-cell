@@ -51,11 +51,26 @@
                     "type": "boolean",
                     "description": "Use additional heuristics to identify barcodes from file paths.",
                     "help_text": "Enabling this option will group together files into samples by the presence of strings of the form `barcodeXXX` present in filenames, rather than simply files grouped into directories (as output by MinKNOW and the Guppy basecaller)."
+                },
+                "kit_name": {
+                    "type": "string",
+                    "description": "10x kit name",
+                    "default": "3prime"
+                },
+                "kit_version": {
+                    "type": "string",
+                    "description": "10x kit version",
+                    "default": "v3"
+                },
+                "expected_cells": {
+                    "type": "integer",
+                    "description": "Number of expected cells.",
+                    "help_text": "If unknown 500 is a good number",
+                    "default": 500
                 }
             },
             "required": [
                 "fastq",
-                "single_cell_sample_sheet",
                 "ref_genome_dir"
             ]
         },
@@ -149,6 +164,11 @@
                     "type": "string",
                     "description": "Optional flags for the minimap2 stage.",
                     "default": "-I 4G"
+                },
+                "mm2_batch_size": {
+                    "type": "integer",
+                    "description": "Fastq chunk size for minimap2 alignmnent",
+                    "default": 40000
                 }
             }
         },
@@ -217,7 +237,7 @@
         },
         "wfversion": {
             "type": "string",
-            "default": "v0.1.2",
+            "default": "v0.1.3",
             "hidden": true
         },
         "monochrome_logs": {
@@ -232,7 +252,7 @@
         }
     },
     "docs": {
-        "intro": "## Introduction\n\nThe following single-cell kits from 10x Genomics are currently supported:\n- Chromium Single Cell [3\u02b9 gene expression](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium3.html), versions 2 and 3\n- Chromium Single Cell [5\u02b9 gene expression](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium5.html), version 1\n- Chromium Single Cell [Multiome (ATAC + GEX)](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium_multiome.html), version 1\n\nOxford Nanopore has developed a protocol for sequencing single-cell libraries from 10x, which can be found on the Nanopore Community [website](https://community.nanoporetech.com/docs/prepare/library_prep_protocols/single-cell-transcriptomics-10x/v/sst_v9148_v111_revb_12jan2022).\n\nThe inputs to Sockeye are raw nanopore reads (FASTQ) generated from the sequencing\ninstrument and reference files that can be downloaded from [10x](https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest).\nThe pipeline output a gene x cell, and transcript x cell expression matrices, as well as a BAM file of\naligned reads tagged with cell barcode and UMI information.\n\nPackage dependencies\n--------------------\n\nThe wf-single-cell pipeline makes use of the following dependencies.\n\n- bedtools\n- bioframe\n- biopython\n- editdistance\n- matplotlib\n- minimap2\n- numpy\n- pandas\n- parasail-python\n- pysam\n- samtools\n- scikit-learn\n- seqkit\n- tqdm\n- umap-learn\n- vsearch\n- stringtie\n- gffcomapare\n\nAdditionally, while no explicit dependency exists for the\n[UMI-tools](https://github.com/CGATOxford/UMI-tools) package, the script\n``bin/cluster_umis.py`` makes significant use of several functions from\nthe package. More detailed acknowledgements can be found in the source code.\n",
+        "intro": "## Introduction\n\nThe following single-cell kits from 10x Genomics are currently supported:\n- Chromium Single Cell [3\u02b9 gene expression](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium3.html), versions 2 and 3\n- Chromium Single Cell [5\u02b9 gene expression](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium5.html), version 1\n- Chromium Single Cell [Multiome (ATAC + GEX)](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium_multiome.html), version 1\n\nOxford Nanopore has developed a protocol for sequencing single-cell libraries from 10x, which can be found on the Nanopore Community [website](https://community.nanoporetech.com/docs/prepare/library_prep_protocols/single-cell-transcriptomics-10x/v/sst_v9148_v111_revb_12jan2022).\n\nThe inputs to Sockeye are raw nanopore reads (FASTQ) generated from the sequencing\ninstrument and reference files that can be downloaded from [10x](https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest).\nThe pipeline output a gene x cell, and transcript x cell expression matrices, as well as a BAM file of\naligned reads tagged with cell barcode and UMI information.\n\nThe BLAZE preprint provided useful benchmarking of the original sockeye implementation. This assisted in the selection of appropriate parameters for cell cut-off thresholds and for defining the limits of the cell x gene matrix.",
         "links": "## Useful links\n\n* [nextflow](https://www.nextflow.io/)\n* [docker](https://www.docker.com/products/docker-desktop)\n* [conda](https://docs.conda.io/en/latest/miniconda.html)\n"
     }
 }

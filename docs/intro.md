@@ -12,31 +12,4 @@ instrument and reference files that can be downloaded from [10x](https://support
 The pipeline output a gene x cell, and transcript x cell expression matrices, as well as a BAM file of
 aligned reads tagged with cell barcode and UMI information.
 
-Package dependencies
---------------------
-
-The wf-single-cell pipeline makes use of the following dependencies.
-
-- bedtools
-- bioframe
-- biopython
-- editdistance
-- matplotlib
-- minimap2
-- numpy
-- pandas
-- parasail-python
-- pysam
-- samtools
-- scikit-learn
-- seqkit
-- tqdm
-- umap-learn
-- vsearch
-- stringtie
-- gffcomapare
-
-Additionally, while no explicit dependency exists for the
-[UMI-tools](https://github.com/CGATOxford/UMI-tools) package, the script
-``bin/cluster_umis.py`` makes significant use of several functions from
-the package. More detailed acknowledgements can be found in the source code.
+The BLAZE preprint provided useful benchmarking of the original sockeye implementation. This assisted in the selection of appropriate parameters for cell cut-off thresholds and for defining the limits of the cell x gene matrix.

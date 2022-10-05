@@ -2,13 +2,13 @@ process call_adapter_scan {
     label "singlecell"
     cpus 1
     input:
-        tuple val(sample_id),
-            val(kit_name),
-            val(kit_version), 
-            path(fastq_chunk)
+        tuple val(sample_id), 
+              val(meta),
+              path(fastq_chunk)
     output:
         tuple val(sample_id), path("*.fastq"), emit: stranded_fq_chunked
         tuple val(sample_id), path("*.tsv"), emit: read_config_chunked
+    
     """
     # Get batch name from file to prevent name collisions
     batch=\$(echo ${fastq_chunk}|awk -F'.' '{print \$(NF-2)}')
@@ -17,7 +17,7 @@ process call_adapter_scan {
     adapter_scan_vsearch.py \
     $fastq_chunk \
     -t 1 \
-    --kit $kit_name \
+    --kit ${meta['kit_name']} \
     --output_fastq ${sample_id}_\${batch}_adapt_scan.fastq \
     --output_tsv  ${sample_id}_\${batch}_adapt_scan.tsv \
     --batch_size $params.read_structure_batch_size \
@@ -102,10 +102,11 @@ process summarize_adapter_table {
 workflow stranding {
     take:
         read_chunks
-        sample_kits
+        meta
     
     main:      
-        chunks_and_kits = sample_kits.cross(read_chunks.flatMap({it ->
+        chunks = meta
+            .cross(read_chunks.flatMap({it ->
             // Rejig the outputs to be [sample_id, fatq_chunk]
             // Then merge in kit info
             if (it[1].getClass() != java.util.ArrayList){
@@ -117,9 +118,11 @@ workflow stranding {
                 l.add(tuple(it[0], x))
             }
             return l
-        })).map{it-> tuple(it[0][0], it[0][1], it[0][2], it[1][1])  }
-        
-        call_adapter_scan(chunks_and_kits)
+        }))
+        // sample_id, meta, fastq_chunk
+        .map {it -> tuple(it[0][0], it[0][1], it[1][1])}
+
+        call_adapter_scan(chunks)
 
         gather_fastq(call_adapter_scan.out.stranded_fq_chunked.groupTuple())
 
