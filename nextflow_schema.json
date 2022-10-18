@@ -185,7 +185,7 @@
                 },
                 "disable_ping": {
                     "type": "boolean",
-                    "default": "false",
+                    "default": false,
                     "description": "Enable to prevent sending a workflow ping."
                 }
             }
