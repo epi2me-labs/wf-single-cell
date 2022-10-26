@@ -5,7 +5,7 @@ import gzip
 import logging
 import multiprocessing
 import os
-import pathlib
+from pathlib import Path
 import shutil
 import subprocess
 import sys
@@ -27,14 +27,14 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     # Positional mandatory arguments
-    parser.add_argument("fastq", help="FASTQ of ONT reads", type=str)
+    parser.add_argument("fastq", help="FASTQ of ONT reads", type=Path)
 
     # Optional arguments
     parser.add_argument(
         "--output_fastq",
         help="Output file name for (gzipped) stranded FASTQ entries \
                         [stranded.fastq.gz]",
-        type=str,
+        type=Path,
         default="stranded.fastq.gz",
     )
 
@@ -42,7 +42,7 @@ def parse_args():
         "--output_tsv",
         help="Output file name for adapter configurations \
                         [adapters.tsv]",
-        type=str,
+        type=Path,
         default="adapters.tsv",
     )
 
@@ -66,7 +66,6 @@ def parse_args():
         determines which adapter sequences to search for in the reads \
         [3prime]",
         default="3prime",
-        type=str,
     )
 
     parser.add_argument(
@@ -91,7 +90,7 @@ def parse_args():
         "--adapters_fasta",
         help="Filename for adapter query sequences \
                         [adapter_seqs.fasta]",
-        type=str,
+        type=Path,
         default="adapter_seqs.fasta",
     )
 
@@ -125,7 +124,7 @@ def parse_args():
         args.adapter2_seq = "GTACTCTGCGTTGATACCACTGCTT"
 
     # Create temp dir and add that to the args object
-    p = pathlib.Path(args.output_tsv)
+    p = Path(args.output_tsv)
     tempdir = tempfile.TemporaryDirectory(prefix="tmp.", dir=p.parents[0])
     args.tempdir = tempdir.name
 
@@ -487,10 +486,10 @@ def write_stranded_fastq(tmp_fastq, read_info, args):
 
 def open_fastq(fastq):
     """Open fastq."""
-    if args.fastq.split(".")[-1] == "gz":
+    if fastq.suffix == ".gz":
         f = gzip.open(fastq, "rt")
     else:
-        f = open(fastq)
+        f = fastq.open()
     return f
 
 

@@ -36,7 +36,7 @@ process summariseCatChunkReads {
               emit: fastq_chunks
     """
     fastcat -s ${meta.sample_id} -r ${meta.sample_id}.stats -x ${directory} | \
-        seqkit split2 -s 100000 -O chunks -o ${meta.sample_id} -e .gz
+        seqkit split2 -s 1000000 -O chunks -o ${meta.sample_id} -e .gz
     """
 }
 
@@ -61,8 +61,13 @@ process makeReport {
 process output {
     label "singlecell"
     // publish inputs to output directory
-    publishDir "${params.out_dir}", mode: 'copy', pattern: "*", 
+    publishDir "${params.out_dir}", mode: 'copy', pattern: "*[.bam|.bai]",
+        saveAs: { filename -> "${sample_id}/bams/$filename" }
+    publishDir "${params.out_dir}", mode: 'copy', pattern: "*umap*",
+        saveAs: { filename -> "${sample_id}/umap/$filename" }
+    publishDir "${params.out_dir}", mode: 'copy', pattern: "*[!.png|!.bam|!.bai]",
         saveAs: { filename -> "${sample_id}/$filename" }
+
     label "isoforms"
     input:
         tuple val(sample_id),
@@ -89,23 +94,6 @@ process output_report {
 }
 
 
-process pack_images {
-    label "singlecell"
-    input:
-        tuple val(sample_id),
-              path(imgs)  
-        output:
-            tuple val(sample_id),
-                path('umap_plots')
-    """
-    mkdir umap_plots
-    for img in $imgs; do
-        cp \$img umap_plots
-    done;
-    """
-}
-
-
 // workflow module
 workflow pipeline {
     take:
@@ -115,8 +103,8 @@ workflow pipeline {
         meta
     main:
         ref_genome_fasta = file("${ref_genome_dir}/fasta/genome.fa", checkIfExists: true)
-        ref_genes_gtf = file("${ref_genome_dir}/genes/genes.gtf", checkIfExists: true)
         ref_genome_idx = file("${ref_genome_fasta}.fai", checkIfExists: true)
+        ref_genes_gtf = file("${ref_genome_dir}/genes/genes.gtf", checkIfExists: true)
         
         bc_longlist_dir = file("${projectDir}/data", checkIfExists: true)
         
@@ -128,25 +116,21 @@ workflow pipeline {
         align(
             stranding.out.stranded_fq,
             ref_genome_fasta,
-            ref_genes_gtf,
-            ref_genome_idx)
+            ref_genome_idx,
+            ref_genes_gtf)
 
-        // Add the kit and sample meta to the bams
-        bam_meta = align.out.bam_sort
-            .cross(meta)
-            .map {it -> tuple(it[0][0], it[0][1], it[0][2], it[1][1])}
-        
         process_bams(
-            bam_meta,
+            align.out.bam_sort,
+            align.out.chr_beds,
+            meta,
             ref_genes_gtf,
             umap_genes,
             bc_longlist_dir,
-            ref_genome_fasta)
+            ref_genome_fasta,
+            ref_genome_idx)
     emit:
         results = process_bams.out.results
-        umap_plots = process_bams.out.umap_plots
         config_stats = stranding.out.config_stats
-        
 }
 
 
@@ -157,7 +141,6 @@ workflow {
     if (params.disable_ping == false) {
         Pinguscript.ping_post(workflow, "start", "none", params.out_dir, params)
     }
-
     
     ref_genome_dir = file(params.ref_genome_dir, checkIfExists: true)
     umap_genes = file(params.umap_plot_genes, checkIfExists: true)
@@ -173,11 +156,8 @@ workflow {
     reads = fastq_ingress([
             "input":params.fastq,
             "sample":params.sample,
-            "sample_sheet":params.sample_sheet,
-            "sanitize": params.sanitize_fastq,
-            "output":params.out_dir])
-    
-    reads.map {it -> it[1]['sample_id']}  // delete
+            "sample_sheet":params.sample_sheet])
+
     fastqingress_ids = reads.map{it -> it[1]['sample_id']}
 
     if (!params.single_cell_sample_sheet) {
@@ -192,7 +172,6 @@ workflow {
                 'kit_name': it[1], 
                 'kit_version:': it[2], 
                 'exp_cells': it[3]]] }
-
     } else {
         // Read single_cell_sample_sheet
         sc_sample_sheet = file(params.single_cell_sample_sheet, checkIfExists: true)
@@ -204,12 +183,12 @@ workflow {
     kit_configs = Channel.fromPath(kit_configs_file)
         .splitCsv(header:true)
         .map {it -> [it['kit_name'], it['kit_version'], it]}
-    
+
     // Do a check for mismatching sample_ids in the data and single cell sample sheet
     sample_kits.map {it -> it[2]['sample_id']}
     .join(fastqingress_ids, failOnMismatch:true)
-    
-    // Merge the kit info and user-supplied data meta on kit name and version
+
+    // Merge the kit info and user-supplied meta data on kit name and version
     sample_info = kit_configs.join(sample_kits, by: [0, 1])
         .map {it ->
             meta = it[2] + it[3] // Join the 2 meta maps  
@@ -245,7 +224,7 @@ workflow {
 
     pipeline(reads, ref_genome_dir, umap_genes, sample_info)
 
-    pack_images(pipeline.out.umap_plots)
+
     
     output(pipeline.out.results.flatMap({it ->
         // Convert [sample_id, file, file, ..] 
@@ -255,8 +234,7 @@ workflow {
                 l.add(tuple(it[0], it[i]))
             }
             return l
-        }).concat(pack_images.out,
-            pipeline.out.config_stats)
+        }).concat(pipeline.out.config_stats)
     )
     // This is temporay until a detailed report is made
     makeReport()
@@ -268,7 +246,7 @@ if (params.disable_ping == false) {
         Pinguscript.ping_post(workflow, "end", "none", params.out_dir, params)
     }
 
-    workflow.onError {   
+    workflow.onError {
         Pinguscript.ping_post(workflow, "error", "$workflow.errorMessage", params.out_dir, params)
     }
 

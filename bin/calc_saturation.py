@@ -18,15 +18,13 @@ def parse_args():
     # Positional mandatory arguments
     parser.add_argument(
         "gene_cell_umi",
-        help="TSV file with read_id, gene, barcode, and UMI",
-        type=str,
+        help="TSV file with read_id, gene, barcode, and UMI"
     )
 
     # Optional arguments
     parser.add_argument(
         "--output",
         help="Output plot file with saturation curves [output.png]",
-        type=str,
         default="output.png",
     )
 

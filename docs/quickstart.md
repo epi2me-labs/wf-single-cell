@@ -108,7 +108,7 @@ The most useful outputs of the pipeline are likely:
   - ``n_plus``: number of reads with the read1-->TSO configuration
   - ``n_minus``: number of reads with the TSO'-->read1' configuration
 
-* ``tagged.sorted.bam``: BAM file of alignments to the reference where each alignment contains the following sequence tags
+* ``bams``: Folder of bam alignment files where each alignment contains the following sequence tags
 
   - CB: corrected cell barcode sequence
   - CR: uncorrected cell barcode sequence
@@ -117,12 +117,25 @@ The most useful outputs of the pipeline are likely:
   - UR: uncorrected UMI sequence
   - UY: Phred quality scores of the uncorrected UMI sequence
 
+  
+  The bam files are output per chromosome (default) unless `--merge_bam` is set.
+
  * ``gene_expression.processed.tsv``:  TSV containing the gene (rows) x cell (columns) expression matrix, processed and normalized according to: 
 
   - ``matrix_min_genes``: cells with fewer than this number of expressed genes will be removed
   - ``matrix_min_cells``: genes present in fewer than this number of cells will be removed
   - ``matrix_max_mito``: cells with more than this percentage of counts belonging to mitochondrial genes will be removed
   - ``matrix_norm_count``: normalize all cells to this number of total counts per cell
+
+* ``umap``: 
+  This folder contains umap projections and the data file used to generate them.
+  As UMAP is a stochastic algorithm, different runs with using the same parameters can lead
+  to different results. Therefore for each expression results matrix, 10 UMAP matrices and plots are gerenated each with a different initial random state. The following UMAP results are predrnt in this folder:
+  - \*genes\*.png: UMAP derived from the expression of all genes across the cells.
+  - \*gene.{gene_name}\*.png The same plot as above but coulored by gene expression for each gene in the file defined by `umap_plot_genes`.
+  - \*transcripts\*.png UMAP created from expression level of all transcripts.
+  - \*mitochondrial\*.png:  UMAP created from expression level of all mitochondrial genes.
+
 
 
 * ``processed_transcript_matrix.tsv``: TSV containing the transcript (rows) x cell (columns) expression matrix in transcript per million (TPM): 

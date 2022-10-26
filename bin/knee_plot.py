@@ -9,6 +9,7 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.matlib as npm
+import pandas as pd
 from scipy.signal import argrelextrema
 from scipy.stats import gaussian_kde
 
@@ -25,7 +26,6 @@ def parse_args():
         "barcodes",
         help="TSV file containing counts for uncorrected barcodes that are \
             present in the barcode superlist.",
-        type=str,
     )
 
     # Optional arguments
@@ -33,7 +33,6 @@ def parse_args():
         "--knee_method",
         help="Method (quantile/distance/density) to use for calculating \
             knee position [quantile]",
-        type=str,
         default="quantile",
     )
 
@@ -73,14 +72,12 @@ def parse_args():
     parser.add_argument(
         "--output_plot",
         help="Knee plot filename [kneeplot.png]",
-        type=str,
         default="kneeplot.png",
     )
 
     parser.add_argument(
         "--output_whitelist",
         help="Barcode whitelist filename [ont_barcodes.tsv]",
-        type=str,
         default="ont_barcodes.tsv",
     )
 
@@ -88,7 +85,6 @@ def parse_args():
         "--ilmn_barcodes",
         help="Illumina barcodes filename, to be overlayed onto \
                         the knee plot of ONT barcodes [None]",
-        type=str,
         default=None,
     )
 
@@ -282,12 +278,11 @@ def getKneeEstimateDensity(
 
 def get_barcode_counts(barcodes):
     """Get barcode counts."""
-    barcode_counts = {}
-    for line in open(barcodes, "r"):
-        line = line.strip()
-        seq = line.split("\t")[0]
-        n = int(line.split("\t")[1])
-        barcode_counts[seq] = n
+    dft = pd.read_csv(
+        barcodes, sep='\t', names=['bc', 'count']).reset_index(drop=True)
+    dft.set_index('bc', drop=True, inplace=True)
+    gb = dft.groupby('bc').sum()
+    barcode_counts = gb['count'].to_dict()
     return barcode_counts
 
 

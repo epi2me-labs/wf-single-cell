@@ -4,53 +4,36 @@ process call_adapter_scan {
     input:
         tuple val(sample_id), 
               val(meta),
-              path(fastq_chunk)
+              path("chunk.fq.gz")
     output:
         tuple val(sample_id), path("*.fastq"), emit: stranded_fq_chunked
         tuple val(sample_id), path("*.tsv"), emit: read_config_chunked
     
-    """
-    # Get batch name from file to prevent name collisions
-    batch=\$(echo ${fastq_chunk}|awk -F'.' '{print \$(NF-2)}')
-    echo \$batch
-    
+    """    
     adapter_scan_vsearch.py \
-    $fastq_chunk \
+    chunk.fq.gz \
     -t 1 \
     --kit ${meta['kit_name']} \
-    --output_fastq ${sample_id}_\${batch}_adapt_scan.fastq \
-    --output_tsv  ${sample_id}_\${batch}_adapt_scan.tsv \
+    --output_fastq "${sample_id}_adapt_scan.fastq" \
+    --output_tsv  "${sample_id}_adapt_scan.tsv" \
     --batch_size $params.read_structure_batch_size \
     """
 }
 
-// process combine_adapter_tables: Do this with workflow operators
-//combine_stranded_fastqs: Do this woth a workflow operator
 
 process combine_adapter_tables {
     label "singlecell"
     cpus 1
     input:
-        tuple val(sample_id), path(tsv_files)
+        tuple val(sample_id), path("adapters.tsv")
     output:
         tuple val(sample_id), path("*read_config.tsv"), emit: read_config
     """
     # Concatenate tsv file keeping header from first file.
-    awk 'FNR==1 && NR!=1{next;}{print}' *.tsv > ${sample_id}_read_config.tsv
+    awk 'FNR==1 && NR!=1{next;}{print}' adapters.tsv* > "${sample_id}_read_config.tsv"
     """
 }
 
-process gather_fastq{
-    label "singlecell"
-    cpus 1
-    input:
-        tuple val(sample_id), path(fastq_files)
-    output:
-        tuple val(sample_id), path('*merged.fastq'), emit: merged_fastq
-    """
-    cat *.fastq >> ${sample_id}_merged.fastq
-    """
-}
 
 process summarize_adapter_table {
     label "singlecell"
@@ -123,13 +106,10 @@ workflow stranding {
         .map {it -> tuple(it[0][0], it[0][1], it[1][1])}
 
         call_adapter_scan(chunks)
-
-        gather_fastq(call_adapter_scan.out.stranded_fq_chunked.groupTuple())
-
         combine_adapter_tables(call_adapter_scan.out.read_config_chunked.groupTuple())
         summarize_adapter_table(combine_adapter_tables.out.read_config)
             
     emit:
-        stranded_fq = gather_fastq.out.merged_fastq
+        stranded_fq = call_adapter_scan.out.stranded_fq_chunked
         config_stats = summarize_adapter_table.out.config_stats
 }

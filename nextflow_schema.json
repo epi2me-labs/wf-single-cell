@@ -47,10 +47,10 @@
                     "format": "directory-path",
                     "description": "The path to the reference directory as downloaded from 10x (e.g. /path/to/refdata-gex-GRCh38-2020-A)"
                 },
-                "sanitize_fastq": {
+                "merge_bam": {
                     "type": "boolean",
-                    "description": "Use additional heuristics to identify barcodes from file paths.",
-                    "help_text": "Enabling this option will group together files into samples by the presence of strings of the form `barcodeXXX` present in filenames, rather than simply files grouped into directories (as output by MinKNOW and the Guppy basecaller)."
+                    "description": "Merge bams from each chromosome into a single file per sample. If not set, output a bam per chromosome.",
+                    "default": false
                 },
                 "kit_name": {
                     "type": "string",
@@ -169,6 +169,11 @@
                     "type": "integer",
                     "description": "Fastq chunk size for minimap2 alignmnent",
                     "default": 40000
+                },
+                "mito_prefix": {
+                    "type": "string",
+                    "description": "Pattern to search for mitocndrial genes. Single or ('MT-') or multiple pattern can be spcified ('MT-,mt-')",
+                    "default": "MT-"
                 }
             }
         },
@@ -237,7 +242,7 @@
         },
         "wfversion": {
             "type": "string",
-            "default": "v0.1.3",
+            "default": "v0.1.4",
             "hidden": true
         },
         "monochrome_logs": {

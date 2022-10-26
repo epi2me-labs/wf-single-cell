@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.1.4]
+### Fixed
+- Fix transcript matrices not in output folder.
+### Added
+- output of merged bam optional.
+- Repeat umap creation with different random states.
+### Changed 
+- Transcript counting Salmon on stringtie-generated transcriptome.
+- Several perforance-related reforactorings including reductions in read write operations. 
+- single_cell_sample_sheet is optional and kit options can be supplied as workflow parameters.
+
+
 ## [v0.1.3]
 ## Changed
 - Better handling of sample_id conflicts in single_cell_sampkle_sheet and fastgingress.
@@ -13,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - kit options can be supplied from command line/config and applied to all samples. 
 
 ## [v0.1.2]
-## Added
+### Added
 - Transcript x cell matrix output.
 
 ## [v0.1.1]

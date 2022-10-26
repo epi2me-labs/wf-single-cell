@@ -17,7 +17,6 @@ def parse_args():
     parser.add_argument(
         "tsv",
         help="TSV file with read ID, cell, UMI, and gene",
-        type=str,
     )
 
     # Optional arguments
@@ -25,7 +24,6 @@ def parse_args():
         "--output",
         help="Output TSV file containing table of read ID, cell barcode, UMI, \
         and gene values extracted from the input BAM [cell_umi_gene.tsv]",
-        type=str,
         default="cell_umi_gene.tsv",
     )
 

@@ -12,8 +12,7 @@ import collections
 import itertools
 import logging
 import multiprocessing
-import pathlib
-import re
+from pathlib import Path
 import tempfile
 
 from editdistance import eval as edit_distance
@@ -30,12 +29,17 @@ def parse_args():
     """Create argument parser."""
     parser = argparse.ArgumentParser()
 
-    # Positional mandatory arguments
+    # Mandatory arguments
     parser.add_argument(
         "bam",
         help="BAM file of alignments with tags for gene (GN), \
         corrected barcode (CB) and uncorrected UMI (UY)",
-        type=str,
+        type=Path,
+    )
+
+    parser.add_argument(
+        "--chrom",
+        help="Chromosome name",
     )
 
     # Optional arguments
@@ -43,8 +47,15 @@ def parse_args():
         "--output",
         help="Output BAM file with new tags for corrected UMI (UB) \
         [tagged.sorted.bam]",
-        type=str,
-        default="tagged.sorted.bam",
+        type=Path,
+        default=Path("tagged.sorted.bam"),
+    )
+
+    parser.add_argument(
+        "--output_read_tags",
+        help="Output file for read to tag TSV [read_tags.tsv]",
+        type=Path,
+        default=Path("read_tags.tsv"),
     )
 
     parser.add_argument(
@@ -65,8 +76,32 @@ def parse_args():
         Can be increased \
         if sufficient UMI complexity is observed. [20000]",
         type=int,
-        default=20000,
+        default=20000
     )
+
+    parser.add_argument(
+        "--gene_assigns",
+        help="TSV read/gene assignments file. \
+        IMPORTANT: reads in the input BAM and gene_assigns file must have the \
+        same order.",
+        type=Path,
+    ),
+
+    parser.add_argument(
+        "--transcript_assigns",
+        help="TSV read/transcript assignments file. \
+        IMPORTANT: reads in the input BAM and gene_assigns file must have the \
+        same order.",
+        type=Path,
+    ),
+
+    parser.add_argument(
+        "--bc_ur_tags",
+        help="TSV read/BC/UR tag assignments file. \
+        IMPORTANT: reads in the input BAM and gene_assigns file must have the \
+        same order? .",
+        type=Path,
+    ),
 
     parser.add_argument(
         "-t", "--threads", help="Threads to use [4]", type=int, default=4
@@ -83,7 +118,7 @@ def parse_args():
     args = parser.parse_args()
 
     # Create temp dir and add that to the args object
-    p = pathlib.Path(args.output)
+    p = Path(args.output)
     tempdir = tempfile.TemporaryDirectory(prefix="tmp.", dir=p.parents[0])
     args.tempdir = tempdir.name
 
@@ -230,7 +265,7 @@ def correct_umis(umis):
     return umis.replace(umi_map)
 
 
-def add_tags(chrom, umis, genes, args):
+def add_tags(chrom, umis, genes, transcripts, args):
     """
     Add tags.
 
@@ -238,24 +273,35 @@ def add_tags(chrom, umis, genes, args):
     tags to the output BAM file.
     """
     bam_out_fn = args.output
+    read_tags = []
 
-    bam = pysam.AlignmentFile(args.bam, "rb")
-    bam_out = pysam.AlignmentFile(bam_out_fn, "wb", template=bam)
+    with pysam.AlignmentFile(args.bam, "rb") as bam:
+        with pysam.AlignmentFile(bam_out_fn, "wb", template=bam) as bam_out:
 
-    for align in bam.fetch(chrom):
-        read_id = align.query_name
+            for align in bam.fetch(chrom):
+                read_id = align.query_name
 
-        if (umis.get(read_id) is not None) & (genes.get(read_id) is not None):
-            # Corrected UMI = UB:Z
-            align.set_tag("UB", umis[read_id], value_type="Z")
+                if (umis.get(read_id) is not None) & \
+                        (genes.get(read_id) is not None):
+                    # Corrected UMI = UB:Z
+                    align.set_tag("UB", umis[read_id], value_type="Z")
 
-            # Annotated gene name = GN:Z
-            align.set_tag("GN", genes[read_id], value_type="Z")
+                    # Annotated gene name = GN:Z
+                    align.set_tag("GN", genes[read_id], value_type="Z")
 
-            bam_out.write(align)
+                    # Annotated transwcript name = TR:Z
+                    align.set_tag("TR", transcripts[read_id], value_type="Z")
 
-    bam.close()
-    bam_out.close()
+                    bam_out.write(align)
+                    read_tags.append(
+                        [read_id,
+                         align.get_tag("GN"),
+                         align.get_tag("TR"),
+                         align.get_tag("CB"),
+                         align.get_tag("UB")])
+
+    header = ['read_id', 'gene', 'transcript', 'barcode', 'umi']
+    return pd.DataFrame.from_records(read_tags, columns=header)
 
 
 def get_bam_info(bam):
@@ -270,17 +316,17 @@ def get_bam_info(bam):
     :return: Sum of all alignments in the BAM index file and list of all chroms
     :rtype: int,list
     """
-    bam = pysam.AlignmentFile(bam, "rb")
-    stats = bam.get_index_statistics()
-    n_aligns = int(sum([contig.mapped for contig in stats]))
-    chroms = dict(
-        [(contig.contig, contig.mapped)
-            for contig in stats if contig.mapped > 0])
-    bam.close()
+    with pysam.AlignmentFile(bam, "rb") as bam:
+        stats = bam.get_index_statistics()
+        n_aligns = int(sum([contig.mapped for contig in stats]))
+        chroms = dict(
+            [(contig.contig, contig.mapped)
+                for contig in stats if contig.mapped > 0])
+
     return n_aligns, chroms
 
 
-def create_region_name(align, args):
+def create_region_name(read, args):
     """
     Create region name.
 
@@ -288,16 +334,16 @@ def create_region_name(align, args):
     The midpoint of the alignment determines which genomic interval to use
     for the 'gene name'.
 
-    :param align: pysam BAM alignment
-    :type align: class 'pysam.libcalignedsegment.AlignedSegment'
+    :param read: read tags and location
+    :type read: tuple
     :param args: object containing all supplied arguments
     :type args: class 'argparse.Namespace'
     :return: Newly created 'gene name' based on aligned chromosome and coords
     :rtype: str
     """
-    chrom = align.reference_name
-    start_pos = align.get_reference_positions()[0]
-    end_pos = align.get_reference_positions()[-1]
+    chrom = read.chr
+    start_pos = read.start
+    end_pos = read.end
 
     # Find the midpoint of the alignment
     midpoint = int((start_pos + end_pos) / 2)
@@ -352,56 +398,74 @@ def run_groupby(df):
     return df
 
 
-def process_bam_records(input_bam, chrom, args):
+def process_records(tag_file, args):
     """
     Process bam records.
 
     Read through all the alignments for specific chromosome to pull out
     the gene, barcode, and uncorrected UMI information. Use that to cluster
-    UMIs and get the corrected UMI sequence. We'll then write out a temporary
-    chromosome-specific BAM file with the corrected UMI tag (UB).
+    UMIs and get the corrected UMI sequence. We'll then write out a TSV
+    file with corrected UMI tag (UB).
 
-    :param tup: Tuple containing the input arguments
-    :type tup: tup
-    :return: Path to a temporary BAM file
-    :rtype: str
+    :param tag_file: TSV file path with read_id, CB and UR tags
+    :type tag_file: str
     """
-    # Open input BAM file
-    bam = pysam.AlignmentFile(input_bam, "rb")
+    tags = pd.read_csv(tag_file, sep='\t', index_col=0)
+
+    ga_header = ['read_id', 'status', 'mapq', 'gene']
+    gene_assigns = pd.read_csv(
+        args.gene_assigns, sep='\t', names=ga_header, index_col=0,
+        keep_default_na=False)
+
+    try:
+        transcript_assigns = pd.read_csv(
+            args.transcript_assigns, sep='\t', index_col=0,
+            keep_default_na=False)
+    except pd.errors.EmptyDataError:
+        transcript_assigns = pd.DataFrame()
+
+    df = gene_assigns.merge(
+        transcript_assigns,
+        left_index=True,
+        right_index=True,
+    ).merge(
+        tags,
+        left_index=True,
+        right_index=True,
+    )
 
     records = []
     cell_gene_counter = collections.Counter()
-    for align in bam.fetch(contig=chrom):
-        read_id = align.query_name
 
-        # Make sure each alignment in this BAM has the expected tags
-        for tag in ["UR", "CB", "GN"]:
-            assert align.has_tag(tag), f"{tag} tag not found in f{read_id}"
+    for row in df.itertuples():
+        read_id = row.Index
 
         # Corrected cell barcode = CB:Z
-        bc_corr = align.get_tag("CB")
+        bc_corr = row.CB
 
         # Uncorrected UMI = UR:Z
-        umi_uncorr = align.get_tag("UR")
+        umi_uncorr = row.UR
 
-        # Annotated gene name = GN:Z
-        gene = align.get_tag("GN")
+        gene = row.gene
+
+        if transcript_assigns is not None:
+            transcript = transcript_assigns.loc[read_id, 'ref_id']
+        else:
+            transcript = '-'
 
         # If no gene annotation exists
         if gene == "NA":
             # Group by region if no gene annotation
-            gene = create_region_name(align, args)
+            gene = create_region_name(row, args)
 
         cell_gene_counter[(bc_corr, gene)] += 1
         if cell_gene_counter[(bc_corr, gene)] <= args.cell_gene_max_reads:
-            records.append((read_id, gene, bc_corr, umi_uncorr))
-
-    # Done reading the chrom-specific alignments from the BAM
-    bam.close()
+            records.append(
+                (read_id, gene, transcript, bc_corr, umi_uncorr))
 
     # Create a dataframe with chrom-specific data
     df = pd.DataFrame.from_records(
-        records, columns=["read_id", "gene", "bc", "umi_uncorr"]
+        records, columns=["read_id", "gene", "transcript", "bc", "umi_uncorr"]
     )
 
     # This is the chunked pandas implementation using multiprocessing module
@@ -437,21 +501,19 @@ def process_bam_records(input_bam, chrom, args):
     # Dict of gene names to add <chr>_<start>_<end> in place of NA
     genes = df.to_dict()["gene"]
 
+    transcripts = df.to_dict()["transcript"]
+
     # Add corrected UMIs to each chrom-specific BAM entry via the UB:Z tag
-    add_tags(chrom, umis, genes, args)
+    read_tags = add_tags(args.chrom, umis, genes, transcripts, args)
+    read_tags.to_csv(args.output_read_tags, sep='\t', index=False)
 
 
 def main(args):
     """Run entry point."""
     init_logger(args)
 
-    # The chromosome name should be the prefix of BAM filename
-    REGEX = r"([A-Za-z0-9.]+).bc_assign.gene.bam"
-    m = re.search(REGEX, args.bam)
-    assert m.group() is not None, "Unexpected input file naming convention!"
-
-    chrom = m.group(1)
-    process_bam_records(args.bam, chrom, args)
+    tag_file = args.bc_ur_tags
+    process_records(tag_file, args)
 
 
 if __name__ == "__main__":

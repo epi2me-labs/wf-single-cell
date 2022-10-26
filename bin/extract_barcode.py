@@ -6,13 +6,14 @@ import gzip
 import logging
 import multiprocessing
 import os
-import pathlib
+from pathlib import Path
 import shutil
 import tempfile
 
 import editdistance as ed
 import parasail
 import pysam
+from pysam import AlignmentFile
 from tqdm import tqdm
 
 
@@ -35,7 +36,12 @@ def parse_args():
         "bam",
         help="Sorted BAM file of stranded sequencing \
             reads aligned to a reference",
-        type=str,
+        type=Path,
+    )
+
+    parser.add_argument(
+        "--contig",
+        help="Contig/chromosome to process",
     )
 
     parser.add_argument(
@@ -50,7 +56,7 @@ def parse_args():
         kit: data/737K-august-2016.txt.gz. \
         For single cell multiome (ATAC + GEX) \
         kit: data/737K-arc-v1.txt.gz",
-        type=str,
+        type=Path,
         default=None,
     )
 
@@ -63,7 +69,6 @@ def parse_args():
         determines which adapter sequences to search for in the reads \
         [3prime]",
         default="3prime",
-        type=str,
     )
 
     parser.add_argument(
@@ -174,16 +179,16 @@ def parse_args():
         help="Output BAM file containing aligned reads with tags \
         for uncorrected \
         barcodes (CR) and barcode QVs (CY) [bc_uncorr.sorted.bam]",
-        type=str,
-        default="bc_uncorr.sorted.bam",
+        type=Path,
+        default=Path("bc_uncorr.sorted.bam"),
     )
 
     parser.add_argument(
         "--output_barcodes",
         help="Output TSV file containing high-quality barcode counts \
         [barcodes_counts.tsv]",
-        type=str,
-        default="barcodes_counts.tsv",
+        type=Path,
+        default=Path("barcodes_counts.tsv"),
     )
 
     parser.add_argument(
@@ -212,7 +217,7 @@ def parse_args():
         args.adapter1_seq = "CTACACGACGCTCTTCCGATCT"
 
     # Create temp dir and add that to the args object
-    p = pathlib.Path(args.output_bam)
+    p = args.output_bam
     output_dir = p.parents[0]
     tempdir = tempfile.TemporaryDirectory(prefix="tmp.", dir=output_dir)
     args.tempdir = tempdir.name
@@ -433,61 +438,52 @@ def align_adapter(tup):
     else:
         raise Exception("Invalid kit name! Specify either 3prime or 5prime.")
 
-    bam = pysam.AlignmentFile(bam_path, "rb")
-
     # Write output BAM file
     suff = f".{chrom}.bam"
     chrom_bam = tempfile.NamedTemporaryFile(
         prefix="tmp.align.", suffix=suff, dir=args.tempdir, delete=False
     )
-    bam_out = pysam.AlignmentFile(chrom_bam.name, "wb", template=bam)
 
-    chrom_barcode_counts = collections.Counter()
+    with AlignmentFile(str(bam_path), "rb") as bam:
+        with AlignmentFile(chrom_bam.name, "wb", template=bam) as bam_out:
 
-    for align in bam.fetch(contig=chrom):
+            chrom_barcode_counts = collections.Counter()
 
-        prefix_seq = align.get_forward_sequence()[: args.window]
-        prefix_qv = align.get_forward_qualities()[: args.window]
+            for align in bam.fetch(contig=chrom):
 
-        p_alignment = parasail_alg(
-            s1=prefix_seq,
-            s2=probe_seq,
-            open=args.gap_open,
-            extend=args.gap_extend,
-            matrix=matrix,
-        )
+                prefix_seq = align.get_forward_sequence()[: args.window]
+                prefix_qv = align.get_forward_qualities()[: args.window]
 
-        adapter1_ed, barcode, bc_start = parse_probe_alignment(
-            p_alignment, adapter1_probe_seq, args
-        )
+                p_alignment = parasail_alg(
+                    s1=prefix_seq,
+                    s2=probe_seq,
+                    open=args.gap_open,
+                    extend=args.gap_extend,
+                    matrix=matrix,
+                )
 
-        # Require minimum read1 edit distance
-        if adapter1_ed <= args.max_adapter1_ed:
-            qscores, min_qv = find_feature_qscores(
-                barcode, p_alignment, prefix_seq, prefix_qv)
+                adapter1_ed, barcode, bc_start = parse_probe_alignment(
+                    p_alignment, adapter1_probe_seq, args
+                )
 
-            if min_qv >= args.min_barcode_qv:
-                chrom_barcode_counts[barcode] += 1
-            # Strip out insertions from alignment to get read barcode sequence
-            barcode = barcode.replace("-", "")
+                # Require minimum read1 edit distance
+                if adapter1_ed <= args.max_adapter1_ed:
+                    qscores, min_qv = find_feature_qscores(
+                        barcode, p_alignment, prefix_seq, prefix_qv)
 
-            # Uncorrected cell barcode = CR:Z
-            align.set_tag("CR", barcode, value_type="Z")
-            # Cell barcode quality score = CY:Z
-            align.set_tag("CY", qscores, value_type="Z")
+                    if min_qv >= args.min_barcode_qv:
+                        chrom_barcode_counts[barcode] += 1
+                    # Strip out insertions from align to get read barcode seq
+                    barcode = barcode.replace("-", "")
 
-            # print(read_id)
-            # print(p_alignment.traceback.ref)
-            # print(p_alignment.traceback.comp)
-            # print(p_alignment.traceback.query)
-            # print()
+                    # Uncorrected cell barcode = CR:Z
+                    align.set_tag("CR", barcode, value_type="Z")
+                    # Cell barcode quality score = CY:Z
+                    align.set_tag("CY", qscores, value_type="Z")
 
-            # Only write BAM entry in output file if it will have CR and CY
-            # tags
-            bam_out.write(align)
-
-    bam.close()
-    bam_out.close()
+                    # Only write BAM entry in output file if it will have
+                    # CR and CY tags
+                    bam_out.write(align)
 
     return chrom_bam.name, chrom_barcode_counts
 
@@ -499,12 +495,12 @@ def load_superlist(superlist):
 
     :param superlist: Path to file containing all possible cell barcodes, e.g.
         3M-february-2018.txt
-    :type superlist: str
+    :type superlist: Path
     :return: Set of all possible cell barcodes
     :rtype: set
     """
-    ext = pathlib.Path(superlist).suffix
-    fn = pathlib.Path(superlist).name
+    ext = superlist.suffix
+    fn = superlist.name
     wl = []
     if ext == ".gz":
         with gzip.open(superlist, "rt") as file:
@@ -524,31 +520,11 @@ def load_superlist(superlist):
     return wl
 
 
-def get_bam_info(bam):
-    """
-    Use `samtools idxstat` to get number of alignments and \
-    names of all contigs in the reference.
-
-    :param bam: Path to sorted BAM file
-    :type bame: str
-    :return: Sum of all alignments in the BAM index file and list of all chroms
-    :rtype: int,list
-    """
-    bam = pysam.AlignmentFile(bam, "rb")
-    stats = bam.get_index_statistics()
-    n_aligns = int(sum([contig.mapped for contig in stats]))
-    chroms = dict(
-        [(contig.contig, contig.mapped)
-            for contig in stats if contig.mapped > 0])
-    bam.close()
-    return n_aligns, chroms
-
-
 def main(args):
     """Run entry point."""
     init_logger(args)
     # logger.info("Getting BAM statistics")
-    n_reads, chroms = get_bam_info(args.bam)
+    # n_reads, chroms = get_bam_info(args.bam)
 
     # logger.info("Loading barcode superlist")
     wl = load_superlist(args.superlist)
@@ -561,8 +537,8 @@ def main(args):
     # Process BAM alignments from each chrom separately
     logger.info(f"Extracting uncorrected barcodes from {args.bam}")
     func_args = []
-    for chrom in chroms.keys():
-        func_args.append((args.bam, chrom, args))
+
+    func_args.append((str(args.bam), args.contig, args))
 
     results = launch_pool(align_adapter, func_args, args.threads)
     chrom_bam_fns, chrom_barcode_counts = list(zip(*results))
@@ -590,7 +566,8 @@ def main(args):
     merge_parameters = ["-f", tmp_bam.name] + list(chrom_bam_fns)
     pysam.merge(*merge_parameters)
 
-    pysam.sort("-@", str(args.threads), "-o", args.output_bam, tmp_bam.name)
+    pysam.sort(
+        "-@", str(args.threads), "-o", str(args.output_bam), tmp_bam.name)
 
     logger.info("Cleaning up temporary files")
     shutil.rmtree(args.tempdir, ignore_errors=True)

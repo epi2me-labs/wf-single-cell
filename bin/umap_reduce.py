@@ -2,6 +2,7 @@
 """Umap reduce."""
 import argparse
 import logging
+from pathlib import Path
 
 import pandas as pd
 import umap
@@ -19,16 +20,15 @@ def parse_args():
         "matrix",
         help="Gene expression matrix: rows=genes, columns=barcodes, \
         values=UMIs",
-        type=str,
     )
 
     # Optional arguments
     parser.add_argument(
         "-o",
-        "--output",
-        help="Output file [umap.tsv]",
+        "--output_prefix",
+        help="write to current directory with this prefix",
         type=str,
-        default="umap.tsv")
+        default="")
 
     parser.add_argument(
         "-d",
@@ -36,6 +36,13 @@ def parse_args():
         help="Number of dimensions to reduce to [2]",
         type=int,
         default=2,
+    )
+
+    parser.add_argument(
+        "-f",
+        "--feature_type",
+        help="matrix is gene or transcript [gene]",
+        default='gene',
     )
 
     parser.add_argument(
@@ -61,6 +68,13 @@ def parse_args():
         default=2,
     )
 
+    parser.add_argument(
+        "--num_umaps",
+        help="Make multiple umap plots with different initial random states",
+        type=int,
+        default=10,
+    )
+
     # Parse arguments
     args = parser.parse_args()
 
@@ -81,7 +95,7 @@ def main(args):
     """Run entry point."""
     init_logger(args)
 
-    df = pd.read_csv(args.matrix, delimiter="\t").set_index("gene")
+    df = pd.read_csv(args.matrix, delimiter="\t").set_index(args.feature_type)
 
     # Switch from barcodes as columns to barcodes as rows
     X = df.transpose()
@@ -89,19 +103,30 @@ def main(args):
     logger.info(
         f"Running UMAP: {X.shape[1]} features --> \
             {args.dimensions} dimensions")
-    reducer = umap.UMAP(
-        n_neighbors=args.n_neighbors,
-        min_dist=args.min_dist,
-        n_components=args.dimensions,
-        verbose=2
-    )
 
-    X_embedded = reducer.fit_transform(X)
+    for n in range(args.num_umaps):
+        reducer = umap.UMAP(
+            n_neighbors=args.n_neighbors,
+            min_dist=args.min_dist,
+            n_components=args.dimensions,
+            verbose=2
+        )
+        outpath = Path() / f"{args.output_prefix}_{n}_umap.tsv"
 
-    cols = [f"D{i+1}" for i in range(args.dimensions)]
-    df_umap = pd.DataFrame(X_embedded, columns=cols, index=X.index)
+        # For testing: If there's only a single transcript column the reducer
+        # step will fail. For now just write an empty file.
+        # TODO: Have a better way of detcting if transcript data does not have
+        # enough transciript columns. Probably only an issue with test data
+        try:
+            X_embedded = reducer.fit_transform(X)
+        except TypeError:
+            open(outpath, 'w').close()
+        else:
+            cols = [f"D{i+1}" for i in range(args.dimensions)]
+            df_umap = pd.DataFrame(X_embedded, columns=cols, index=X.index)
 
-    df_umap.to_csv(args.output, sep="\t", index=True, index_label="barcode")
+            df_umap.to_csv(
+                outpath, sep="\t", index=True, index_label="barcode")
 
 
 if __name__ == "__main__":
