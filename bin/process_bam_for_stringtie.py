@@ -21,33 +21,33 @@ def main():
 
     bc_alns = defaultdict(dict)
 
-    bam = pysam.AlignmentFile(bam_file, "rb")
+    with pysam.AlignmentFile(bam_file, "rb") as bam:
 
-    for align in bam.fetch():
-        bc = align.get_tag('CB')
-        umi = align.get_tag('UB')
-        aln_len = align.query_length
-        flag = align.flag
-        if flag == 16:
-            align.flag = 0
-        elif flag == 0:
-            align.flag = 16
-        else:
-            raise ValueError('Only expecting bam flags of 16 or 0')
-        # Keep only the UMI with the longest read
-        try:
-            bc_alns[bc][umi]
-        except KeyError:
-            bc_alns[bc][umi] = align
-        else:
-            if aln_len > bc_alns[bc][umi].query_length:
+        for align in bam.fetch():
+            bc = align.get_tag('CB')
+            umi = align.get_tag('UB')
+            aln_len = align.query_length
+            flag = align.flag
+            if flag == 16:
+                align.flag = 0
+            elif flag == 0:
+                align.flag = 16
+            else:
+                raise ValueError('Only expecting bam flags of 16 or 0')
+            # Keep only the UMI with the longest read
+            try:
+                bc_alns[bc][umi]
+            except KeyError:
                 bc_alns[bc][umi] = align
+            else:
+                if aln_len > bc_alns[bc][umi].query_length:
+                    bc_alns[bc][umi] = align
 
     for bc_, umi_dicts in bc_alns.items():
         outfile = f'{bc_}.bam'
-        bamout = pysam.AlignmentFile(outfile, 'wb', template=bam)
-        for _, aln_ in umi_dicts.items():
-            bamout.write(aln_)
+        with pysam.AlignmentFile(outfile, 'wb', template=bam) as bamout:
+            for _, aln_ in umi_dicts.items():
+                bamout.write(aln_)
 
 
 if __name__ == "__main__":

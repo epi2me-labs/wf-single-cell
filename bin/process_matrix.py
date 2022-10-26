@@ -14,12 +14,16 @@ def parse_args():
     """Create argument parser."""
     parser = argparse.ArgumentParser()
 
-    # Positional mandatory arguments
     parser.add_argument(
-        "counts",
+        "--gene_counts",
         help="Matrix of read counts per gene (row) \
-        per cell (column)",
-        type=str,
+        per cell (column)"
+    )
+
+    parser.add_argument(
+        "--transcript_counts",
+        help="Matrix of read counts per transcript (row) \
+        per cell (column)"
     )
 
     # Optional arguments
@@ -48,6 +52,13 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--mito_prefix",
+        help="prefix(s) to identify mitochondrial genes. Multiple can be \
+            supplied as comma-sperated prefixes",
+        default="MT-",
+    )
+
+    parser.add_argument(
         "--norm_count",
         help="Normalize to this number of counts per cell [10000]",
         type=int,
@@ -55,20 +66,11 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--output",
+        "--output_prefix",
         help="Output TSV file containing processed gene expression matrix, \
             where genes are rows and cells are columns \
             [expression.processed.tsv]",
-        type=str,
-        default="expression.processed.tsv",
-    )
-
-    parser.add_argument(
-        "--mito_output",
-        help="Output TSV file containing percentage of UMI counts coming from \
-            mitochondrial genes [expression.mito.tsv]",
-        type=str,
-        default="expression.mito.tsv",
+        required=True
     )
 
     parser.add_argument(
@@ -95,92 +97,121 @@ def init_logger(args):
     logging.root.handlers[0].addFilter(lambda x: "NumExpr" not in x.msg)
 
 
-def filter_cells(df, args):
+def filter_cells(df_gene, df_tr, args):
     """Remove cells that express fewer than N=<args.min_genes> \
         unique genes."""
-    df = df.transpose()
-    df["total"] = df.sum(axis=1)
+    df_gene = df_gene.transpose()
+    df_tr = df_tr.transpose()
+    df_gene["total"] = df_gene.sum(axis=1)
+    df_tr["total"] = df_tr.sum(axis=1)
 
     # Remove cells that have fewer than <args.min_genes> unique genes
-    df["n_genes"] = df.astype(bool).sum(axis=1)
-    n_dropped = df[df["n_genes"] < args.min_genes].shape[0]
+    df_gene["n_genes"] = df_gene.astype(bool).sum(axis=1)
+    n_dropped = df_gene[df_gene["n_genes"] < args.min_genes].shape[0]
     logger.info(f"Dropping {n_dropped} cells with < {args.min_genes} genes")
-    df = df[df["n_genes"] >= args.min_genes]
-    df = df.drop(["n_genes"], axis=1)
+    df_gene = df_gene[df_gene["n_genes"] >= args.min_genes]
+    df_gene = df_gene.drop(["n_genes"], axis=1)
 
     # Filter out cells where mitochondrial genes comprise more than
     # <args.max_mito> percentage of the total count
-    mito_genes = [gene for gene in df.columns if gene.find("MT-") == 0]
-    df["mito_total"] = df.loc[:, mito_genes].sum(axis=1)
-    df["mito_pct"] = 100 * df["mito_total"] / df["total"]
-    df["mito_pct"].to_csv(args.mito_output, sep="\t")
-    n_mito = df[df["mito_pct"] > args.max_mito].shape[0]
+    mito_prefixes = args.mito_prefix.strip().split(',')
+    mito_genes = []
+    for gene in df_gene.columns:
+        for mpre in mito_prefixes:
+            if gene.find(mpre) == 0:
+                mito_genes.append(gene)
+
+    df_gene["mito_total"] = df_gene.loc[:, mito_genes].sum(axis=1)
+    df_gene["mito_pct"] = 100 * df_gene["mito_total"] / df_gene["total"]
+    df_gene["mito_pct"].to_csv(
+        f"{args.output_prefix}gene_expression.mito.tsv", sep="\t")
+    n_mito = df_gene[df_gene["mito_pct"] > args.max_mito].shape[0]
     logger.info(
         f"Dropping {n_mito} cells with > {args.max_mito}% mitochondrial reads")
-    df = df[df["mito_pct"] <= args.max_mito]
+    df_gene = df_gene[df_gene["mito_pct"] <= args.max_mito]
 
-    df = df.drop(["mito_total", "mito_pct"], axis=1)
-    df = df.transpose()
+    df_gene = df_gene.drop(["mito_total", "mito_pct"], axis=1)
+    df_gene = df_gene.transpose()
 
-    if df.shape[1] == 0:
+    if df_gene.shape[1] == 0:
         raise Exception("All cells have been filtered out!")
 
-    return df
+    # Apply same filtering to transcript matrix
+    # Todo filter mitochondrial transcripts
+    df_tr["n_transcripts"] = df_tr.astype(bool).sum(axis=1)
+    n_dropped = \
+        df_tr[df_tr["n_transcripts"] < args.min_genes].shape[0]
+    logger.info(f"Dropping {n_dropped} cells with < {args.min_genes} genes")
+    df_tr = df_tr[df_tr["n_transcripts"] >= args.min_genes]
+    df_tr = df_tr.drop(["n_transcripts"], axis=1)
+    df_tr = df_tr.transpose()
+
+    return df_gene, df_tr
 
 
-def filter_genes(df, args):
+def filter_genes(df_gene,  args):
     """Filter genes."""
-    df["n_cells"] = df.astype(bool).sum(axis=1)
+    df_gene["n_cells"] = df_gene.astype(bool).sum(axis=1)
 
     # Remove genes that are present in fewer than <args.min_cells> unique cells
-    n_dropped = df[df["n_cells"] < args.min_cells].shape[0]
+    n_dropped = df_gene[df_gene["n_cells"] < args.min_cells].shape[0]
     logger.info(
         f"Dropping {n_dropped} genes observed in < {args.min_cells} cells")
-    df = df[df["n_cells"] >= args.min_cells]
-    df = df.drop(["n_cells"], axis=1)
+    df_gene = df_gene[df_gene["n_cells"] >= args.min_cells]
+    df_gene = df_gene.drop(["n_cells"], axis=1)
 
-    if df.shape[0] == 0:
+    if df_gene.shape[0] == 0:
         raise Exception("All genes have been filtered out!")
 
-    return df
+    return df_gene
 
 
-def normalize(df, args):
+def normalize(df_gene, args):
     """Normalize."""
-    df = df.transpose()
+    df_gene = df_gene.transpose()
 
     # cell_count / cell_total = X / <args.norm_count>
     logger.info(f"Normalizing counts to {args.norm_count} reads per cell")
-    genes = df.columns != "total"
-    df.loc[:, genes] = df.loc[:, genes] * args.norm_count
-    df.loc[:, genes] = df.loc[:, genes].div(df["total"], axis=0)
-    df = df.drop(["total"], axis=1)
-    df = df.transpose()
+    genes = df_gene.columns != "total"
+    df_gene.loc[:, genes] = df_gene.loc[:, genes] * args.norm_count
+    df_gene.loc[:, genes] = df_gene.loc[:, genes].div(df_gene["total"], axis=0)
+    df_gene = df_gene.drop(["total"], axis=1)
+    df_gene = df_gene.transpose()
 
-    return df
-
-
-def logarithmize(df):
-    """Logarithmize."""
-    # Add pseudo count and logarithmize the normalized counts
-    logger.info("Logarithmizing counts")
-    df = np.log10(df + 1)
-    return df
+    return df_gene
 
 
 def main(args):
     """Run entry point."""
     init_logger(args)
 
-    df = pd.read_csv(args.counts, sep="\t").set_index("gene")
+    df_gene = pd.read_csv(
+        args.gene_counts, sep="\t").set_index("gene")
+    df_transcript = pd.read_csv(
+        args.transcript_counts, sep="\t").set_index("transcript")
 
-    df = filter_cells(df, args)
-    df = filter_genes(df, args)
-    df = normalize(df, args)
-    df = logarithmize(df)
+    df_gene, df_transcript = filter_cells(df_gene, df_transcript, args)
 
-    logger.info(f"Processed matrix: {df.shape[0]} genes x {df.shape[1]} cells")
-    df.to_csv(args.output, sep="\t")
+    df_gene = filter_genes(df_gene, args)
+    df_transcript = filter_genes(df_transcript, args)
+
+    df_gene = normalize(df_gene, args)
+    df_transcript = normalize(df_transcript, args)
+
+    df_gene = np.log10(df_gene + 1)
+    df_transcript = np.log10(df_transcript + 1)
+
+    logger.info(
+        f"Processed gene matrix: {df_gene.shape[0]} "
+        f"genes x {df_gene.shape[1]} cells")
+    df_gene.to_csv(
+        f"{args.output_prefix}.gene_expression.processed.tsv", sep="\t")
+
+    logger.info(
+        f"Processed transcript matrix: {df_transcript.shape[0]} "
+        f"transcripts x {df_transcript.shape[1]} cells")
+    df_transcript.to_csv(
+        f"{args.output_prefix}.transcript_expression.processed.tsv", sep="\t")
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@
 import argparse
 import logging
 import os
+from pathlib import Path
 
 import bioframe as bf
 import numpy as np
@@ -20,13 +21,13 @@ def parse_args():
     parser.add_argument(
         "bed",
         help="BED file of alignments intervals",
-        type=str,
+        type=Path,
     )
 
     parser.add_argument(
         "gtf",
         help="GTF file of gene annotations",
-        type=str,
+        type=Path,
     )
 
     # Optional arguments
@@ -41,7 +42,7 @@ def parse_args():
     parser.add_argument(
         "--output",
         help="Output file [./read_annotations.tsv]",
-        type=str,
+        type=Path,
         default="./read_annotations.tsv",
     )
 
@@ -316,7 +317,7 @@ def main(args):
     gtf = load_gtf(args)
     bed = load_bed(args)
 
-    ext = args.output.split(".")[-1]
+    ext = args.output.suffix
     if (bed.shape[0] > 0) & (gtf.shape[0] > 0):
         # Process alignment overlaps in chunks of <args.chunk_size> alignments
         n = int(np.ceil(bed.shape[0] / args.chunk_size))
@@ -324,12 +325,13 @@ def main(args):
         for i, bed_chunk in enumerate(np.array_split(bed, n)):
             df_chunk = process_bed_chunk(bed_chunk, gtf, args)
 
-            fn = args.output.replace(ext, f"{i}.{ext}")
+            fn = args.output.with_suffix(f".{i}{ext}")
+
             chunk_fns.append(fn)
             df_chunk.to_csv(fn, sep="\t", index=False, header=False)
 
         # Concatenate chunked output files
-        with open(args.output, "w") as f_out:
+        with args.output.open("w") as f_out:
             for fn in chunk_fns:
                 with open(fn) as f_in:
                     for line in f_in:
@@ -341,7 +343,7 @@ def main(args):
     else:
         # The bed file contained no alignments or the chromosome does not
         # have any annotations, so output empty file
-        f = open(args.output, "w")
+        f = args.output.open("w")
         f.close()
 
 

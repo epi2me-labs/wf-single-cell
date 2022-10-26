@@ -26,6 +26,8 @@ dependencies:
   - stringtie==2.2.1
   - gffread
   - gffcompare
+  - salmon==1.8.0
+  - bc
   # For Mac
   - gawk
   - sed

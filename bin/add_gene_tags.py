@@ -3,6 +3,7 @@
 import argparse
 import logging
 import os
+from pathlib import Path
 
 import numpy as np
 import pysam
@@ -17,14 +18,14 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     # Positional mandatory arguments
-    parser.add_argument("bam", help="Sorted BAM file", type=str)
+    parser.add_argument("bam", help="Sorted BAM file", type=Path)
 
     parser.add_argument(
         "gene_assigns",
         help="TSV read/gene assignments file. \
         IMPORTANT: reads in the input BAM and gene_assigns file must have the \
         same order.",
-        type=str,
+        type=Path,
     )
 
     # Optional arguments
@@ -32,7 +33,7 @@ def parse_args():
         "--output",
         help="Output BAM file containing aligned reads with gene name \
             tags (GN) [gene.sorted.bam]",
-        type=str,
+        type=Path,
         default="gene.sorted.bam",
     )
 
@@ -67,11 +68,11 @@ def get_bam_info(bam):
     :return: Sum of all alignments in the BAM index file and list of all chroms
     :rtype: int,list
     """
-    bam = pysam.AlignmentFile(bam, "rb")
-    stats = bam.get_index_statistics()
-    n_aligns = int(np.sum([contig.mapped for contig in stats]))
-    chroms = [contig.contig for contig in stats]
-    bam.close()
+    with pysam.AlignmentFile(bam, "rb") as bam:
+        stats = bam.get_index_statistics()
+        n_aligns = int(np.sum([contig.mapped for contig in stats]))
+        chroms = [contig.contig for contig in stats]
+
     return n_aligns, chroms
 
 
@@ -88,32 +89,29 @@ def process_bam_entries(args):
     """
     n_reads, chroms = get_bam_info(args.bam)
 
-    bam = pysam.AlignmentFile(args.bam, "rb")
-    bam_out = pysam.AlignmentFile(args.output, "wb", template=bam)
+    with pysam.AlignmentFile(args.bam, "rb") as bam:
+        with pysam.AlignmentFile(args.output, "wb", template=bam) as bam_out:
 
-    # If input BAM file is empty or there are no gene assignments,
-    # write an empty output BAM file
-    if (n_reads == 0) or (os.path.getsize(args.gene_assigns) == 0):
-        pass
-    else:
-        logger.info(f"Adding gene tags (GN) to {args.bam}")
-        with open(args.gene_assigns, "r") as f:
-            for align in tqdm(bam.fetch(), total=n_reads):
-                line = f.readline().strip()
-                gene_assigns_id = line.split("\t")[0]
-                gene_assigns_gene = line.split("\t")[3]
+            # If input BAM file is empty or there are no gene assignments,
+            # write an empty output BAM file
+            if (n_reads == 0) or (os.path.getsize(args.gene_assigns) == 0):
+                pass
+            else:
+                logger.info(f"Adding gene tags (GN) to {args.bam}")
+                with open(args.gene_assigns, "r") as f:
+                    for align in tqdm(bam.fetch(), total=n_reads):
+                        line = f.readline().strip()
+                        gene_assigns_id = line.split("\t")[0]
+                        gene_assigns_gene = line.split("\t")[3]
 
-                assert (
-                    gene_assigns_id == align.query_name
-                ), "BAM and featureCounts reads not ordered"
+                        assert (
+                            gene_assigns_id == align.query_name
+                        ), "BAM and featureCounts reads not ordered"
 
-                # Annotated gene name = GN:Z
-                align.set_tag("GN", gene_assigns_gene, value_type="Z")
+                        # Annotated gene name = GN:Z
+                        align.set_tag("GN", gene_assigns_gene, value_type="Z")
 
-                bam_out.write(align)
-
-    bam.close()
-    bam_out.close()
+                        bam_out.write(align)
 
 
 def main(args):

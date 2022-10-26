@@ -2,6 +2,7 @@
 """Plot umap."""
 import argparse
 import logging
+import re
 import sys
 
 import matplotlib.cm as cm
@@ -20,25 +21,23 @@ def parse_args():
 
     # Positional mandatory arguments
     parser.add_argument(
-        "umap",
-        help="File containing the 2D UMAP projection of cell barcodes.",
-        type=str,
+        "--umap",
+        help="File(s) containing the 2D UMAP projection of cell barcodes.",
+        nargs='+'
     )
 
     parser.add_argument(
-        "full_matrix",
+        "--full_matrix",
         help="File containing the full expression matrix that was used for \
         the UMAP projection.",
-        type=str,
         default=None,
     )
 
     # Optional arguments
     parser.add_argument(
-        "--output",
-        help="Output file name for UMAP plots [umap.png]",
-        type=str,
-        default="umap.png",
+        "--output_prefix",
+        help="Output files into current directory with this prefix",
+        default="umap",
     )
 
     parser.add_argument(
@@ -46,8 +45,14 @@ def parse_args():
         "--gene",
         help="Gene to annotate in UMAP plots (e.g. --gene=CD19). If not \
         specified, cells will be annotated with total UMI counts [None]",
-        type=str,
         default=None,
+    )
+
+    parser.add_argument(
+        "-f",
+        "--feature",
+        help="Plotting gene or transcript data [gene]",
+        default='gene',
     )
 
     parser.add_argument(
@@ -57,14 +62,6 @@ def parse_args():
         gene expression. Overrides the --gene flag [False]",
         action="store_true",
     )
-
-    # parser.add_argument(
-    #     "-t",
-    #     "--target_cells",
-    #     help="List of cells to highlight in UMAP plots [None]",
-    #     type=str,
-    #     default=None,
-    # )
 
     parser.add_argument(
         "-s", "--size", help="Size of markers [15]", type=int, default=15
@@ -116,7 +113,7 @@ def remove_top_right_axes(ax):
     ax.get_yaxis().tick_left()
 
 
-def scatterplot(df, values, args):
+def scatterplot(df, values, args, outpath):
     """Scatter plot."""
     fig = plt.figure(figsize=[8, 8])
     ax = fig.add_axes([0.08, 0.08, 0.85, 0.85])
@@ -163,10 +160,10 @@ def scatterplot(df, values, args):
     ax.set_xlabel("UMAP-1")
     ax.set_ylabel("UMAP-2")
 
-    plt.savefig(args.output, dpi=300)
+    plt.savefig(outpath, dpi=300)
 
 
-def get_expression(args):
+def get_expression(args, outpath):
     """Get expression."""
     # Create annotation dataframe to populate with requested features
     df_annot = pd.DataFrame()
@@ -174,7 +171,7 @@ def get_expression(args):
     if not args.mito_genes:
         df_f = (
             pd.read_csv(args.full_matrix, delimiter="\t")
-            .rename(columns={"gene": "barcode"})
+            .rename(columns={args.feature: "barcode"})
             .set_index("barcode")
         )
         df_f = df_f.transpose()
@@ -188,7 +185,7 @@ def get_expression(args):
                     "not found in expression matrix!")
                 fig = plt.figure(figsize=[8, 8])
                 fig.add_axes([0.08, 0.08, 0.85, 0.85])
-                plt.savefig(args.output)
+                plt.savefig(outpath)
                 sys.exit()
             df_annot[args.gene] = df_f.loc[:, args.gene]
     else:
@@ -205,42 +202,32 @@ def main(args):
     """Run entry point."""
     init_logger(args)
 
-    df = pd.read_csv(args.umap, delimiter="\t").set_index("barcode")
+    for file_ in args.umap:
 
-    df_annot = get_expression(args)
+        suffix = re.search(r'_(\d)_umap', file_).group(1)
 
-    # Only include annotation barcodes that are in the UMAP matrix
-    df_annot = df_annot.loc[df.index, :]
+        df = pd.read_csv(file_, delimiter="\t").set_index("barcode")
 
-    df = df.loc[df_annot.index]
+        outpath = f"{args.output_prefix}_{suffix}.png"
 
-    if (not args.gene) & (not args.mito_genes):
-        logger.info("Plotting UMAP with total UMI counts")
-        scatterplot(df, df_annot.loc[:, "total"], args)
-    elif args.gene:
-        logger.info(f"Plotting UMAP with {args.gene} annotations")
-        scatterplot(df, df_annot.loc[:, args.gene], args)
-    elif args.mito_genes:
-        logger.info("Plotting UMAP with mitochrondrial gene annotations")
-        scatterplot(df, df_annot.loc[:, "mitochondrial"], args)
+        df_annot = get_expression(args, outpath)
 
-    # if args.target_cells:
-    #     logger.info(f"Plotting UMAP with highlighted
-    #       cells from {args.target_cells}")
-    #
-    #     df_highlight = pd.read_csv(args.target_cells,
-    #       header=None, names=["barcode"])
-    #     df_highlight["barcode"] = df_highlight["barcode"].str.split(
-    #         "-", n=0, expand=True
-    #     )
-    #     df_highlight["highlight"] = "red"
-    #     df_highlight = df_highlight.set_index("barcode")
-    #     df_highlight = pd.merge(df, df_highlight,
-    #           on="barcode", how="left").fillna(
-    #         "lightgray"
-    #     )
-    #     values = df_highlight.loc[:, "highlight"]
-    #     scatterplot(df, values, args)
+        # Only include annotation barcodes that are in the UMAP matrix
+        df_annot = df_annot.loc[df.index, :]
+
+        df = df.loc[df_annot.index]
+
+        if (not args.gene) & (not args.mito_genes):
+            logger.info("Plotting UMAP with total UMI counts")
+
+            scatterplot(df, df_annot.loc[:, "total"], args, outpath)
+
+        elif args.gene:
+            logger.info(f"Plotting UMAP with {args.gene} annotations")
+            scatterplot(df, df_annot.loc[:, args.gene], args, outpath)
+        elif args.mito_genes:
+            logger.info("Plotting UMAP with mitochrondrial gene annotations")
+            scatterplot(df, df_annot.loc[:, "mitochondrial"], args, outpath)
 
 
 if __name__ == "__main__":
