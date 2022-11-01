@@ -488,6 +488,7 @@ def process_records(tag_file, args):
             columns=[
                 "read_id",
                 "gene",
+                "transcript",
                 "bc",
                 "umi_uncorr",
                 "umi_corr"])
