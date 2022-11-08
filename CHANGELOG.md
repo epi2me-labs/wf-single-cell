@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Changed
+- Replace samlmon for minimap2 for assigning reads to transcripts.
+
 ## [v0.1.4]
 ### Fixed
 - Fix transcript matrices not in output folder.
@@ -14,7 +18,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Transcript counting Salmon on stringtie-generated transcriptome.
 - Several perforance-related reforactorings including reductions in read write operations. 
 - single_cell_sample_sheet is optional and kit options can be supplied as workflow parameters.
-
 
 ## [v0.1.3]
 ## Changed

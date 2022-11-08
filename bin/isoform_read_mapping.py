@@ -65,12 +65,9 @@ def main(read_tr_map, tmap, read_order, outfile):
     df_dups = df_out[df_out['dup']]
     df_out = df_out.loc[~df_out['dup']]
 
-    # Duplicate reads occur when Salmon maps anbiquously to multiple query
-    # transcritps. If all map to same reference transcript, assign to it,
+    # If all map to same reference transcript, assign to it,
     # else assign as ambiguous.
-    # TODO: Can we get a mapping score from Salmon to help here.
     # Should a class of '=' automatically trump other codes?
-    # Also are there other reasons we get duplicates?
     results = []
     for read_id, dup_frame in df_dups.groupby('read_id'):
         if all(dup_frame['ref_id'].values[0] == dup_frame['ref_id']):

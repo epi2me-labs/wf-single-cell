@@ -122,7 +122,7 @@ def parse_args():
     return args
 
 
-def getKneeQuantile(count_array):
+def get_knee_quantile(count_array):
     """Quantile-based method for thresholding the cell barcode whitelist.
 
     This method is adapted from the following preprint:
@@ -136,7 +136,7 @@ def getKneeQuantile(count_array):
     return read_count_threshold
 
 
-def getKneeDistance(values):
+def get_knee_distance(values):
     """Get knee distance.
 
     This function is based on
@@ -150,52 +150,53 @@ def getKneeDistance(values):
     """
     # noqa
     # get coordinates of all the points
-    nPoints = len(values)
-    allCoord = np.vstack((range(nPoints), values)).T
+    n_points = len(values)
+    all_coord = np.vstack((range(n_points), values)).T
 
     # get the first point
-    firstPoint = allCoord[0]
+    first_point = all_coord[0]
     # get vector between first and last point - this is the line
-    lineVec = allCoord[-1] - allCoord[0]
-    lineVecNorm = lineVec / np.sqrt(np.sum(lineVec ** 2))
+    line_vec = all_coord[-1] - all_coord[0]
+    line_vec_norm = line_vec / np.sqrt(np.sum(line_vec ** 2))
 
     # find the distance from each point to the line:
     # vector between all points and first point
-    vecFromFirst = allCoord - firstPoint
+    vec_from_first = all_coord - first_point
 
-    # To calculate the distance to the line, we split vecFromFirst into two
+    # To calculate the distance to the line, we split vec_from_first into two
     # components, one that is parallel to the line and one that
     # is perpendicular.
     # Then, we take the norm of the part that is perpendicular to the line and
     # get the distance.
-    # We find the vector parallel to the line by projecting vecFromFirst onto
-    # the line. The perpendicular vector is vecFromFirst - vecFromFirstParallel
-    # We project vecFromFirst by taking the scalar product of the vector with
+    # We find the vector parallel to the line by projecting vec_from_first onto
+    # the line. The perpendicular vector is
+    #   vec_from_first - vec_from_first_parallel
+    # We project vec_from_first by taking the scalar product of the vector with
     # the unit vector that points in the direction of the line (this gives us
-    # the length of the projection of vecFromFirst onto the line). If we
+    # the length of the projection of vec_from_first onto the line). If we
     # multiply the scalar product by the unit vector, we have
-    # vecFromFirstParallel
+    # vec_from_first_parallel
 
-    scalarProduct = np.sum(
-        vecFromFirst *
+    scalar_product = np.sum(
+        vec_from_first *
         npm.repmat(
-            lineVecNorm,
-            nPoints,
+            line_vec_norm,
+            n_points,
             1),
         axis=1)
-    vecFromFirstParallel = np.outer(scalarProduct, lineVecNorm)
-    vecToLine = vecFromFirst - vecFromFirstParallel
+    vec_from_first_parallel = np.outer(scalar_product, line_vec_norm)
+    vec_to_line = vec_from_first - vec_from_first_parallel
 
-    # distance to line is the norm of vecToLine
-    distToLine = np.sqrt(np.sum(vecToLine ** 2, axis=1))
+    # distance to line is the norm of vec_to_line
+    dist_to_line = np.sqrt(np.sum(vec_to_line ** 2, axis=1))
 
     # knee/elbow is the point with max distance value
-    idxOfBestPoint = np.argmax(distToLine)
+    idx_of_best_point = np.argmax(dist_to_line)
 
-    return distToLine, idxOfBestPoint
+    return dist_to_line, idx_of_best_point
 
 
-def getKneeEstimateDensity(
+def get_knee_estimate_density(
         cell_barcode_counts,
         expect_cells=False,
         cell_number=False,
@@ -246,10 +247,7 @@ def getKneeEstimateDensity(
 
             if not local_min:  # if we have selected a local min yet
                 if expect_cells:  # we have a "soft" expectation
-                    if (
-                        passing_threshold > expect_cells * 0.1
-                        and passing_threshold <= expect_cells
-                    ):
+                    if expect_cells * 0.1 < passing_threshold <= expect_cells:
                         local_min = poss_local_min
 
                 else:  # we have no prior expectation
@@ -303,12 +301,12 @@ def get_threshold_rank_index(read_count_threshold, ont_bc_sorted, args):
     cutoff_ont_bcs = set(
         [bc for bc, n in ont_bc_sorted.items() if n >= read_count_threshold]
     )
-    idxOfBestPoint = len(cutoff_ont_bcs)
+    idx_of_best_point = len(cutoff_ont_bcs)
     logger.info(
         f"Writing {len(cutoff_ont_bcs)} cells with >= {read_count_threshold} \
             reads to {args.output_whitelist}"
     )
-    return cutoff_ont_bcs, idxOfBestPoint
+    return cutoff_ont_bcs, idx_of_best_point
 
 
 def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
@@ -327,18 +325,18 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
     # Only plot 50 cells for a given number of reads. This dramatically reduces
     # the number of points to plot in the long tail, which is helpful when
     # making vectorized images.
-    X = []
-    Y = []
+    x = []
+    y = []
     n_counter = Counter()
     for i, (b, n) in enumerate(ont_bc_sorted.items()):
         n_counter[n] += 1
         if n_counter[n] <= 50:
-            X.append(i)
-            Y.append(n)
+            x.append(i)
+            y.append(n)
 
     ax1.scatter(
-        X,
-        Y,
+        x,
+        y,
         color="k",
         label="ONT",
         alpha=0.1,
@@ -356,22 +354,23 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
     ont_counts = list(ont_bc_sorted.values())
     if (args.cell_count is None) and (args.read_count_threshold is None):
         if args.knee_method == "quantile":
-            read_count_threshold = getKneeQuantile(ont_counts)
-            cutoff_ont_bcs, idxOfBestPoint = get_threshold_rank_index(
+            read_count_threshold = get_knee_quantile(ont_counts)
+            cutoff_ont_bcs, idx_of_best_point = get_threshold_rank_index(
                 read_count_threshold, ont_bc_sorted, args
             )
         elif args.knee_method == "distance":
-            distToLine, idxOfBestPoint = getKneeDistance(ont_counts)
-            cutoff_ont_bcs = apply_bc_cutoff(ont_bc_sorted, idxOfBestPoint)
+            dist_to_line, idx_of_best_point = get_knee_distance(ont_counts)
+            cutoff_ont_bcs = apply_bc_cutoff(ont_bc_sorted, idx_of_best_point)
         elif args.knee_method == "density":
-            cutoff_ont_bcs, threshold = getKneeEstimateDensity(Counter(ont_bc))
-            idxOfBestPoint, countOfBestPoint = min(
+            cutoff_ont_bcs, threshold = \
+                get_knee_estimate_density(Counter(ont_bc))
+            idx_of_best_point, count_of_best_point = min(
                 enumerate(
                     ont_bc_sorted.values()),
                 key=lambda x: abs(x[1] - threshold))
         else:
-            print(
-                "Invalid value for --knee_method(quantile, distance, density)")
+            logger.info(
+                "Invalid value for--knee_method(quantile, distance, density)")
             sys.exit()
         logger.info(
             f"Writing {len(cutoff_ont_bcs)} cells to \
@@ -381,18 +380,18 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
     elif args.cell_count is not None:
         cell_count = min(len(ont_bc_sorted), args.cell_count)
         cutoff_ont_bcs = set(list(ont_bc_sorted.keys())[:cell_count])
-        idxOfBestPoint = cell_count
+        idx_of_best_point = cell_count
         logger.info(
             f"Writing top {cell_count} cells to {args.output_whitelist}")
     elif args.read_count_threshold is not None:
-        cutoff_ont_bcs, idxOfBestPoint = get_threshold_rank_index(
+        cutoff_ont_bcs, idx_of_best_point = get_threshold_rank_index(
             args.read_count_threshold, ont_bc_sorted, args)
 
     write_ont_barcodes(cutoff_ont_bcs, args)
 
-    ax1.vlines(idxOfBestPoint, ymin=1, ymax=ymax, linestyle="--", color="k")
+    ax1.vlines(idx_of_best_point, ymin=1, ymax=ymax, linestyle="--", color="k")
     ax1.set_title(
-        "Found {} cells using ONT barcodes".format(idxOfBestPoint + 1))
+        "Found {} cells using ONT barcodes".format(idx_of_best_point + 1))
 
     if args.ilmn_barcodes is not None:
         pct_ilmn_in_ont = 100 * len(cutoff_ont_bcs & ilmn_bc) / len(ilmn_bc)
@@ -420,7 +419,7 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
             s=15,
             label="Both ONT + ILMN")
         ax2.vlines(
-            idxOfBestPoint,
+            idx_of_best_point,
             ymin=1,
             ymax=ymax,
             linestyle="--",
@@ -455,7 +454,7 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
             alpha=0.1,
             s=5)
         ax3.vlines(
-            idxOfBestPoint,
+            idx_of_best_point,
             ymin=1,
             ymax=ymax,
             linestyle="--",
