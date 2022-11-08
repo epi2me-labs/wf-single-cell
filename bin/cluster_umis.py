@@ -285,7 +285,6 @@ def add_tags(chrom, umis, genes, transcripts, args):
                         (genes.get(read_id) is not None):
                     # Corrected UMI = UB:Z
                     align.set_tag("UB", umis[read_id], value_type="Z")
-
                     # Annotated gene name = GN:Z
                     align.set_tag("GN", genes[read_id], value_type="Z")
 
@@ -495,6 +494,7 @@ def process_records(tag_file, args):
 
     # Simplify to a read_id:umi_corr dictionary
     df = df.drop(["bc", "umi_uncorr"], axis=1).set_index("read_id")
+    df.fillna('NA', inplace=True)
 
     # Dict of corrected UMI for each read ID
     umis = df.to_dict()["umi_corr"]

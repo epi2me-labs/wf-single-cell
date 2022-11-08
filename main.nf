@@ -68,7 +68,6 @@ process output {
     publishDir "${params.out_dir}", mode: 'copy', pattern: "*[!.png|!.bam|!.bai]",
         saveAs: { filename -> "${sample_id}/$filename" }
 
-    label "isoforms"
     input:
         tuple val(sample_id),
               path(fname)

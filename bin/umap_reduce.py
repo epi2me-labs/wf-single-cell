@@ -98,10 +98,10 @@ def main(args):
     df = pd.read_csv(args.matrix, delimiter="\t").set_index(args.feature_type)
 
     # Switch from barcodes as columns to barcodes as rows
-    X = df.transpose()
+    x = df.transpose()
 
     logger.info(
-        f"Running UMAP: {X.shape[1]} features --> \
+        f"Running UMAP: {x.shape[1]} features --> \
             {args.dimensions} dimensions")
 
     for n in range(args.num_umaps):
@@ -118,12 +118,13 @@ def main(args):
         # TODO: Have a better way of detcting if transcript data does not have
         # enough transciript columns. Probably only an issue with test data
         try:
-            X_embedded = reducer.fit_transform(X)
+            x_embedded = reducer.fit_transform(x)
         except TypeError:
             open(outpath, 'w').close()
         else:
             cols = [f"D{i+1}" for i in range(args.dimensions)]
-            df_umap = pd.DataFrame(X_embedded, columns=cols, index=X.index)
+            df_umap = pd.DataFrame(
+                x_embedded, columns=cols, index=x.index)
 
             df_umap.to_csv(
                 outpath, sep="\t", index=True, index_label="barcode")

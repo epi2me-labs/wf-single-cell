@@ -57,7 +57,7 @@ def process_tag_tsv(read_tags_tsv):
     :type read_tags_tsv: Path
     """
     # Build regular expression for "gene" annotations where no gene was found
-    REGEX = r"[a-zA-Z0-9]+_\d+_\d+"  # e.g. chr7_44468000_44469000
+    regex = r"[a-zA-Z0-9]+_\d+_\d+"  # e.g. chr7_44468000_44469000
 
     df = pd.read_csv(read_tags_tsv, sep='\t', index_col=0)
 
@@ -67,7 +67,7 @@ def process_tag_tsv(read_tags_tsv):
         dfg = pd.pivot(dfg, index=feature, columns='barcode', values='umi')
         dfg = dfg.dropna(how='all', axis=1)
         dfg.fillna(0, inplace=True)
-        dfg = dfg.loc[~dfg.index.str.contains(REGEX, regex=True)]
+        dfg = dfg.loc[~dfg.index.str.contains(regex, regex=True)]
         return dfg
 
     df_gene = process_dataframe('gene')

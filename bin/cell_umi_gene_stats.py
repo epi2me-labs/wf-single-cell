@@ -95,13 +95,13 @@ def main(args):
 
     df = read_table(args)
 
-    n_IGK_reads = df.loc[df["gene"].str.startswith("IGK"), :].shape[0]
-    n_IGL_reads = df.loc[df["gene"].str.startswith("IGL"), :].shape[0]
-    n_IGH_reads = df.loc[df["gene"].str.startswith("IGH"), :].shape[0]
+    n_igk_reads = df.loc[df["gene"].str.startswith("IGK"), :].shape[0]
+    n_igl_reads = df.loc[df["gene"].str.startswith("IGL"), :].shape[0]
+    n_igh_reads = df.loc[df["gene"].str.startswith("IGH"), :].shape[0]
 
-    logger.info(f"IGH reads: {n_IGH_reads}")
-    logger.info(f"IGK reads: {n_IGK_reads}")
-    logger.info(f"IGL reads: {n_IGL_reads}")
+    logger.info(f"IGH reads: {n_igh_reads}")
+    logger.info(f"IGK reads: {n_igk_reads}")
+    logger.info(f"IGL reads: {n_igl_reads}")
 
     # df_gene_bulk = per_gene_bulk_stats(df)
     # print(df_gene_bulk.head())
