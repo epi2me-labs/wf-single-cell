@@ -60,12 +60,13 @@ process makeReport {
 // decoupling the publish from the process steps.
 process output {
     label "singlecell"
-    // publish inputs to output directory
-    publishDir "${params.out_dir}", mode: 'copy', pattern: "*[.bam|.bai]",
+    // // publish inputs to output directory
+    publishDir "${params.out_dir}", mode: 'copy', pattern: "*.{bam,bai}",
         saveAs: { filename -> "${sample_id}/bams/$filename" }
-    publishDir "${params.out_dir}", mode: 'copy', pattern: "*umap*",
+    publishDir "${params.out_dir}", mode: 'copy', pattern: "*umap*.{tsv,png}",
         saveAs: { filename -> "${sample_id}/umap/$filename" }
-    publishDir "${params.out_dir}", mode: 'copy', pattern: "*[!.png|!.bam|!.bai]",
+    publishDir "${params.out_dir}", mode: 'copy', 
+        pattern: "*{counts,processed,kneeplot,saturation,config,tags}*",
         saveAs: { filename -> "${sample_id}/$filename" }
 
     input:
@@ -224,7 +225,7 @@ workflow {
     pipeline(reads, ref_genome_dir, umap_genes, sample_info)
 
 
-    
+
     output(pipeline.out.results.flatMap({it ->
         // Convert [sample_id, file, file, ..] 
         // to      [[sample_id, file], [sample_id, file], ...]
