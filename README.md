@@ -154,22 +154,28 @@ The most useful outputs of the pipeline are likely:
 * ``umap``: 
   This folder contains umap projections and the data file used to generate them.
   As UMAP is a stochastic algorithm, different runs with using the same parameters can lead
-  to different results. Therefore for each expression results matrix, 10 UMAP matrices and plots are gerenated each with a different initial random state. The following UMAP results are predrnt in this folder:
+  to different results. Therefore for each expression results matrix, 10 UMAP matrices and plots are gerenated each with a different initial random state. The following UMAP results are present in this folder:
   - \*genes\*.png: UMAP derived from the expression of all genes across the cells.
   - \*gene.{gene_name}\*.png The same plot as above but coulored by gene expression for each gene in the file defined by `umap_plot_genes`.
   - \*transcripts\*.png UMAP created from expression level of all transcripts.
   - \*mitochondrial\*.png:  UMAP created from expression level of all mitochondrial genes.
 
 
-
-* ``processed_transcript_matrix.tsv``: TSV containing the transcript (rows) x cell (columns) expression matrix in transcript per million (TPM): 
+* ``transcript_matrix_processed.tsv``: TSV containing the transcript (rows) x cell (columns) expression matrix in transcript per million (TPM): 
 These expression values are determined by applying [stringtie](https://ccb.jhu.edu/software/stringtie/) and 
 [gffcompare](https://ccb.jhu.edu/software/stringtie/gffcompare.shtml) to reads with the same barcodes (each cell). 
 The assembled transcripts with the following gffcompare class codes
 are excluded: `i`, `p`, `s` or `u`.
 See the [gffcompare](https://ccb.jhu.edu/software/stringtie/gffcompare.shtml)
 and [this image](https://ccb.jhu.edu/software/stringtie/gffcompare_codes.png), and
-only cells and genes that pass the gene filtering described above are included.## Useful links
+only cells and genes that pass the gene filtering described above are included.
+* ``read_tags.tsv``: 
+TSV file witjh the following columns:
+  - read_id
+  - gene (assigned gene)
+  - transcript (assigned transcript id)  
+  - barcode (corrected barcode)
+  - umi )corrected umi## Useful links
 
 * [nextflow](https://www.nextflow.io/)
 * [docker](https://www.docker.com/products/docker-desktop)

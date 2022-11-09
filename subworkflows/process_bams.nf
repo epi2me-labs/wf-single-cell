@@ -215,6 +215,8 @@ process stringtie {
     label "singlecell"
     cpus Math.max(params.max_threads / 4, 4.0)
     input:
+        path 'ref_genome.fa'
+        path 'ref_genome.fa.fai'
         tuple val(sample_id),
               val(chr),
               path("align.bam"),
@@ -223,6 +225,7 @@ process stringtie {
     output:
         tuple val(sample_id),
               val(chr),
+              path("transcriptome.fa"),
               path("chr.gtf"),
               path("stringtie.gff"),
               path("read_order.tsv"),
@@ -236,22 +239,24 @@ process stringtie {
         | samtools fastq - \
         | tee reads.fastq \
         | seqkit seq -n > read_order.tsv 
+    
+    # Get transcriptome sequence
+    gffread -g ref_genome.fa -w transcriptome.fa stringtie.gff  
 
     """
 }
 
 
-process salmon {
+process align_to_transcriptome {
     label "singlecell"
-    cpus Math.max(params.max_threads / 4, 4.0)
+    cpus Math.max(params.max_threads / 2, 4.0)
     input:
-        path "genome.fa"
-        path "genome.fa.fai"
         tuple val(sample_id),
               val(chr),
-              path("chr.gtf"),
-              path("stringtie.gff"),
-              path("read_order.tsv"),
+              path('transcriptome.fa'),
+              path('chr.gtf'),
+              path('stringtie.gff'),
+              path('read_order.tsv'),
               path("reads.fastq")
     output:
         tuple val(sample_id),
@@ -261,29 +266,15 @@ process salmon {
               path('stringtie.gff'),
               path("read_order.tsv"),
               emit: read_tr_map
-    """
-    echo "procesing ${sample_id}, ${chr} with salmon"
-
-    # If less than 5 transcripts can be built, return empty file 
-    if [ \$(wc -l <stringtie.gff) -lt 5 ]; then
-        touch empty_read_query_tr_map.tsv
-    else
-
-        # Get transcriptome sequence
-        gffread -g genome.fa -w transcriptome.fa stringtie.gff
-
-        # Build salmon index. 
-        salmon index -t transcriptome.fa -i salmon_index -k31 
-
-        # Count. What's sensible for minAssignedFrags?
-        # Write mappings to stdout
-        salmon quant -p ${task.cpus} -i salmon_index -l SF -r reads.fastq \
-            -o salmon_out --minAssignedFrags 1 \
-            --writeMappings --validateMappings \
-            2>/dev/null \
-            | gawk 'BEGIN{OFS="\t";} /^[^@]/ {print \$1,\$3}' \
-            > read_query_tr_map.tsv;
-    fi
+    """  
+    minimap2 -ax map-ont \
+        --end-bonus 10 \
+        -t $task.cpus \
+        transcriptome.fa \
+        reads.fastq \
+        | samtools view -F 2304 \
+        |  gawk 'BEGIN{OFS="\t";} /^[^@]/ {print \$1,\$3}' \
+        > read_query_tr_map.tsv;
     """
 }
 
@@ -323,14 +314,15 @@ process umi_gene_saturation {
     cpus 1
     input:
         tuple val(sample_id),
-              path("cell_umi_gene.tsv")
+              path("read_tags.tsv")
     output:
         tuple val(sample_id),
-              path("*saturation_curves.png")
+              path("*saturation_curves.png"),
+              path('read_tags.tsv')
     """
     calc_saturation.py \
         --output "${sample_id}.saturation_curves.png" \
-        cell_umi_gene.tsv
+        read_tags.tsv
     """
 }
 
@@ -392,8 +384,8 @@ process umap_reduce_expression_matrix {
          tuple val(sample_id),
               path("*gene_expression*umap.tsv"),
               path("*transcript_expression*umap.tsv"),
-              path("gene_matrix_processed.tsv"),
-              path("transcript_matrix_processed.tsv"),
+            //   path("gene_matrix_processed.tsv"),
+            //   path("transcript_matrix_processed.tsv"),
               emit: matrix_umap_tsv
     """
     umap_reduce.py \
@@ -557,20 +549,20 @@ workflow process_bams {
         assign_genes(chr_beds_gtf)
 
         stringtie( 
+            ref_genome_fasta,
+            ref_genome_idx,
             chr_gtf
                 .cross(
                     assign_barcodes.out.chrom_bam_bc_bai
                     .map {it -> it[1, 0, 2, 3]}
                 ).map {it -> it.flatten()[3, 0, 4, 5, 1]})
         
-        salmon(
-            ref_genome_fasta,
-            ref_genome_idx,
+        align_to_transcriptome(
             stringtie.out.read_tr_map
         )
         
         assign_transcripts {
-            salmon.out.read_tr_map
+            align_to_transcriptome.out.read_tr_map
         }
         
         cluster_umis(
@@ -580,7 +572,8 @@ workflow process_bams {
             .join(assign_transcripts.out.transcript_assigns, by: [0, 1])
             .join(assign_barcodes.out.bc_ur_tags, by: [0, 1]))
         
-        read_tags = cluster_umis.out.tags.collectFile(keepHeader: true)
+        read_tags = cluster_umis.out.tags.collectFile(
+            keepHeader: true, name: "test")
             .map {it -> [it.name, it]}
 
         umi_gene_saturation(read_tags)
@@ -594,13 +587,16 @@ workflow process_bams {
             process_expression_matrix.out.matrix_processed_tsv)
 
          umap_plot_total_umis(
-            umap_reduce_expression_matrix.out.matrix_umap_tsv)
+            umap_reduce_expression_matrix.out.matrix_umap_tsv
+            .join(process_expression_matrix.out.matrix_processed_tsv))
 
          genes_to_plot = Channel.fromPath(umap_genes)
              .splitCsv()
         
          umap_plot_genes(
              umap_reduce_expression_matrix.out.matrix_umap_tsv
+             .join(process_expression_matrix.out.matrix_processed_tsv)
+             // Combine each umap with a gene to annotate with
              .transpose()
              .combine(genes_to_plot)
              .transpose())
@@ -608,7 +604,7 @@ workflow process_bams {
         umap_plot_mito_genes(
             umap_reduce_expression_matrix.out.matrix_umap_tsv
             .join(process_expression_matrix.out.matrix_mito_tsv)
-            .map{it -> it[0, 1, 5]})
+            .map {it -> it[0, 1, 3]})
 
         
         if (params.merge_bam) {
@@ -620,7 +616,7 @@ workflow process_bams {
         }else{
             tagged_bams = cluster_umis.out.bam_bc_bai
             // [sample_id, bam, bai]
-            .map {it -> [it[0], it[1], it[2]]}
+            .map {it -> it[0, 1, 2]}
             .groupTuple()
         }
 
@@ -629,15 +625,15 @@ workflow process_bams {
              .join(construct_expression_matrix.out)
              .join(process_expression_matrix.out.matrix_processed_tsv)
              .join(process_expression_matrix.out.matrix_mito_tsv)
-             .join(generate_whitelist.out.whitelist
-                .map {it -> [it[0], it[1]] } )
+             .join(generate_whitelist.out.whitelist)
              .join(generate_whitelist.out.kneeplot)
-            .join(tagged_bams)
-             .join(extract_barcodes.out.barcode_counts
-                .map {it -> [it[0], it[1]] } )
-             .join(umap_plot_genes.out.umap_plot_gene.groupTuple())
+             .join(tagged_bams)
+             .join(extract_barcodes.out.barcode_counts)
+             .join(umap_plot_genes.out.umap_plot_gene)
              .join(umap_reduce_expression_matrix.out.matrix_umap_tsv)
              .join(umap_plot_total_umis.out.gene_umap_plot_total)
              .join(umap_plot_mito_genes.out.matrix_umap_plot_mito)
              .join(umap_plot_total_umis.out.transcript_umap_plot_total)
+             .map{it -> it.flatten()}
+        // results.view()
 }
