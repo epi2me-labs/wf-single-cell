@@ -390,12 +390,10 @@ process umap_reduce_expression_matrix {
     """
     umap_reduce.py \
         --output_prefix "${sample_id}.gene_expression" \
-        --feature_type gene \
         gene_matrix_processed.tsv
 
     umap_reduce.py \
         --output_prefix "${sample_id}.transcript_expression" \
-        --feature_type transcript \
         transcript_matrix_processed.tsv
     """
 }
@@ -420,13 +418,11 @@ process umap_plot_total_umis {
     """
     plot_umap.py \
         --output_prefix "${sample_id}.umap.genes.total" \
-        --feature gene \
         --umap ${gene_matrix_umap} \
         --full_matrix gene_matrix_processed.tsv
     
     plot_umap.py \
         --output_prefix "${sample_id}.umap.transcripts.total" \
-        --feature transcript \
         --umap ${transcript_matrix_umap} \
         --full_matrix transcript_matrix_processed.tsv
     """
