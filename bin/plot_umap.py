@@ -49,13 +49,6 @@ def parse_args():
     )
 
     parser.add_argument(
-        "-f",
-        "--feature",
-        help="Plotting gene or transcript data [gene]",
-        default='gene',
-    )
-
-    parser.add_argument(
         "--mito_genes",
         help="Annotate the expression level of all mitochondrial genes. This \
         is useful for identifying unreliable cells with high mitochondrial \
@@ -64,7 +57,7 @@ def parse_args():
     )
 
     parser.add_argument(
-        "-s", "--size", help="Size of markers [15]", type=int, default=15
+        "-s", "--size", help="Size of markers [3]", type=int, default=3
     )
 
     parser.add_argument(
@@ -169,11 +162,10 @@ def get_expression(args, outpath):
     df_annot = pd.DataFrame()
 
     if not args.mito_genes:
-        df_f = (
-            pd.read_csv(args.full_matrix, delimiter="\t")
-            .rename(columns={args.feature: "barcode"})
+        df_f = pd.read_csv(args.full_matrix, delimiter="\t")
+        feature_header = df_f.columns[0]
+        df_f = df_f.rename(columns={feature_header: "barcode"})\
             .set_index("barcode")
-        )
         df_f = df_f.transpose()
 
         df_annot["total"] = np.exp(df_f).sum(axis=1) - 1

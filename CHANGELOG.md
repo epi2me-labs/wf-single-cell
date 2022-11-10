@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Changed
 - Replace samlmon for minimap2 for assigning reads to transcripts.
+### Added
+- Reduced matrix to the top N principal components pripor to umap generation.
 
 ## [v0.1.4]
 ### Fixed
