@@ -69,7 +69,7 @@ It consits of data from just 10 cells and the 10x reference data for only chr22.
 It can be downloaded using:
 
 wget -O test_data.tar.gz  \
-   https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/wf-single-cell-testdata.tar.gz \
+   https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v0.1.5_test_data.tar.gz \
   && tar -xzvf test_data.tar.gz
 ```
 
