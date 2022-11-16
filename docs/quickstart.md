@@ -137,9 +137,9 @@ The most useful outputs of the pipeline are likely:
   - \*mitochondrial\*.png:  UMAP created from expression level of all mitochondrial genes.
 
 
-* ``transcript_matrix_processed.tsv``: TSV containing the transcript (rows) x cell (columns) expression matrix in transcript per million (TPM): 
-These expression values are determined by applying [stringtie](https://ccb.jhu.edu/software/stringtie/) and 
-[gffcompare](https://ccb.jhu.edu/software/stringtie/gffcompare.shtml) to reads with the same barcodes (each cell). 
+* ``transcript_matrix_processed.tsv``: TSV containing the transcript (rows) x cell (columns) expression matrix, processed and normalized in the same manner as the genes.
+These expression values are determined by first generating a transcriptome per sample using [stringtie](https://ccb.jhu.edu/software/stringtie/) and then assigning reads to
+transcripts aligning them to this transcriptome with minimap2. Only reads that map unambiguously to a reference transcript are assigned. 
 The assembled transcripts with the following gffcompare class codes
 are excluded: `i`, `p`, `s` or `u`.
 See the [gffcompare](https://ccb.jhu.edu/software/stringtie/gffcompare.shtml)
