@@ -9,7 +9,7 @@ Oxford Nanopore has developed a protocol for sequencing single-cell libraries fr
 
 The inputs to Sockeye are raw nanopore reads (FASTQ) generated from the sequencing
 instrument and reference files that can be downloaded from [10x](https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest).
-The pipeline output a gene x cell, and transcript x cell expression matrices, as well as a BAM file of
+The pipeline outputs gene x cell, and transcript x cell expression matrices, as well as a BAM file of
 aligned reads tagged with cell barcode and UMI information.
 
 The BLAZE preprint provided useful benchmarking of the original sockeye implementation. This assisted in the selection of appropriate parameters for cell cut-off thresholds and for defining the limits of the cell x gene matrix.

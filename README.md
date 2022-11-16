@@ -19,7 +19,7 @@ Oxford Nanopore has developed a protocol for sequencing single-cell libraries fr
 
 The inputs to Sockeye are raw nanopore reads (FASTQ) generated from the sequencing
 instrument and reference files that can be downloaded from [10x](https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest).
-The pipeline output a gene x cell, and transcript x cell expression matrices, as well as a BAM file of
+The pipeline outputs gene x cell, and transcript x cell expression matrices, as well as a BAM file of
 aligned reads tagged with cell barcode and UMI information.
 
 The BLAZE preprint provided useful benchmarking of the original sockeye implementation. This assisted in the selection of appropriate parameters for cell cut-off thresholds and for defining the limits of the cell x gene matrix.## Quickstart
@@ -161,9 +161,9 @@ The most useful outputs of the pipeline are likely:
   - \*mitochondrial\*.png:  UMAP created from expression level of all mitochondrial genes.
 
 
-* ``transcript_matrix_processed.tsv``: TSV containing the transcript (rows) x cell (columns) expression matrix in transcript per million (TPM): 
-These expression values are determined by applying [stringtie](https://ccb.jhu.edu/software/stringtie/) and 
-[gffcompare](https://ccb.jhu.edu/software/stringtie/gffcompare.shtml) to reads with the same barcodes (each cell). 
+* ``transcript_matrix_processed.tsv``: TSV containing the transcript (rows) x cell (columns) expression matrix, processed and normalized in the same manner as the genes.
+These expression values are determined by first generating a transcriptome per sample using [stringtie](https://ccb.jhu.edu/software/stringtie/) and then assigning reads to
+transcripts aligning them to this transcriptome with minimap2. Only reads that map unambiguously to a reference transcript are assigned. 
 The assembled transcripts with the following gffcompare class codes
 are excluded: `i`, `p`, `s` or `u`.
 See the [gffcompare](https://ccb.jhu.edu/software/stringtie/gffcompare.shtml)
