@@ -102,6 +102,13 @@ workflow pipeline {
         umap_genes
         meta
     main:
+        // throw an exception for deprecated conda users
+        if (workflow.profile.contains("conda")) {
+            throw new Exception(
+                "Sorry, this workflow is not compatible with --profile conda," + 
+                "please use --profile standard (Docker) " +
+                "or --profile singularity.")
+        }
         ref_genome_fasta = file("${ref_genome_dir}/fasta/genome.fa", checkIfExists: true)
         ref_genome_idx = file("${ref_genome_fasta}.fai", checkIfExists: true)
         ref_genes_gtf = file("${ref_genome_dir}/genes/genes.gtf", checkIfExists: true)
