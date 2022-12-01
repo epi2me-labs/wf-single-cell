@@ -49,31 +49,31 @@ process summarize_adapter_table {
 
     df = pd.read_csv("${read_config}", sep="\t")
     stats = {}
-    stats["{$sample_id}"] = {}
-    stats["{$sample_id}"]["general"] = {}
-    stats["{$sample_id}"]["general"]["n_reads"] = df.shape[0]
-    stats["{$sample_id}"]["general"]["rl_mean"] = df["readlen"].mean()
-    stats["{$sample_id}"]["general"]["rl_std_dev"] = df["readlen"].std()
-    stats["{$sample_id}"]["general"]["n_fl"] = df[df["fl"] == True].shape[0]
-    stats["{$sample_id}"]["general"]["n_stranded"] = df[
+    stats["$sample_id"] = {}
+    stats["$sample_id"]["general"] = {}
+    stats["$sample_id"]["general"]["n_reads"] = df.shape[0]
+    stats["$sample_id"]["general"]["rl_mean"] = df["readlen"].mean()
+    stats["$sample_id"]["general"]["rl_std_dev"] = df["readlen"].std()
+    stats["$sample_id"]["general"]["n_fl"] = df[df["fl"] == True].shape[0]
+    stats["$sample_id"]["general"]["n_stranded"] = df[
         df["stranded"] == True
     ].shape[0]
 
-    stats["{$sample_id}"]["strand_counts"] = {}
-    stats["{$sample_id}"]["strand_counts"]["n_plus"] = df[
+    stats["$sample_id"]["strand_counts"] = {}
+    stats["$sample_id"]["strand_counts"]["n_plus"] = df[
         df["orig_strand"] == "+"
     ].shape[0]
-    stats["{$sample_id}"]["strand_counts"]["n_minus"] = df[
+    stats["$sample_id"]["strand_counts"]["n_minus"] = df[
         df["orig_strand"] == "-"
     ].shape[0]
 
-    stats["{$sample_id}"]["detailed_config"] = {}
+    stats["$sample_id"]["detailed_config"] = {}
     for category, n in df["orig_adapter_config"].value_counts().items():
-        stats["{$sample_id}"]["detailed_config"][category] = n
+        stats["$sample_id"]["detailed_config"][category] = n
 
-    stats["{$sample_id}"]["summary_config"] = {}
+    stats["$sample_id"]["summary_config"] = {}
     for label, n in df["lab"].value_counts().items():
-        stats["{$sample_id}"]["summary_config"][label] = n
+        stats["$sample_id"]["summary_config"][label] = n
 
     with open("${sample_id}.config_stats.json", "w") as f:
         json.dump(stats, f, indent=4)

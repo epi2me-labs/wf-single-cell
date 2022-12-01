@@ -42,6 +42,11 @@ def parse_args():
         help="Chromosome name",
     )
 
+    parser.add_argument(
+        "--sample_id",
+        help="ID of the sample",
+    )
+
     # Optional arguments
     parser.add_argument(
         "--output",
@@ -283,6 +288,10 @@ def add_tags(chrom, umis, genes, transcripts, args):
 
                 if (umis.get(read_id) is not None) & \
                         (genes.get(read_id) is not None):
+
+                    # TODO: Allow transcripts to be added to tags even
+                    # if no gene if found
+
                     # Corrected UMI = UB:Z
                     align.set_tag("UB", umis[read_id], value_type="Z")
                     # Annotated gene name = GN:Z
@@ -506,6 +515,7 @@ def process_records(tag_file, args):
 
     # Add corrected UMIs to each chrom-specific BAM entry via the UB:Z tag
     read_tags = add_tags(args.chrom, umis, genes, transcripts, args)
+    read_tags['sample_id'] = args.sample_id
     read_tags.to_csv(args.output_read_tags, sep='\t', index=False)
 
 

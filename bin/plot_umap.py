@@ -57,10 +57,6 @@ def parse_args():
     )
 
     parser.add_argument(
-        "-s", "--size", help="Size of markers [3]", type=int, default=3
-    )
-
-    parser.add_argument(
         "-a",
         "--alpha",
         help="Transpancy of markers [0.7]",
@@ -115,16 +111,20 @@ def scatterplot(df, values, args, outpath):
     colors = ["lightgray", "blue"]
     cmap_custom = LinearSegmentedColormap.from_list("bluegray", colors)
 
-    if (values.name == "total") | (values.name == "mitochondrial"):
+    if any(
+            ['total' in values.name.lower(),
+             "mitochondrial" in values.name.lower()]):
         cmap = cm.jet
     else:
         # cmap = cm.inferno_r
         cmap = cmap_custom
 
+    point_size = 3 if len(df) > 1000 else 6
+
     plot = ax.scatter(
         df["D1"],
         df["D2"],
-        s=args.size,
+        s=point_size,
         edgecolor="None",
         c=values,
         cmap=cmap,
@@ -164,11 +164,15 @@ def get_expression(args, outpath):
     if not args.mito_genes:
         df_f = pd.read_csv(args.full_matrix, delimiter="\t")
         feature_header = df_f.columns[0]
+        if feature_header == 'transcript':
+            title = 'Total transcript expression'
+        else:
+            title = 'Total gene expression'
         df_f = df_f.rename(columns={feature_header: "barcode"})\
             .set_index("barcode")
         df_f = df_f.transpose()
 
-        df_annot["total"] = np.exp(df_f).sum(axis=1) - 1
+        df_annot[title] = np.exp(df_f).sum(axis=1) - 1
         if args.gene:
             # Make sure requested gene is in the matrix
             if args.gene not in df_f.columns:
@@ -212,7 +216,8 @@ def main(args):
         if (not args.gene) & (not args.mito_genes):
             logger.info("Plotting UMAP with total UMI counts")
 
-            scatterplot(df, df_annot.loc[:, "total"], args, outpath)
+            scatterplot(
+                    df, df_annot.loc[:, df_annot.columns[0]], args, outpath)
 
         elif args.gene:
             logger.info(f"Plotting UMAP with {args.gene} annotations")
