@@ -11,6 +11,7 @@
 //        as an entry point when using this workflow in isolation.
 
 import groovy.json.JsonBuilder
+import nextflow.util.BlankSeparatedList;
 nextflow.enable.dsl = 2
 
 include { fastq_ingress } from './lib/fastqingress'
@@ -34,22 +35,71 @@ process summariseCatChunkReads {
         tuple val("${meta.sample_id}"), 
               path("chunks/*"),
               emit: fastq_chunks
+    
     """
     fastcat -s ${meta.sample_id} -r ${meta.sample_id}.stats -x ${directory} | \
-        seqkit split2 -s 1000000 -O chunks -o ${meta.sample_id} -e .gz
+        seqkit split2 -p ${params.max_threads} -O chunks -o ${meta.sample_id} -e .gz
+    """
+}
+
+process getVersions {
+    label "singlecell"
+    cpus 1
+    output:
+        path "versions.txt"
+    script:
+    """
+    python -c "import pysam; print(f'pysam,{pysam.__version__}')" >> versions.txt
+    python -c "import pandas; print(f'pandas,{pandas.__version__}')" >> versions.txt
+    python -c "import sklearn; print(f'scikit-learn,{sklearn.__version__}')" >> versions.txt
+    fastcat --version | sed 's/^/fastcat,/' >> versions.txt
+    minimap2 --version | sed 's/^/minimap2,/' >> versions.txt
+    samtools --version | head -n 1 | sed 's/ /,/' >> versions.txt
+    bedtools --version | head -n 1 | sed 's/ /,/' >> versions.txt
+    gffread --version | sed 's/^/gffread,/' >> versions.txt
+    seqkit version | head -n 1 | sed 's/ /,/' >> versions.txt
+    stringtie --version | sed 's/^/stringtie,/' >> versions.txt
+    gffcompare --version | head -n 1 | sed 's/ /,/' >> versions.txt
+    """
+}
+
+
+process getParams {
+    label "singlecell"
+    cpus 1
+    output:
+        path "params.json"
+    script:
+        def paramsJSON = new JsonBuilder(params).toPrettyString()
+    """
+    # Output nextflow params object to JSON
+    echo '$paramsJSON' > params.json
     """
 }
 
 process makeReport {
     label "singlecell"
+    input:
+        path 'versions'
+        path 'params.csv'
+        path 'read_stats.csv'
+        path 'survival.tsv'
+        path 'wf_summary.tsv'
+        path images
+
     output:
         path "wf-single-cell-*.html"
     script:
         report_name = "wf-single-cell-" + params.report_name + '.html'
     """
-    echo "<html><body>This report is a placeholder<br> \
-        a detailed report will be available in the next release</body></html>" \
-        > wf-single-cell-report.html
+    report.py \
+        --read_stats read_stats.csv \
+        --params params.csv \
+        --versions versions \
+        --survival survival.tsv \
+        --wf_summary wf_summary.tsv \
+        --output ${report_name} \
+        --images ${images} \
     """
 }
 
@@ -94,6 +144,29 @@ process output_report {
 }
 
 
+process prepare_report_data {
+    label "singlecell"
+    input:
+        tuple val(sample_id),
+              path('read_tags'),
+              path('config_stats'),
+              path('white_list')
+    output:
+        path 'survival_data.tsv',
+            emit: survival
+        path 'sample_summary.tsv',
+            emit: summary
+    """
+    prepare_report_data.py \
+        --read_tags read_tags \
+        --config_stats config_stats \
+        --white_list white_list \
+        --sample_id ${sample_id}
+
+    """
+}
+
+
 // workflow module
 workflow pipeline {
     take:
@@ -112,6 +185,8 @@ workflow pipeline {
         ref_genome_fasta = file("${ref_genome_dir}/fasta/genome.fa", checkIfExists: true)
         ref_genome_idx = file("${ref_genome_fasta}.fai", checkIfExists: true)
         ref_genes_gtf = file("${ref_genome_dir}/genes/genes.gtf", checkIfExists: true)
+        software_versions = getVersions()
+        workflow_params = getParams()
         
         bc_longlist_dir = file("${projectDir}/data", checkIfExists: true)
         
@@ -135,9 +210,27 @@ workflow pipeline {
             bc_longlist_dir,
             ref_genome_fasta,
             ref_genome_idx)
+        
+        prepare_report_data(
+            process_bams.out.read_tags
+            .join(stranding.out.config_stats)
+            .join(process_bams.out.white_list))
+        
+        makeReport(
+            software_versions,
+            workflow_params,
+            summariseCatChunkReads.out.stats
+                .map {it -> it[1]}
+                .collectFile(keepHeader:true, name: 'stats'),
+            prepare_report_data.out.survival
+                .collectFile(keepHeader:true),
+            prepare_report_data.out.summary
+                .collectFile(keepHeader:true),
+            process_bams.out.plots)
     emit:
         results = process_bams.out.results
         config_stats = stranding.out.config_stats
+        report = makeReport.out
 }
 
 
@@ -243,9 +336,8 @@ workflow {
             return l
         }).concat(pipeline.out.config_stats)
     )
-    // This is temporay until a detailed report is made
-    makeReport()
-    output_report(makeReport.out)
+
+    output_report(pipeline.out.report)
 }
 
 if (params.disable_ping == false) {

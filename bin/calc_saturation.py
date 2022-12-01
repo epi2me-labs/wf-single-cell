@@ -57,6 +57,7 @@ def plot_saturation_curves(res, umi_sat, args):
     Output a single file with two subplots:
     1. Median number of unique genes per cell
     2. Median number of unique UMIs per cell
+    3. Sequencing saturation
     """
     fig = plt.figure(figsize=[15, 5])
 

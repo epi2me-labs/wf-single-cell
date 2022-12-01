@@ -184,7 +184,8 @@ process cluster_umis {
     --transcript_assigns chrom_tr_assigns.tsv \
     --bc_ur_tags ${bc_ur_tags} \
     --output "${sample_id}_${chr}.tagged.bam" \
-    --output_read_tags "${sample_id}_${chr}.read_tags.tsv"
+    --output_read_tags "${sample_id}_${chr}.read_tags.tsv" \
+    --sample_id ${sample_id}
 
     samtools index "${sample_id}_${chr}.tagged.bam"
     """
@@ -318,7 +319,7 @@ process umi_gene_saturation {
     output:
         tuple val(sample_id),
               path("*saturation_curves.png"),
-              path('read_tags.tsv')
+              emit: saturation_curve
     """
     calc_saturation.py \
         --output "${sample_id}.saturation_curves.png" \
@@ -415,6 +416,7 @@ process umap_plot_total_umis {
           tuple val(sample_id),
               path("*transcripts*.png"), 
               emit: transcript_umap_plot_total
+
     """
     plot_umap.py \
         --output_prefix "${sample_id}.umap.genes.total" \
@@ -429,7 +431,7 @@ process umap_plot_total_umis {
 }
 
 
-process umap_plot_genes {
+process annotate_umap_genes {
     // TODO: make a channle of input genes for thes process
     label "singlecell"
     cpus 1
@@ -442,15 +444,28 @@ process umap_plot_genes {
               val(gene)
     output:
         tuple val(sample_id),
-              path("*.png"), 
-              emit: umap_plot_gene
+              path("*.png"),
+              emit: umaps
     script:
     """
     plot_umap.py \
         --gene $gene \
-        --output_prefix "${sample_id}.umap.gene.${gene}" \
+        --output_prefix "${sample_id}.umap.gene_annotate.${gene}" \
         --umap ${matrix_umap_gene} \
         --full_matrix matrix_processed_gene.tsv
+    """
+}
+
+process pack_images {
+    label "singlecell"
+    cpus 1
+    input:
+        tuple val(sample_id),
+              path("images_${sample_id}/*")
+    output:
+        path "images_${sample_id}"
+    """
+    echo packing images
     """
 }
 
@@ -569,7 +584,7 @@ workflow process_bams {
             .join(assign_barcodes.out.bc_ur_tags, by: [0, 1]))
         
         read_tags = cluster_umis.out.tags.collectFile(
-            keepHeader: true, name: "test")
+            keepHeader: true, name: "umis")
             .map {it -> [it.name, it]}
 
         umi_gene_saturation(read_tags)
@@ -589,7 +604,7 @@ workflow process_bams {
          genes_to_plot = Channel.fromPath(umap_genes)
              .splitCsv()
         
-         umap_plot_genes(
+         annotate_umap_genes(
              umap_reduce_expression_matrix.out.matrix_umap_tsv
              .join(process_expression_matrix.out.matrix_processed_tsv)
              // Combine each umap with a gene to annotate with
@@ -616,8 +631,30 @@ workflow process_bams {
             .groupTuple()
         }
 
+    // Select the first replicate of each umap for report plotting.
+    umaps = umap_plot_total_umis.out.gene_umap_plot_total
+        .concat(
+            umap_plot_total_umis.out.transcript_umap_plot_total,
+            umap_plot_mito_genes.out,
+            annotate_umap_genes.out.umaps.groupTuple())
+        .flatMap {it -> 
+                l = []
+                for (i=0; i<it[1].size(); i++){
+                    l.add([it[0], it[1][i]])
+                }
+                return l
+        }.filter {it -> it[1] ==~ /.*_0\.png$/}
+
+
+    pack_images(
+           umaps
+            .concat(generate_whitelist.out.kneeplot,
+                umi_gene_saturation.out.saturation_curve)
+            .groupTuple())
+
      emit:
-        results = umi_gene_saturation.out
+        results = umi_gene_saturation.out.saturation_curve
+             .join(read_tags)
              .join(construct_expression_matrix.out)
              .join(process_expression_matrix.out.matrix_processed_tsv)
              .join(process_expression_matrix.out.matrix_mito_tsv)
@@ -625,11 +662,15 @@ workflow process_bams {
              .join(generate_whitelist.out.kneeplot)
              .join(tagged_bams)
              .join(extract_barcodes.out.barcode_counts)
-             .join(umap_plot_genes.out.umap_plot_gene)
+             .join(annotate_umap_genes.out.umaps)
              .join(umap_reduce_expression_matrix.out.matrix_umap_tsv)
              .join(umap_plot_total_umis.out.gene_umap_plot_total)
              .join(umap_plot_mito_genes.out.matrix_umap_plot_mito)
              .join(umap_plot_total_umis.out.transcript_umap_plot_total)
              .map{it -> it.flatten()}
-        // results.view()
+        
+        // Emit these sperately for use in the report
+        read_tags = read_tags
+        plots = pack_images.out.collect()
+        white_list = generate_whitelist.out.whitelist
 }

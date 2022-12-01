@@ -63,14 +63,16 @@ tar -xvf refdata-gex-GRCh38-2020-A.tar.gz
 ```
 
 **Download demonstration data**
-```
-A small dataset is provided for the purposes of testing the workflow
-It consits of data from just 10 cells and the 10x reference data for only chr22.
+
+A dataset of around 500 MB is provided for the purposes of testing the workflow.
+It consists of a downsampled dataset of reads mapping to human chromosome 17. 
+The biological sources of the data are five cancer cell lines ([see this article](https://www.nature.com/articles/s41592-019-0425-8))
+, which can be visualied as clusters in the resulting UMAP plots.
 It can be downloaded using:
 
-wget -O test_data.tar.gz  \
-   https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v0.1.5_test_data.tar.gz \
-  && tar -xzvf test_data.tar.gz
+```
+wget https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/wf-single-cell-demo.tar.gz \
+  && tar -xzvf wf-single-cell-demo.tar.gz
 ```
 
 The workflow can be run with the demonstration data using:
@@ -80,12 +82,11 @@ OUTPUT=output
 nextflow run epi2me-labs/wf-single-cell \
     -w ${OUTPUT}/workspace \
     -profile standard \
-    --fastq test_data/fastq/ \
-    --single_cell_sample_sheet test_data/samples.test.csv \
-    --ref_genome_dir test_data/refdata-gex-GRCh38-2020-A \
-    --matrix_min_genes 1 \
-    --matrix_min_cells 1 \
-    --matrix_max_mito 100 \
+    --fastq wf-single-cell-demo/chr17.fastq/ \
+    --kit_name 3prime \
+    --kit_version v3 \
+    --expected_cells 100 \
+    --ref_genome_dir wf-single-cell-demo/ \
     --out_dir ${OUTPUT}
 ```
 
