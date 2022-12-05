@@ -2,7 +2,7 @@
     "$schema": "http://json-schema.org/draft-07/schema",
     "$id": "https://raw.githubusercontent.com/./master/nextflow_schema.json",
     "title": "epi2me-labs/wf-single-cell",
-    "description": "Identification of cell barcodend UMI sequences present in nanopore sequencing reads.",
+    "description": "Identification of cell- and UMI barcodes from single-cell sequencing.",
     "demo_url": "https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/wf-single-cell-demo.tar.gz",
     "url": "https://github.com/epi2me-labs/wf-single-cell",
     "type": "object",
@@ -267,7 +267,7 @@
         },
         "wfversion": {
             "type": "string",
-            "default": "v0.1.6",
+            "default": "v0.1.7",
             "hidden": true
         },
         "monochrome_logs": {
