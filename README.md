@@ -106,7 +106,7 @@ OUTPUT=output
 nextflow run epi2me-labs/wf-single-cell \
     -w ${OUTPUT}/workspace \
     -profile standard \
-    --fastq wf-single-cell-demo/chr17.fastq/ \
+    --fastq wf-single-cell-demo/chr17.fq.gz \
     --kit_name 3prime \
     --kit_version v3 \
     --expected_cells 100 \

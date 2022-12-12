@@ -90,7 +90,7 @@ process makeReport {
     output:
         path "wf-single-cell-*.html"
     script:
-        report_name = "wf-single-cell-" + params.report_name + '.html'
+        report_name = "wf-single-cell-report.html"
     """
     report.py \
         --read_stats read_stats.csv \
