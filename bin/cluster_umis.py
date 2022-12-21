@@ -300,6 +300,11 @@ def add_tags(chrom, umis, genes, transcripts, args):
                     # Annotated transwcript name = TR:Z
                     align.set_tag("TR", transcripts[read_id], value_type="Z")
 
+                    # Up to this point in the workflow, reads are in reverse
+                    # orientation relative to mRNA. Toggle reverse flag
+                    # for the output bams
+                    align.flag ^= 16  # reverse read alignment flag
+
                     bam_out.write(align)
                     read_tags.append(
                         [read_id,

@@ -519,8 +519,6 @@ def process_bam_records(tup):
                 assert align.has_tag("CR") and align.has_tag(
                     "CY"), "CR or CY tags not found"
 
-                align.flag ^= 16  # reverse read alignment flag
-
                 bc_uncorr = align.get_tag("CR")
 
                 # Don't consider any uncorrected barcodes shorter than k

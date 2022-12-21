@@ -63,7 +63,7 @@ def process_tag_tsv(read_tags_tsv):
 
     def process_dataframe(feature='gene'):
         dfg = df[[feature, 'barcode', 'umi']]
-        dfg = dfg.groupby([feature, 'barcode']).count()['umi'].reset_index()
+        dfg = dfg.groupby([feature, 'barcode']).nunique()['umi'].reset_index()
         dfg = pd.pivot(dfg, index=feature, columns='barcode', values='umi')
         dfg = dfg.dropna(how='all', axis=1)
         dfg.fillna(0, inplace=True)
