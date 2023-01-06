@@ -196,7 +196,7 @@
                 "resources_mm2_flags": {
                     "type": "string",
                     "description": "Optional flags for the minimap2 stage.",
-                    "default": "-I 4G",
+                    "default": "-I 16G",
                     "help_text": "Minimap2 options can be supplied to modify the alignment parameters: eg '-I 4G' loads at max 4G bases into memory for indexing."
                 },
                 "mito_prefix": {
