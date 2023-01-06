@@ -56,11 +56,10 @@ def umap_plots(img_dirs):
                         b64img = base64.b64encode(fh.read()).decode()
                     with figure():
                         img(src=f'data:image/png;base64,{b64img}', width=600)
-
             if len(annotated_plots[sample_id]) > 0:
                 b(
-                    """Gene expression umaps overlaid with gene of interest
-                    expression levels""")
+                    """Gene expression umaps overlaid with expression levels of
+                    genes of interest""")
                 with Grid(columns=2):
                     for plot_path in annotated_plots[sample_id]:
                         with open(plot_path, 'rb') as fh:
@@ -210,28 +209,30 @@ def main(args):
             illustrates the procedure used to filter invalid cells.
             The X-axis represents cells ranked by number of reads
             and the Y-axis reads per barcode. The
-            vertical dashed line shows the cutoff, cells to the right
+            vertical dashed line shows the cutoff. Cells to the right
             of this are assumed to be invalid cells, including dead cells and
             background from empty droplets."""
         )
 
         b('Saturation plots')
         p(
-            """Sequencing saturation provide a view of the ammount of library
+            """Sequencing saturation provides a view of the amount of library
             complexity that has been captured in the experiment.
             As read depth increases,
-            the number of genes, or distinct UMIs identified will increase at a
+            the number of genes and distinct UMIs identified will increase at a
             rate that is dependent on the complexity of the input library.
-            A steep slope indicates that new genes or UMIS coud still be
-            idfentified by increaseing the read coverage. A slope which
-            flattens towards higher read coverage indicates that the library
-            complexity is being well captured."""
+            A steep slope indicates that new genes or UMIs could still be
+            identified by increasing the read coverage. A slope which
+            flattens towards higher read coverage indicates that the full
+            library complexity is being well captured."""
         )
         ul(
             li("Gene saturation: Genes per cell as a function of depth."),
             li("UMI saturation: UMIs per cell as a function of read depth."),
-            li("""Sequencing saturation: Sequencing saturation
-            (unique reads across all cells) as a funcion of read depth.""")
+            li("""Sequencing saturation:  This metric is a measure of the
+            proportion of reads that come from a previously observed UMI,
+            and is calculated with the following formula:
+             1 - (number of unique UMIs / number of reads).""")
         )
 
         diagnostic_plots(args.images)
@@ -241,10 +242,10 @@ def main(args):
             """This section presents various UMAP projections
             of the data.
             UMAP is an unsupervised algorithm that projects the
-            multidimensional single cell gene expression data into 2
+            multidimensional single cell expression data into 2
             dimensions. This can reveal structure in the data representing
-            different cell type types or cells that share common regulatory
-            pathways for example.
+            different cell types or cells that share common regulatory
+            pathways, for example.
 
             The UMAP algorithm is stochastic, which means running the same data
             multiple times through UMAP with the same settings can lead to
