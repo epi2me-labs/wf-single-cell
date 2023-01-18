@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 """Make report."""
-import argparse
 import base64
 from collections import defaultdict
 from pathlib import Path
@@ -16,6 +15,8 @@ from ezcharts.layout.snippets import DataTable, Grid, Tabs
 from ezcharts.plots import util
 from ezcharts.util import get_named_logger
 import pandas as pd
+
+from .util import wf_parser  # noqa: ABS101
 
 
 # Setup simple globals
@@ -95,7 +96,7 @@ def diagnostic_plots(img_dirs):
 
 def main(args):
     """wf-single-cell report generation."""
-    logger = get_named_logger("wf-single-cell report")
+    logger = get_named_logger("Report")
 
     logger.info('Building plots')
 
@@ -263,8 +264,8 @@ def main(args):
 
 def argparser():
     """Argument parser for entrypoint."""
-    parser = argparse.ArgumentParser(
-        "wf-single-cell report")
+    parser = wf_parser("report")
+
     parser.add_argument(
         "--read_stats",
         help="fastcat read stats file, with multiple samples concatenated")
@@ -283,8 +284,9 @@ def argparser():
         "--versions", help="Workflow versions file")
     parser.add_argument(
         "--output", help="Output HTML file.")
-    return parser.parse_args()
+    return parser
 
 
 if __name__ == "__main__":
-    main(argparser())
+    args = argparser().parse_args()
+    main(args)

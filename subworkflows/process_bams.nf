@@ -42,7 +42,7 @@ process extract_barcodes{
               path("*.tsv"), emit: barcode_counts
 
     """
-    extract_barcode.py \
+    workflow-glue extract_barcode \
     sort.bam bc_longlist_dir/${meta['bc_long_list']}\
     -t $task.cpus \
     --kit ${meta['kit_name']} \
@@ -72,7 +72,7 @@ process generate_whitelist{
               path("*kneeplot.png"), 
               emit: kneeplot
     """
-    knee_plot.py \
+    workflow-glue knee_plot \
         counts \
         --exp_cells ${meta['exp_cells']} \
         --output_whitelist "${meta.sample_id}.whitelist.tsv" \
@@ -104,7 +104,7 @@ process assign_barcodes{
               path("*bc_ur_tags.tsv"),
               emit: bc_ur_tags
     """
-    assign_barcodes.py \
+    workflow-glue assign_barcodes \
         -t ${task.cpus} \
         --output_bam "${meta.sample_id}_${chr}.bc_assign.bam" \
         --output_tags "${meta.sample_id}_${chr}.bc_ur_tags.tsv" \
@@ -148,7 +148,7 @@ process assign_genes {
               path("*.read.gene_assigns.tsv"),
               emit: chrom_tsv_gene_assigns
     """
-    assign_genes.py \
+    workflow-glue assign_genes \
     --output "${sample_id}_${chr}.read.gene_assigns.tsv" \
     chrom_bc.bed chrom.gtf
     """
@@ -174,7 +174,7 @@ process cluster_umis {
               path("*tags.tsv"),
               emit: tags
     """
-    cluster_umis.py \
+    workflow-glue cluster_umis \
     chr.bam \
     --threads $task.cpus \
     --chrom ${chr} \
@@ -301,7 +301,7 @@ process assign_transcripts {
     else
         gffcompare -o gffcompare -r chr.gtf stringtie.gff
         
-        isoform_read_mapping.py \
+        workflow-glue isoform_read_mapping \
             --read_tr_map read_query_tr_map.tsv \
             --all_read_ids read_order.tsv \
             --gffcompare_tmap gffcompare.stringtie.gff.tmap \
@@ -321,7 +321,7 @@ process umi_gene_saturation {
               path("*saturation_curves.png"),
               emit: saturation_curve
     """
-    calc_saturation.py \
+    workflow-glue calc_saturation \
         --output "${sample_id}.saturation_curves.png" \
         read_tags.tsv
     """
@@ -339,7 +339,7 @@ process construct_expression_matrix {
               path("*transcript_expression.counts.tsv"),
               emit: matrix_counts_tsv
     """
-    gene_expression.py \
+    workflow-glue gene_expression \
         --output_prefix "${sample_id}" \
         --read_tags read_tags.tsv
     """
@@ -361,7 +361,7 @@ process process_expression_matrix {
               path("*gene_expression.mito.tsv"),
               emit: matrix_mito_tsv
     """
-    process_matrix.py \
+    workflow-glue process_matrix \
     --min_genes $params.matrix_min_genes \
     --min_cells $params.matrix_min_cells \
     --max_mito $params.matrix_max_mito \
@@ -389,11 +389,11 @@ process umap_reduce_expression_matrix {
             //   path("transcript_matrix_processed.tsv"),
               emit: matrix_umap_tsv
     """
-    umap_reduce.py \
+    workflow-glue umap_reduce \
         --output_prefix "${sample_id}.gene_expression" \
         gene_matrix_processed.tsv
 
-    umap_reduce.py \
+    workflow-glue umap_reduce \
         --output_prefix "${sample_id}.transcript_expression" \
         transcript_matrix_processed.tsv
     """
@@ -418,12 +418,12 @@ process umap_plot_total_umis {
               emit: transcript_umap_plot_total
 
     """
-    plot_umap.py \
+    workflow-glue plot_umap \
         --output_prefix "${sample_id}.umap.genes.total" \
         --umap ${gene_matrix_umap} \
         --full_matrix gene_matrix_processed.tsv
     
-    plot_umap.py \
+    workflow-glue plot_umap \
         --output_prefix "${sample_id}.umap.transcripts.total" \
         --umap ${transcript_matrix_umap} \
         --full_matrix transcript_matrix_processed.tsv
@@ -448,7 +448,7 @@ process annotate_umap_genes {
               emit: umaps
     script:
     """
-    plot_umap.py \
+    workflow-glue plot_umap \
         --gene $gene \
         --output_prefix "${sample_id}.umap.gene_annotate.${gene}" \
         --umap ${matrix_umap_gene} \
@@ -481,7 +481,7 @@ process umap_plot_mito_genes {
               path("*.png"), 
               emit: matrix_umap_plot_mito
     """
-    plot_umap.py \
+    workflow-glue plot_umap \
         --mito_genes \
         --output_prefix "${sample_id}.umap.mitochondrial" \
         --umap ${gene_matrix_umaps} \

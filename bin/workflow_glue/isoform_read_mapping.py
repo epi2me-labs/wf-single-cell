@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 """Build a TSV of read_id, query_transcript, ref_transcript gene."""
-import argparse
 
 import pandas as pd
 
+from .util import get_named_logger, wf_parser  # noqa: ABS101
 
-def parse_args():
+
+def argparser():
     """Create argument parser."""
-    parser = argparse.ArgumentParser()
+    parser = wf_parser("isoform_read_mapping")
 
     # Positional mandatory arguments
     parser.add_argument(
@@ -29,22 +30,24 @@ def parse_args():
         "--output",
         help="Path to output file"
     )
-    return parser.parse_args()
+    return parser
 
 
-def main(read_tr_map, tmap, read_order, outfile):
+def main(args):
     """Entry point.
 
     read_tr_map: maps reads to query transcripts
     tamp: maps query isoforms to reference isoforms
     """
+    logger = get_named_logger('IsoReadMap')
+    logger.info('Mapping reads to transcript isoforms')
     df_r = pd.read_csv(
-        read_tr_map,
+        args.read_tr_map,
         names=['read_id', 'qry_id'],
         index_col=None,
         sep='\t')
     df_t = pd.read_csv(
-        tmap,
+        args.gffcompare_tmap,
         index_col=None,
         sep='\t')
 
@@ -54,7 +57,8 @@ def main(read_tr_map, tmap, read_order, outfile):
         left_on='qry_id',
         right_on='qry_id')
 
-    df_read_order = pd.read_csv(read_order, index_col=None, names=['read_id'])
+    df_read_order = pd.read_csv(
+        args.all_read_ids, index_col=None, names=['read_id'])
     df_tr['status'] = 'Assigned'
     df_out = df_tr.merge(
         df_read_order, left_on='read_id', right_on='read_id', how='right')
@@ -88,11 +92,9 @@ def main(read_tr_map, tmap, read_order, outfile):
     df_out.drop(columns=['dup'], inplace=True)
     df_out = df_out.loc[df_read_order['read_id']]
     df_out.fillna('-', inplace=True)
-    df_out.to_csv(outfile, sep='\t')
+    df_out.to_csv(args.output, sep='\t')
 
 
 if __name__ == "__main__":
-    args = parse_args()
-
-    main(
-        args.read_tr_map, args.gffcompare_tmap, args.all_read_ids, args.output)
+    args = argparser().parse_args()
+    main(args)

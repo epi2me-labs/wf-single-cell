@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Added
+- workflow-glue to allow script to be run as a module.
+- pytest testing using workflow container.
+
 ## [v0.1.9]
 ### Fixed
 - Incorrect UMIs reported and not collapsing into unique UMI counts.
@@ -14,13 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [v0.1.7]
 ### Changed
-- Updated description in manifest
+- Updated description in manifest.
 
 ## [v0.1.6]
 ## Added
 - A workflow report using ezcharts.
 ## Chnaged
-- Updates for the new Labs Launcher
+- Updates for the new Labs Launcher.
 
 ## [v0.1.5]
 ### Changed
@@ -36,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Repeat umap creation with different random states.
 ### Changed 
 - Transcript counting Salmon on stringtie-generated transcriptome.
-- Several perforance-related reforactorings including reductions in read write operations. 
+- Several performance-related reforactorings including reductions in read write operations. 
 - single_cell_sample_sheet is optional and kit options can be supplied as workflow parameters.
 
 ## [v0.1.3]

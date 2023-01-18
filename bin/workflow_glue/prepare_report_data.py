@@ -1,10 +1,32 @@
 #!/usr/bin/env python
 """Preapre data for the report."""
-import argparse
 from collections import defaultdict
 import json
 
 import pandas as pd
+
+from .util import get_named_logger, wf_parser  # noqa: ABS101
+
+
+def argparser():
+    """Argument parser for entrypoint."""
+    parser = wf_parser("prepare_report_data")
+
+    parser.add_argument(
+        "--sample_id",
+        help="TSV with read id gene, transcript, barcode, umi assignments ")
+    parser.add_argument(
+        "--read_tags",
+        help="TSV with read id gene, transcript, barcode, umi assignments ")
+    parser.add_argument(
+        "--config_stats",
+        help="Workflow sumamry statistics")
+    parser.add_argument(
+        "--white_list",
+        help="Workflow sumamry statistics")
+    parser.add_argument(
+        "--output", help="Output csv with workflow data.")
+    return parser
 
 
 def _get_sample_summaries(read_tags, white_list):
@@ -87,6 +109,8 @@ def _parse_config_stats(wf_config_stats, summ_df, sample_id):
 
 def main(args):
     """Entry point for script."""
+    logger = get_named_logger('PrepReport')
+    logger.info('preparing report data')
     df_summ = _get_sample_summaries(
         args.read_tags, args.white_list)
 
@@ -104,26 +128,6 @@ def main(args):
     df_survival.to_csv('survival_data.tsv', sep='\t')
 
 
-def argparser():
-    """Argument parser for entrypoint."""
-    parser = argparse.ArgumentParser(
-        "wf-single-cell report data preparation")
-    parser.add_argument(
-        "--sample_id",
-        help="TSV with read id gene, transcript, barcode, umi assignments ")
-    parser.add_argument(
-        "--read_tags",
-        help="TSV with read id gene, transcript, barcode, umi assignments ")
-    parser.add_argument(
-        "--config_stats",
-        help="Workflow sumamry statistics")
-    parser.add_argument(
-        "--white_list",
-        help="Workflow sumamry statistics")
-    parser.add_argument(
-        "--output", help="Output csv with workflow data.")
-    return parser.parse_args()
-
-
 if __name__ == "__main__":
-    main(argparser())
+    args = argparser().parse_args()
+    main(args)

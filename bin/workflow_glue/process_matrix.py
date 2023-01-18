@@ -1,18 +1,14 @@
 #!/usr/bin/env python
 """Process matrix."""
-import argparse
-import logging
-
 import numpy as np
 import pandas as pd
 
+from .util import get_named_logger, wf_parser  # noqa: ABS101
 
-logger = logging.getLogger(__name__)
 
-
-def parse_args():
+def argparser():
     """Create argument parser."""
-    parser = argparse.ArgumentParser()
+    parser = wf_parser("process_matrix")
 
     parser.add_argument(
         "--gene_counts",
@@ -73,33 +69,13 @@ def parse_args():
         required=True
     )
 
-    parser.add_argument(
-        "--verbosity",
-        help="logging level: <=2 logs info, <=3 logs warnings",
-        type=int,
-        default=2,
-    )
-
-    # Parse arguments
-    args = parser.parse_args()
-
-    return args
-
-
-def init_logger(args):
-    """Initiate logger."""
-    logging.basicConfig(
-        format="%(asctime)s -- %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    logging_level = args.verbosity * 10
-    logging.root.setLevel(logging_level)
-    logging.root.handlers[0].addFilter(lambda x: "NumExpr" not in x.msg)
+    return parser
 
 
 def filter_cells(df_gene, df_tr, args):
     """Remove cells that express fewer than N=<args.min_genes> \
         unique genes."""
+    logger = get_named_logger('ProcMatrix')
     df_gene = df_gene.transpose()
     df_tr = df_tr.transpose()
     df_gene["total"] = df_gene.sum(axis=1)
@@ -151,6 +127,7 @@ def filter_cells(df_gene, df_tr, args):
 
 def filter_genes(df_gene,  args):
     """Filter genes."""
+    logger = get_named_logger('ProcMatrix')
     df_gene["n_cells"] = df_gene.astype(bool).sum(axis=1)
 
     # Remove genes that are present in fewer than <args.min_cells> unique cells
@@ -168,6 +145,7 @@ def filter_genes(df_gene,  args):
 
 def normalize(df_gene, args):
     """Normalize."""
+    logger = get_named_logger('ProcMatrix')
     df_gene = df_gene.transpose()
 
     # cell_count / cell_total = X / <args.norm_count>
@@ -183,8 +161,7 @@ def normalize(df_gene, args):
 
 def main(args):
     """Run entry point."""
-    init_logger(args)
-
+    logger = get_named_logger('ProcMatrix')
     df_gene = pd.read_csv(
         args.gene_counts, sep="\t").set_index("gene")
     df_transcript = pd.read_csv(
@@ -215,6 +192,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = parse_args()
-
+    args = argparser().parse_args()
     main(args)

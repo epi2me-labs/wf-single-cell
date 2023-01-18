@@ -92,7 +92,7 @@ process makeReport {
     script:
         report_name = "wf-single-cell-report.html"
     """
-    report.py \
+    workflow-glue report \
         --read_stats read_stats.csv \
         --params params.csv \
         --versions versions \
@@ -157,7 +157,7 @@ process prepare_report_data {
         path 'sample_summary.tsv',
             emit: summary
     """
-    prepare_report_data.py \
+    workflow-glue prepare_report_data \
         --read_tags read_tags \
         --config_stats config_stats \
         --white_list white_list \

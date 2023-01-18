@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 """Assign genes."""
-import argparse
-import logging
 import os
 from pathlib import Path
 
@@ -9,13 +7,12 @@ import bioframe as bf
 import numpy as np
 import pandas as pd
 
+from .util import wf_parser  # noqa: ABS101
 
-logger = logging.getLogger(__name__)
 
-
-def parse_args():
+def argparser():
     """Create argument parser."""
-    parser = argparse.ArgumentParser()
+    parser = wf_parser("AssignGene")
 
     # Positional mandatory arguments
     parser.add_argument(
@@ -54,27 +51,7 @@ def parse_args():
         default=200000,
     )
 
-    parser.add_argument(
-        "--verbosity",
-        help="logging level: <=2 logs info, <=3 logs warnings",
-        type=int,
-        default=2,
-    )
-
-    # Parse arguments
-    args = parser.parse_args()
-
-    return args
-
-
-def init_logger(args):
-    """Initiate logger."""
-    logging.basicConfig(
-        format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    logging_level = args.verbosity * 10
-    logging.root.setLevel(logging_level)
-    logging.root.handlers[0].addFilter(lambda x: "NumExpr" not in x.msg)
+    return parser
 
 
 def load_gtf(args):
@@ -348,6 +325,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = parse_args()
-
+    args = argparser().parse_args()
     main(args)

@@ -1,20 +1,17 @@
 #!/usr/bin/env python
 """Umap reduce."""
-import argparse
-import logging
 from pathlib import Path
 
 import pandas as pd
 from sklearn.decomposition import IncrementalPCA
 import umap
 
+from .util import get_named_logger, wf_parser  # noqa: ABS101
 
-logger = logging.getLogger(__name__)
 
-
-def parse_args():
+def argparser():
     """Create argument parser."""
-    parser = argparse.ArgumentParser()
+    parser = wf_parser("umap_reduce")
 
     # Positional mandatory arguments
     parser.add_argument(
@@ -64,33 +61,13 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--verbosity",
-        help="logging level: <=2 logs info, <=3 logs warnings",
-        type=int,
-        default=2,
-    )
-
-    parser.add_argument(
         "--num_umaps",
         help="Make multiple umap plots with different initial random states",
         type=int,
         default=10,
     )
 
-    # Parse arguments
-    args = parser.parse_args()
-
-    return args
-
-
-def init_logger(args):
-    """Initiate logger."""
-    logging.basicConfig(
-        format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    logging_level = args.verbosity * 10
-    logging.root.setLevel(logging_level)
-    logging.root.handlers[0].addFilter(lambda x: "NumExpr" not in x.msg)
+    return parser
 
 
 def pca(x, args):
@@ -102,8 +79,7 @@ def pca(x, args):
 
 def main(args):
     """Run entry point."""
-    init_logger(args)
-
+    logger = get_named_logger('UmapReduce')
     df = pd.read_csv(args.matrix, delimiter="\t")
     feature_header = df.columns[0]
     if feature_header == "gene":
@@ -151,6 +127,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = parse_args()
-
+    args = argparser().parse_args()
     main(args)

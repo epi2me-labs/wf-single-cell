@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 """Plot umap."""
-import argparse
-import logging
 import re
 import sys
 
@@ -11,13 +9,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from .util import get_named_logger, wf_parser  # noqa: ABS101
 
-logger = logging.getLogger(__name__)
 
-
-def parse_args():
+def argparser():
     """Create argument parser."""
-    parser = argparse.ArgumentParser()
+    parser = wf_parser("plot_umap")
 
     # Positional mandatory arguments
     parser.add_argument(
@@ -63,34 +60,7 @@ def parse_args():
         type=float,
         default=0.7)
 
-    parser.add_argument(
-        "--verbosity",
-        help="logging level: <=2 logs info, <=3 logs warnings",
-        type=int,
-        default=2,
-    )
-
-    # Parse arguments
-    args = parser.parse_args()
-
-    if args.gene == "None":
-        args.gene = None
-
-    # Override --gene flag if --mito_genes is specified
-    if args.mito_genes:
-        args.gene = None
-
-    return args
-
-
-def init_logger(args):
-    """Initiate logger."""
-    logging.basicConfig(
-        format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    logging_level = args.verbosity * 10
-    logging.root.setLevel(logging_level)
-    logging.root.handlers[0].addFilter(lambda x: "NumExpr" not in x.msg)
+    return parser
 
 
 def remove_top_right_axes(ax):
@@ -158,6 +128,7 @@ def scatterplot(df, values, args, outpath):
 
 def get_expression(args, outpath):
     """Get expression."""
+    logger = get_named_logger('PlotUmap')
     # Create annotation dataframe to populate with requested features
     df_annot = pd.DataFrame()
 
@@ -176,7 +147,7 @@ def get_expression(args, outpath):
         if args.gene:
             # Make sure requested gene is in the matrix
             if args.gene not in df_f.columns:
-                logging.info(
+                logger.info(
                     f"WARNING: gene {args.gene}"
                     "not found in expression matrix!")
                 fig = plt.figure(figsize=[8, 8])
@@ -196,7 +167,13 @@ def get_expression(args, outpath):
 
 def main(args):
     """Run entry point."""
-    init_logger(args)
+    logger = get_named_logger('PlotUmap')
+    if args.gene == "None":
+        args.gene = None
+
+    # Override --gene flag if --mito_genes is specified
+    if args.mito_genes:
+        args.gene = None
 
     for file_ in args.umap:
 
@@ -228,6 +205,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = parse_args()
-
+    args = argparser().parse_args()
     main(args)

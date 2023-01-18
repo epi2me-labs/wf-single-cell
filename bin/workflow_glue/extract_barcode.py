@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 """Extract barcode."""
-import argparse
 import collections
 import gzip
-import logging
 import multiprocessing
 import os
 from pathlib import Path
@@ -16,12 +14,11 @@ import pysam
 from pysam import AlignmentFile
 from tqdm import tqdm
 
+from .sc_util import kit_adapters  # noqa: ABS101
+from .util import get_named_logger, wf_parser  # noqa: ABS101
 
-# Make logger globally accessible to all functions
-logger = logging.getLogger(__name__)
 
-
-def parse_args():
+def argparser():
     """
     Parse the command line arguments.
 
@@ -29,7 +26,7 @@ def parse_args():
     :rtype: class argparse.Namespace
     """
     # Create argument parser
-    parser = argparse.ArgumentParser()
+    parser = wf_parser("extract_barcode")
 
     # Positional mandatory arguments
     parser.add_argument(
@@ -191,53 +188,7 @@ def parse_args():
         default=Path("barcodes_counts.tsv"),
     )
 
-    parser.add_argument(
-        "--verbosity",
-        help="logging level: <=2 logs info, <=3 logs warnings",
-        type=int,
-        default=2,
-    )
-
-    # Parse arguments
-    args = parser.parse_args()
-
-    # verify kit selection
-    if (args.kit != "3prime") and (
-            args.kit != "5prime") and (args.kit != "multiome"):
-        raise Exception(
-            "Invalid kit name! Specify either 3prime, 5prime or \
-        multiome."
-        )
-
-    if (args.kit == "3prime") or (args.kit == "multiome"):
-        # Read1 adapter
-        args.adapter1_seq = "CTACACGACGCTCTTCCGATCT"
-    elif args.kit == "5prime":
-        # Read1 adapter
-        args.adapter1_seq = "CTACACGACGCTCTTCCGATCT"
-
-    # Create temp dir and add that to the args object
-    p = args.output_bam
-    output_dir = p.parents[0]
-    tempdir = tempfile.TemporaryDirectory(prefix="tmp.", dir=output_dir)
-    args.tempdir = tempdir.name
-
-    return args
-
-
-def init_logger(args):
-    """
-    Initialize the logger using the specified verbosity level.
-
-    :param args: object containing all supplied arguments
-    :type args: class argparse.Namespace
-    """
-    logging.basicConfig(
-        format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    logging_level = args.verbosity * 10
-    logging.root.setLevel(logging_level)
-    logging.root.handlers[0].addFilter(lambda x: "NumExpr" not in x.msg)
+    return parser
 
 
 def update_matrix(args):
@@ -522,11 +473,15 @@ def load_superlist(superlist):
 
 def main(args):
     """Run entry point."""
-    init_logger(args)
-    # logger.info("Getting BAM statistics")
-    # n_reads, chroms = get_bam_info(args.bam)
+    logger = get_named_logger('ExtractBC')
+    args.adapter1_seq = kit_adapters[args.kit]['adapter1']
 
-    # logger.info("Loading barcode superlist")
+    # Create temp dir and add that to the args object
+    p = args.output_bam
+    output_dir = p.parents[0]
+    tempdir = tempfile.TemporaryDirectory(prefix="tmp.", dir=output_dir)
+    args.tempdir = tempdir.name
+
     wl = load_superlist(args.superlist)
 
     # Create temporary directory
@@ -574,6 +529,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = parse_args()
-
+    args = argparser().parse_args()
     main(args)
