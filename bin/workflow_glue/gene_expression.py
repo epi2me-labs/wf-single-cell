@@ -1,17 +1,15 @@
 #!/usr/bin/env python
 """Gene expression."""
-import argparse
-import logging
 from pathlib import Path
 
 import pandas as pd
 
-logger = logging.getLogger(__name__)
+from .util import get_named_logger, wf_parser  # noqa: ABS101
 
 
-def parse_args():
+def argparser():
     """Create argument parser."""
-    parser = argparse.ArgumentParser()
+    parser = wf_parser("gene_expression")
 
     # Positional mandatory arguments
     parser.add_argument(
@@ -27,27 +25,7 @@ def parse_args():
         default="gene_expression.tsv",
     )
 
-    parser.add_argument(
-        "--verbosity",
-        help="logging level: <=2 logs info, <=3 logs warnings",
-        type=int,
-        default=2,
-    )
-
-    # Parse arguments
-    args = parser.parse_args()
-
-    return args
-
-
-def init_logger(args):
-    """Initiate logger."""
-    logging.basicConfig(
-        format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    logging_level = args.verbosity * 10
-    logging.root.setLevel(logging_level)
-    logging.root.handlers[0].addFilter(lambda x: "NumExpr" not in x.msg)
+    return parser
 
 
 def process_tag_tsv(read_tags_tsv):
@@ -77,7 +55,7 @@ def process_tag_tsv(read_tags_tsv):
     return df_gene, df_transcript
 
 
-def process_reads(args):
+def main(args):
     """
     Iterate through the BAM file and count unique UMIs (UB tag) \
     associated with each gene (GN tag) and cell barcode (CB tag).
@@ -85,6 +63,7 @@ def process_reads(args):
     :param args: object containing all supplied arguments
     :type args: class argparse.Namespace
     """
+    logger = get_named_logger('GeneEx')
     logger.info(
         f"Building gene/transcript expression matrices from {args.read_tags}")
 
@@ -99,14 +78,6 @@ def process_reads(args):
         sep="\t", index_label="transcript")
 
 
-def main(args):
-    """Run entry point."""
-    init_logger(args)
-
-    process_reads(args)
-
-
 if __name__ == "__main__":
-    args = parse_args()
-
+    args = argparser().parse_args()
     main(args)

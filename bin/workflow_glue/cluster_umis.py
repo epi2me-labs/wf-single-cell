@@ -7,10 +7,8 @@
 #
 # The specific functions borrowed or modified are documented below in comments
 
-import argparse
 import collections
 import itertools
-import logging
 import multiprocessing
 from pathlib import Path
 import tempfile
@@ -21,13 +19,12 @@ import pandas as pd
 import pysam
 from tqdm import tqdm
 
+from .util import wf_parser  # noqa: ABS101
 
-logger = logging.getLogger(__name__)
 
-
-def parse_args():
+def argparser():
     """Create argument parser."""
-    parser = argparse.ArgumentParser()
+    parser = wf_parser("cluster_umis")
 
     # Mandatory arguments
     parser.add_argument(
@@ -112,32 +109,7 @@ def parse_args():
         "-t", "--threads", help="Threads to use [4]", type=int, default=4
     )
 
-    parser.add_argument(
-        "--verbosity",
-        help="logging level: <=2 logs info, <=3 logs warnings",
-        type=int,
-        default=2,
-    )
-
-    # Parse arguments
-    args = parser.parse_args()
-
-    # Create temp dir and add that to the args object
-    p = Path(args.output)
-    tempdir = tempfile.TemporaryDirectory(prefix="tmp.", dir=p.parents[0])
-    args.tempdir = tempdir.name
-
-    return args
-
-
-def init_logger(args):
-    """Initiate logger."""
-    logging.basicConfig(
-        format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    logging_level = args.verbosity * 10
-    logging.root.setLevel(logging_level)
-    logging.root.handlers[0].addFilter(lambda x: "NumExpr" not in x.msg)
+    return parser
 
 
 def breadth_first_search(node, adj_list):
@@ -526,13 +498,15 @@ def process_records(tag_file, args):
 
 def main(args):
     """Run entry point."""
-    init_logger(args)
+    # Create temp dir and add that to the args object
+    p = Path(args.output)
+    tempdir = tempfile.TemporaryDirectory(prefix="tmp.", dir=p.parents[0])
+    args.tempdir = tempdir.name
 
     tag_file = args.bc_ur_tags
     process_records(tag_file, args)
 
 
 if __name__ == "__main__":
-    args = parse_args()
-
+    args = argparser().parse_args()
     main(args)

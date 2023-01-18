@@ -1,14 +1,11 @@
 #!/usr/bin/env python
 """Adapter scan vsearch."""
-import argparse
 import gzip
-import logging
 import multiprocessing
 import os
 from pathlib import Path
 import shutil
 import subprocess
-import sys
 import tempfile
 
 from Bio import SeqIO
@@ -18,13 +15,13 @@ import numpy as np
 import pandas as pd
 import pysam
 from tqdm import tqdm
+from .sc_util import kit_adapters  # noqa: ABS101
+from .util import get_named_logger, wf_parser  # noqa: ABS101
 
-logger = logging.getLogger(__name__)
 
-
-def parse_args():
+def argparser():
     """Create argument parser."""
-    parser = argparse.ArgumentParser()
+    parser = wf_parser("adapter_scan_vsearch")
 
     # Positional mandatory arguments
     parser.add_argument("fastq", help="FASTQ of ONT reads", type=Path)
@@ -94,44 +91,7 @@ def parse_args():
         default="adapter_seqs.fasta",
     )
 
-    parser.add_argument(
-        "--verbosity",
-        help="logging level: <=2 logs info, <=3 logs warnings",
-        type=int,
-        default=2,
-    )
-
-    # Parse arguments
-    args = parser.parse_args()
-
-    # verify kit selection
-    if (args.kit != "3prime") and (
-            args.kit != "5prime") and (args.kit != "multiome"):
-        raise Exception(
-            "Invalid kit name! Specify either 3prime, 5prime or \
-        multiome."
-        )
-
-    if (args.kit == "3prime") or (args.kit == "multiome"):
-        # Read1 adapter
-        args.adapter1_seq = "CTACACGACGCTCTTCCGATCT"
-        # TSO adapter
-        args.adapter2_seq = "ATGTACTCTGCGTTGATACCACTGCTT"
-    elif args.kit == "5prime":
-        # Read1 adapter
-        args.adapter1_seq = "CTACACGACGCTCTTCCGATCT"
-        # Poly-dT RT adapter
-        args.adapter2_seq = "GTACTCTGCGTTGATACCACTGCTT"
-
-    # Create temp dir and add that to the args object
-    p = Path(args.output_tsv)
-    tempdir = tempfile.TemporaryDirectory(prefix="tmp.", dir=p.parents[0])
-    args.tempdir = tempdir.name
-
-    # Add tempdir path to the adapters_fasta
-    args.adapters_fasta = os.path.join(args.tempdir, args.adapters_fasta)
-
-    return args
+    return parser
 
 
 # complement translation table with support for regex punctuation
@@ -145,14 +105,6 @@ def run_subprocess(cmd):
     p = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE)
     stdout, stderr = p.communicate()
     return str(stdout), str(stderr)
-
-
-def check_vsearch():
-    """Check vsearch."""
-    stdout, stderr = run_subprocess("vsearch --quiet -h")
-    if stderr.find("vsearch: command not found") > -1:
-        logging.error("Could not load find VSEARCH -- check installation")
-        sys.exit(1)
 
 
 def write_adapters_fasta(args):
@@ -563,16 +515,6 @@ def process_batch(tup):
     return stranded_tmp_fastq, tmp_table, vsearch_cols
 
 
-def init_logger(args):
-    """Init logger."""
-    logging.basicConfig(
-        format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    logging_level = args.verbosity * 10
-    logging.root.setLevel(logging_level)
-    logging.root.handlers[0].addFilter(lambda x: "NumExpr" not in x.msg)
-
-
 def write_output_table(tmp_tables, args):
     """Write output table."""
     if len(tmp_tables) > 1:
@@ -632,11 +574,20 @@ def write_tmp_fastx_files_for_processing(n_batches, args):
 
 def main(args):
     """Entry point."""
-    init_logger(args)
-    check_vsearch()
+    logger = get_named_logger("AdaptScan")
+    adapters = kit_adapters[args.kit]
+    args.adapter1_seq = adapters['adapter1']
+    args.adapter2_seq = adapters['adapter2']
+
+    # Create temp dir and add that to the args object
+    p = Path(args.output_tsv)
+    tempdir = tempfile.TemporaryDirectory(prefix="tmp.", dir=p.parents[0])
+    args.tempdir = tempdir.name
+    if not shutil.which('vsearch'):
+        raise OSError('vsearch installation not found')
 
     # If specified batch size is > total number of reads, reduce batch size
-    logging.debug("Counting reads")
+    logger.debug("Counting reads")
     n_reads = count_reads(args.fastq)
     args.batch_size = min(n_reads, args.batch_size)
     n_batches = int(np.ceil(n_reads / args.batch_size))
@@ -648,7 +599,7 @@ def main(args):
 
     fastq_fns = write_tmp_fastx_files_for_processing(n_batches, args)
 
-    logging.info(
+    logger.info(
         "Processing {} batches of {} reads".format(
             n_batches, args.batch_size))
     func_args = []
@@ -662,14 +613,13 @@ def main(args):
     vsearch_cols = vsearch_cols[0]
 
     # Merge temp tables and fastqs then clean up
-    logging.debug(f"Writing output table to {args.output_tsv}")
+    logger.debug(f"Writing output table to {args.output_tsv}")
     write_output_table(tmp_tables, args)
 
-    logging.debug(f"Writing stranded fastq to {args.output_fastq}")
+    logger.debug(f"Writing stranded fastq to {args.output_fastq}")
     write_output_fastq(tmp_fastqs, args)
 
 
 if __name__ == "__main__":
-    args = parse_args()
-
+    args = argparser().parse_args()
     main(args)

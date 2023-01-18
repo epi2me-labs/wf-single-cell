@@ -6,15 +6,15 @@ process call_adapter_scan {
               val(meta),
               path("chunk.fq.gz")
     output:
-        tuple val(sample_id), path("*.fastq"), emit: stranded_fq_chunked
-        tuple val(sample_id), path("*.tsv"), emit: read_config_chunked
+        tuple val(sample_id), path("${sample_id}_adapt_scan.fastq.gz"), emit: stranded_fq_chunked
+        tuple val(sample_id), path("${sample_id}_adapt_scan.tsv"), emit: read_config_chunked
     
     """    
-    adapter_scan_vsearch.py \
+    workflow-glue adapter_scan_vsearch \
     chunk.fq.gz \
     -t 1 \
     --kit ${meta['kit_name']} \
-    --output_fastq "${sample_id}_adapt_scan.fastq" \
+    --output_fastq "${sample_id}_adapt_scan.fastq.gz" \
     --output_tsv  "${sample_id}_adapt_scan.tsv" \
     --batch_size $params.read_structure_batch_size \
     """
@@ -27,7 +27,7 @@ process combine_adapter_tables {
     input:
         tuple val(sample_id), path("adapters.tsv")
     output:
-        tuple val(sample_id), path("*read_config.tsv"), emit: read_config
+        tuple val(sample_id), path("${sample_id}_read_config.tsv"), emit: read_config
     """
     # Concatenate tsv file keeping header from first file.
     awk 'FNR==1 && NR!=1{next;}{print}' adapters.tsv* > "${sample_id}_read_config.tsv"
@@ -41,7 +41,7 @@ process summarize_adapter_table {
     input:
         tuple val(sample_id), path(read_config)
     output:
-        tuple val(sample_id), path('*config_stats.json'), emit: config_stats
+        tuple val(sample_id), path("${sample_id}.config_stats.json"), emit: config_stats
     """
     #!/usr/bin/env python
     import pandas as pd

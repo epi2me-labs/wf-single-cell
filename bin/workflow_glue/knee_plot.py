@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 """Knee plot."""
-import argparse
 from collections import Counter
-import logging
 import operator
 import sys
 
@@ -13,13 +11,12 @@ import pandas as pd
 from scipy.signal import argrelextrema
 from scipy.stats import gaussian_kde
 
+from .util import get_named_logger, wf_parser  # noqa: ABS101
 
-logger = logging.getLogger(__name__)
 
-
-def parse_args():
+def argparser():
     """Create argument parser."""
-    parser = argparse.ArgumentParser()
+    parser = wf_parser("knee_plot")
 
     # Positional mandatory arguments
     parser.add_argument(
@@ -88,41 +85,10 @@ def parse_args():
         default=None,
     )
 
-    parser.add_argument(
-        "--verbosity",
-        help="logging level: <=2 logs info, <=3 logs warnings",
-        type=int,
-        default=2,
-    )
-
-    # Parse arguments
-    args = parser.parse_args()
-    init_logger(args)
-
-    if (args.cell_count is not None) and (
-            args.read_count_threshold is not None):
-        raise Exception(
-            "Cannot specify BOTH --cell_count and \
-                --read_count_threshold. Please pick one method."
-        )
-
-    if args.cell_count is not None:
-        logging.info(
-            f"Using explicit cell count (N = {args.cell_count})\
-                for creating whitelist, not the distance or density algorithm"
-        )
-
-    if args.read_count_threshold is not None:
-        logging.info(
-            f"Using explicit reads per cell threshold \
-                (>= {args.read_count_threshold}) for creating whitelist,\
-                    not the distance or density algorithm"
-        )
-
-    return args
+    return parser
 
 
-def get_knee_quantile(count_array):
+def get_knee_quantile(count_array, exp_cells):
     """Quantile-based method for thresholding the cell barcode whitelist.
 
     This method is adapted from the following preprint:
@@ -131,7 +97,7 @@ def get_knee_quantile(count_array):
     barcodes from long-read single-cell RNA-seq with BLAZE. biorxiv. 2022.
     doi: https://doi.org/10.1101/2022.08.16.504056
     """
-    top_count = np.sort(count_array)[::-1][:args.exp_cells]
+    top_count = np.sort(count_array)[::-1][:exp_cells]
     read_count_threshold = np.quantile(top_count, 0.95) / 20
     return read_count_threshold
 
@@ -298,6 +264,7 @@ def write_ont_barcodes(cutoff_ont_bcs, args):
 
 def get_threshold_rank_index(read_count_threshold, ont_bc_sorted, args):
     """Find cell rank cutoff based on a specified read count threshold."""
+    logger = get_named_logger('KneePLot')
     cutoff_ont_bcs = set(
         [bc for bc, n in ont_bc_sorted.items() if n >= read_count_threshold]
     )
@@ -311,6 +278,7 @@ def get_threshold_rank_index(read_count_threshold, ont_bc_sorted, args):
 
 def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
     """Make kneeplot."""
+    logger = get_named_logger('KneePlot')
     ont_bc_sorted = dict(
         sorted(ont_bc.items(), key=operator.itemgetter(1), reverse=True)
     )
@@ -354,7 +322,8 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
     ont_counts = list(ont_bc_sorted.values())
     if (args.cell_count is None) and (args.read_count_threshold is None):
         if args.knee_method == "quantile":
-            read_count_threshold = get_knee_quantile(ont_counts)
+            read_count_threshold = get_knee_quantile(
+                ont_counts, args.exp_cells)
             cutoff_ont_bcs, idx_of_best_point = get_threshold_rank_index(
                 read_count_threshold, ont_bc_sorted, args
             )
@@ -494,18 +463,26 @@ def intersect_ont_ilmn(ont_bc, ilmn_bc):
     return conserved_bc
 
 
-def init_logger(args):
-    """Initiate logger."""
-    logging.basicConfig(
-        format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    logging_level = args.verbosity * 10
-    logging.root.setLevel(logging_level)
-    logging.root.handlers[0].addFilter(lambda x: "NumExpr" not in x.msg)
-
-
 def main(args):
     """Run entry point."""
+    logger = get_named_logger('KneePlot')
+    if (args.cell_count is not None) and (
+            args.read_count_threshold is not None):
+        raise Exception(
+            "Cannot specify BOTH --cell_count and \
+                --read_count_threshold. Please pick one method.")
+
+    if args.cell_count is not None:
+        logger.info(
+            f"Using explicit cell count (N = {args.cell_count})\
+                for creating whitelist, not the distance or density algorithm")
+
+    if args.read_count_threshold is not None:
+        logger.info(
+            f"Using explicit reads per cell threshold \
+                (>= {args.read_count_threshold}) for creating whitelist,\
+                    not the distance or density algorithm")
+
     ont_bc = get_barcode_counts(args.barcodes)
     if args.ilmn_barcodes is not None:
         ilmn_bc = read_ilmn_barcodes(args.ilmn_barcodes)
@@ -519,5 +496,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    args = argparser().parse_args()
     main(args)

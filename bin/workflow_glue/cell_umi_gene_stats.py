@@ -1,17 +1,13 @@
 #!/usr/bin/env python
 """Cell Umi gene stats."""
-import argparse
-import logging
-
 import pandas as pd
 
+from .util import get_named_logger, wf_parser  # noqa: ABS101
 
-logger = logging.getLogger(__name__)
 
-
-def parse_args():
+def argparser():
     """Create argument parser."""
-    parser = argparse.ArgumentParser()
+    parser = wf_parser("UmiGene")
 
     # Positional mandatory arguments
     parser.add_argument(
@@ -27,27 +23,7 @@ def parse_args():
         default="cell_umi_gene.tsv",
     )
 
-    parser.add_argument(
-        "--verbosity",
-        help="logging level: <=2 logs info, <=3 logs warnings",
-        type=int,
-        default=2,
-    )
-
-    # Parse arguments
-    args = parser.parse_args()
-
-    return args
-
-
-def init_logger(args):
-    """Initiate logger."""
-    logging.basicConfig(
-        format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    logging_level = args.verbosity * 10
-    logging.root.setLevel(logging_level)
-    logging.root.handlers[0].addFilter(lambda x: "NumExpr" not in x.msg)
+    return parser
 
 
 def read_table(args):
@@ -91,7 +67,7 @@ def per_gene_bulk_stats(df):
 
 def main(args):
     """Run entry point."""
-    init_logger(args)
+    logger = get_named_logger('cell_umi_gene_stats')
 
     df = read_table(args)
 
@@ -103,22 +79,7 @@ def main(args):
     logger.info(f"IGK reads: {n_igk_reads}")
     logger.info(f"IGL reads: {n_igl_reads}")
 
-    # df_gene_bulk = per_gene_bulk_stats(df)
-    # print(df_gene_bulk.head())
-    # print(df_gene_bulk.describe())
-    #
-    # df_cell = per_cell_stats(df)
-    # print(df_cell.head())
-    #
-    # df_cell_umi = per_cell_umi_stats(df)
-    # print(df_cell_umi.head())
-    #
-    # df_cell_gene = per_cell_gene_stats(df)
-    # print(df_cell_gene.head())
-    # print(df_cell_gene.describe())
-
 
 if __name__ == "__main__":
-    args = parse_args()
-
+    args = argparser().parse_args()
     main(args)

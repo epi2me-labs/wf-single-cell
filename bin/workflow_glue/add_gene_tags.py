@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 """Add gene tags."""
-import argparse
-import logging
 import os
 from pathlib import Path
 
@@ -9,13 +7,12 @@ import numpy as np
 import pysam
 from tqdm import tqdm
 
+from .util import get_named_logger, wf_parser  # noqa: ABS101
 
-logger = logging.getLogger(__name__)
 
-
-def parse_args():
+def argparser():
     """Create argument parser."""
-    parser = argparse.ArgumentParser()
+    parser = wf_parser("add_gene_tags")
 
     # Positional mandatory arguments
     parser.add_argument("bam", help="Sorted BAM file", type=Path)
@@ -37,27 +34,7 @@ def parse_args():
         default="gene.sorted.bam",
     )
 
-    parser.add_argument(
-        "--verbosity",
-        help="logging level: <=2 logs info, <=3 logs warnings",
-        type=int,
-        default=2,
-    )
-
-    # Parse arguments
-    args = parser.parse_args()
-
-    return args
-
-
-def init_logger(args):
-    """Initiate logger."""
-    logging.basicConfig(
-        format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    logging_level = args.verbosity * 10
-    logging.root.setLevel(logging_level)
-    logging.root.handlers[0].addFilter(lambda x: "NumExpr" not in x.msg)
+    return parser
 
 
 def get_bam_info(bam):
@@ -87,6 +64,7 @@ def process_bam_entries(args):
     :param args: object containing all supplied arguments
     :type args: class argparse.Namespace
     """
+    logger = get_named_logger('AddGeneTag')
     n_reads, chroms = get_bam_info(args.bam)
 
     with pysam.AlignmentFile(args.bam, "rb") as bam:
@@ -116,12 +94,9 @@ def process_bam_entries(args):
 
 def main(args):
     """Run the entry point."""
-    init_logger(args)
-
     process_bam_entries(args)
 
 
 if __name__ == "__main__":
-    args = parse_args()
-
+    args = argparser().parse_args()
     main(args)

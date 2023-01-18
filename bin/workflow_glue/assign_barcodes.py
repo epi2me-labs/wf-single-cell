@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 """Assign barcodes."""
-import argparse
 import collections
-import logging
 import math
 import multiprocessing
 import os
@@ -16,12 +14,13 @@ import parasail
 import pysam
 from tqdm import tqdm
 
-logger = logging.getLogger(__name__)
+from .sc_util import kit_adapters  # noqa: ABS101
+from .util import get_named_logger, wf_parser  # noqa: ABS101
 
 
-def parse_args():
+def argparser():
     """Create argument parser."""
-    parser = argparse.ArgumentParser()
+    parser = wf_parser("assign_barcodes")
 
     # Positional mandatory arguments
     parser.add_argument(
@@ -100,6 +99,7 @@ def parse_args():
         determines which adapter sequences to search for in the reads \
         [3prime]",
         default="3prime",
+        choices=['3prime', '5prime', 'multiome']
     )
 
     parser.add_argument(
@@ -179,52 +179,7 @@ def parse_args():
         type=int,
         default=1)
 
-    parser.add_argument(
-        "--verbosity",
-        help="logging level: <=2 logs info, <=3 logs warnings",
-        type=int,
-        default=2,
-    )
-
-    # Parse arguments
-    args = parser.parse_args()
-
-    # verify kit selection
-    if (args.kit != "3prime") and (
-        args.kit != "5prime") and (
-            args.kit != "multiome"):
-        raise Exception(
-            "Invalid kit name! Specify either 3prime, 5prime or \
-        multiome."
-        )
-
-    if (args.kit == "3prime") or (args.kit == "multiome"):
-        # Read1 adapter
-        args.adapter1_seq = "CTACACGACGCTCTTCCGATCT"
-        # TSO adapter
-        args.adapter2_seq = "ATGTACTCTGCGTTGATACCACTGCTT"
-    elif args.kit == "5prime":
-        # Read1 adapter
-        args.adapter1_seq = "CTACACGACGCTCTTCCGATCT"
-        # Poly-dT RT adapter
-        args.adapter2_seq = "GTACTCTGCGTTGATACCACTGCTT"
-
-    # Create temp dir and add that to the args object
-    p = Path(args.output_bam)
-    tempdir = tempfile.TemporaryDirectory(prefix="tmp.", dir=p.parents[0])
-    args.tempdir = tempdir.name
-
-    return args
-
-
-def init_logger(args):
-    """Initiate logger."""
-    logging.basicConfig(
-        format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    logging_level = args.verbosity * 10
-    logging.root.setLevel(logging_level)
-    logging.root.handlers[0].addFilter(lambda x: "NumExpr" not in x.msg)
+    return parser
 
 
 def find(target, my_string):
@@ -700,8 +655,17 @@ def get_bam_info(bam):
 
 def main(args):
     """Run main entry point."""
-    init_logger(args)
-    # logger.info("Getting BAM statistics")
+    logger = get_named_logger('AssignBC')
+
+    adapters = kit_adapters[args.kit]
+    args.adapter1_seq = adapters['adapter1']
+    args.adapter2_seq = adapters['adapter2']
+
+    # Create temp dir and add that to the args object
+    p = Path(args.output_bam)
+    tempdir = tempfile.TemporaryDirectory(prefix="tmp.", dir=p.parents[0])
+    args.tempdir = tempdir.name
+
     n_reads, chroms = get_bam_info(args.bam)
 
     if args.threads > 1:
@@ -748,6 +712,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = parse_args()
-
+    args = argparser().parse_args()
     main(args)
