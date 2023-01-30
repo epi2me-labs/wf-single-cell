@@ -1,18 +1,12 @@
 #!/usr/bin/env python
 """Extract barcode."""
 import collections
-import gzip
-import multiprocessing
-import os
 from pathlib import Path
-import shutil
-import tempfile
 
 import editdistance as ed
+import pandas as pd
 import parasail
-import pysam
 from pysam import AlignmentFile
-from tqdm import tqdm
 
 from .sc_util import kit_adapters  # noqa: ABS101
 from .util import get_named_logger, wf_parser  # noqa: ABS101
@@ -66,6 +60,7 @@ def argparser():
         determines which adapter sequences to search for in the reads \
         [3prime]",
         default="3prime",
+        choices=['3prime', '5prime', 'multiome']
     )
 
     parser.add_argument(
@@ -89,7 +84,7 @@ def argparser():
 
     parser.add_argument(
         "-T",
-        "--polyT_length",
+        "--polyt_length",
         help="Length of polyT sequence to use in the \
         alignment query (ignored with --kit=5prime) [10]",
         type=int,
@@ -172,38 +167,35 @@ def argparser():
     )
 
     parser.add_argument(
-        "--output_bam",
-        help="Output BAM file containing aligned reads with tags \
-        for uncorrected \
-        barcodes (CR) and barcode QVs (CY) [bc_uncorr.sorted.bam]",
-        type=Path,
-        default=Path("bc_uncorr.sorted.bam"),
+        "--output_read_tags",
+        help="Output TSV file with read_ids and associated tags",
+        type=Path
     )
 
     parser.add_argument(
-        "--output_barcodes",
-        help="Output TSV file containing high-quality barcode counts \
-        [barcodes_counts.tsv]",
-        type=Path,
-        default=Path("barcodes_counts.tsv"),
+        "--output_barcode_counts",
+        help="Output TSV file containing high-quality barcode counts",
+        type=Path
     )
 
     return parser
 
 
-def update_matrix(args):
+def update_matrix(match, mismatch, acg_to_n_match, t_to_n_match):
     """
     Update matrix.
 
     Create new parasail scoring matrix. 'N' is used as wildcard character
     for barcodes and has its own match parameter (0 per default).
 
-    :param args: object containing all supplied arguments
-    :type args: class argparse.Namespace
+    :param match: Score for matchinging bases
+    :param mismatch: Score for mismatches
+    :param acg_to_n_match: Score for matching tacq to n
+    :param t_to_n_match: Score for matching t to n
     :return: custom parasail alignment matrix
     :rtype: parasail.bindings_v2.Matrix
     """
-    matrix = parasail.matrix_create("ACGTN", args.match, args.mismatch)
+    matrix = parasail.matrix_create("ACGTN", match, mismatch)
 
     ############################
     # SCORING MATRIX POSITIONS #
@@ -218,164 +210,85 @@ def update_matrix(args):
     # Update scoring matrix so that N matches A/C/G/N
     pointers = [4, 10, 16, 24, 25, 26]
     for i in pointers:
-        matrix.pointer[0].matrix[i] = args.acg_to_n_match
+        matrix.pointer[0].matrix[i] = acg_to_n_match
 
     # Update N to T matching score so that we start
     # aligning dT sequence instead of Ns.
-    matrix.pointer[0].matrix[22] = args.t_to_n_match
-    matrix.pointer[0].matrix[27] = args.t_to_n_match
+    matrix.pointer[0].matrix[22] = t_to_n_match
+    matrix.pointer[0].matrix[27] = t_to_n_match
     return matrix
 
 
-def launch_pool(func, func_args, procs=1):
-    """
-    Launch pool.
-
-    Use multiprocessing library to create pool and map function calls to
-    that pool
-
-    :param procs: Number of processes to use for pool
-    :type procs: int, optional
-    :param func: Function to exececute in the pool
-    :type func: function
-    :param func_args: List containing arguments for each
-        call to function <funct>
-    :type func_args: list
-    :return: List of results returned by each call to function <funct>
-    :rtype: list
-    """
-    p = multiprocessing.Pool(processes=procs)
-    try:
-        results = list(tqdm(p.imap(func, func_args), total=len(func_args)))
-        p.close()
-        p.join()
-    except KeyboardInterrupt:
-        p.terminate()
-    return results
-
-
-def find(char, string):
-    """
-    Return iterator of indices for positions in a string \
-    corresponding to a target character.
-
-    :param char: Target character whose positions you want
-        to locate in the string
-    :type char: str
-    :param string: String to search for the target character positions
-    :type string: str
-    :return: Indices in the string corresponding to the target character
-    :rtype: iterator
-    """
-    for i in range(len(string)):
-        if string[i] == char:
-            yield i
-
-
-def edit_distance(query, target):
-    """
-    Return Levenshtein distance between the two supplied strings.
-
-    :param query: Query string to compare against the target
-    :type query: str
-    :param target: Target string to compare against the query
-    :type target: str
-    :return: Calculated Levenshtein distance between query and target
-    :rtype: int
-    """
-    d = ed.eval(query, target)
-    return d
-
-
-def parse_probe_alignment(p_alignment, adapter1_probe_seq, args):
+def parse_probe_alignment(
+        p_alignment, adapter1_probe_seq, barcode_length, umi_length,
+        prefix_qual
+        ):
     """Parse probe alignment."""
     # Find the position of the Ns in the alignment. These correspond
     # to the cell barcode + UMI sequences bound by the read1 and polyT
-    idxs = list(find("N", p_alignment.traceback.ref))
-    if len(idxs) > 0:
+    bc_start = p_alignment.traceback.ref.find('N')
+    if bc_start > -1:
         # The Ns in the probe successfully aligned to sequence
-        bc_start = min(idxs)
-
         # The read1 adapter comprises the first part of the alignment
         adapter1 = p_alignment.traceback.query[0:bc_start]
-        adapter1_ed = edit_distance(adapter1, adapter1_probe_seq)
+        adapter1_ed = ed.eval(adapter1, adapter1_probe_seq)
 
         # The barcode + UMI sequences in the read correspond to the
         # positions of the aligned Ns in the probe sequence
-        barcode = p_alignment.traceback.query[
-            bc_start: (bc_start + args.barcode_length)
-        ]
+        barcode_umi_end = bc_start + barcode_length + umi_length
+        barcode_umi = p_alignment.traceback.query[
+            bc_start: barcode_umi_end]
+
+        barcode_umi_qual = prefix_qual[bc_start: barcode_umi_end]
+
+        # Split features and strip feature alignment string of deletions (-)
+        barcode = barcode_umi[:barcode_length].replace("-", "")
+        umi = barcode_umi[barcode_length:].replace("-", "")
+
+        barcode_q = barcode_umi_qual[:barcode_length]
+        barcode_q_ascii = "".join(map(lambda x: chr(x + 33), barcode_q))
+        bc_min_q = min(barcode_q)
+
+        umi_q = barcode_umi_qual[barcode_length:]
+        umi_q_ascii = "".join(map(lambda x: chr(x + 33), umi_q))
+
     else:
         # No Ns in the probe successfully aligned -- we will ignore this read
         adapter1_ed = len(adapter1_probe_seq)
         barcode = ""
-        bc_start = 0
+        umi = ""
+        barcode_q_ascii = ""
+        umi_q_ascii = ""
+        bc_min_q = 0
 
-    return adapter1_ed, barcode, bc_start
+    return adapter1_ed, barcode, umi, barcode_q_ascii, umi_q_ascii, bc_min_q
 
 
-def find_feature_qscores(feature, p_alignment, prefix_seq, prefix_qv):
+def align_adapter(args):
+    """Align a single adapter template to read and compute identity.
+
+    :param bam_path: BAM file
+    :param chrom: Chromosome/contig to process
+    :param: matrix: custom parasail alignment matrix
+    :returns: tuple containing two DataFrames
+        -  Index:  read_id', Columns: 'CR' 'CY
+        -  Index: barcode, Columns: count
     """
-    Use the parasail alignment results, find the qscores corresponding \
-    to the feature (e.g. barcode or UMI) positions in the read.
-
-    :param feature: Feature sequence identified from the parasail alignment
-    :type feature: str
-    :param p_alignment: Parasail alignment object
-    :type p_alignment: class 'parasail.bindings_v2.Result'
-    :param prefix_seq: Nucleotide sequence from the first <args.window> bp of
-        the read
-    :type prefix_seq: str
-    :param prefix_qv: Qscores from the first <args.window> bp of the read
-    :type prefix_qv: np.array
-    :return: Array of phred scale qscores from the identified feature region
-    :rtype: np.array
-    """
-    # Strip feature alignment string of insertions (-)
-    feature_no_ins = feature.replace("-", "")
-
-    # Find where the stripped feature starts and ends in the larger prefis_seq
-    prefix_seq_feature_start = prefix_seq.find(feature_no_ins)
-    prefix_seq_feature_end = prefix_seq_feature_start + len(feature_no_ins)
-
-    # Use these start/end indices to locate the correspoding qscores in
-    # prefix_qv
-    feature_qv = prefix_qv[prefix_seq_feature_start:prefix_seq_feature_end]
-    feature_qv_ascii = "".join(map(lambda x: chr(x + 33), feature_qv))
-
-    return feature_qv_ascii, min(feature_qv)
-
-
-def align_adapter(tup):
-    """
-    Align a single adapter template to the read an computes the \
-    identity for the alignment.
-
-    :param tup: Tuple containing the function arguments
-    :type tup: tup
-    :return: Path to temporary BAM containing CR and CY tags, plus a counter
-        tracking the number of each barcode that we encounter
-    :rtype: str, class 'collections.Counter'
-    """
-    bam_path = tup[0]
-    chrom = tup[1]
-    args = tup[2]
-
     # Build align matrix and define the probe sequence for alignments
-    matrix = update_matrix(args)
-    parasail_alg = parasail.sw_trace
+    matrix = update_matrix(
+        args.match, args.mismatch, args.acg_to_n_match, args.t_to_n_match)
 
     # Use only the specified suffix length of adapter1
     adapter1_probe_seq = args.adapter1_seq[-args.adapter1_suff_length:]
 
-    if (args.kit == "3prime") or (args.kit == "multiome"):
+    if args.kit in ("3prime", "multiome"):
         # Compile the actual probe sequence of
         # <adapter1_suffix>NNN...NNN<TTTTT....>
-        probe_seq = "{a1}{bc}{umi}{pT}".format(
+        probe_seq = "{a1}{bc}{umi}{pt}".format(
             a1=adapter1_probe_seq,
             bc="N" * args.barcode_length,
             umi="N" * args.umi_length,
-            pT="T" * args.polyT_length,
+            pt="T" * args.polyt_length,
         )
     elif args.kit == "5prime":
         # Compile the actual probe sequence of
@@ -389,145 +302,77 @@ def align_adapter(tup):
     else:
         raise Exception("Invalid kit name! Specify either 3prime or 5prime.")
 
-    # Write output BAM file
-    suff = f".{chrom}.bam"
-    chrom_bam = tempfile.NamedTemporaryFile(
-        prefix="tmp.align.", suffix=suff, dir=args.tempdir, delete=False
-    )
+    records = []
 
-    with AlignmentFile(str(bam_path), "rb") as bam:
-        with AlignmentFile(chrom_bam.name, "wb", template=bam) as bam_out:
+    with AlignmentFile(str(args.bam), "rb") as bam:
 
-            chrom_barcode_counts = collections.Counter()
+        barcode_counts = collections.Counter()
 
-            for align in bam.fetch(contig=chrom):
+        for align in bam.fetch(contig=args.contig):
 
-                prefix_seq = align.get_forward_sequence()[: args.window]
-                prefix_qv = align.get_forward_qualities()[: args.window]
+            prefix_seq = align.get_forward_sequence()[: args.window]
+            prefix_qv = align.get_forward_qualities()[: args.window]
 
-                p_alignment = parasail_alg(
-                    s1=prefix_seq,
-                    s2=probe_seq,
-                    open=args.gap_open,
-                    extend=args.gap_extend,
-                    matrix=matrix,
-                )
+            p_alignment = parasail.sw_trace(
+                s1=prefix_seq,
+                s2=probe_seq,
+                open=args.gap_open,
+                extend=args.gap_extend,
+                matrix=matrix,
+            )
 
-                adapter1_ed, barcode, bc_start = parse_probe_alignment(
-                    p_alignment, adapter1_probe_seq, args
-                )
+            adapter1_ed, barcode, umi, bc_qscores, umi_qscores, bc_min_qv \
+                = parse_probe_alignment(
+                    p_alignment, adapter1_probe_seq, args.barcode_length,
+                    args.umi_length, prefix_qv
+                    )
 
-                # Require minimum read1 edit distance
-                if adapter1_ed <= args.max_adapter1_ed:
-                    qscores, min_qv = find_feature_qscores(
-                        barcode, p_alignment, prefix_seq, prefix_qv)
+            # Require minimum read1 edit distance
+            if adapter1_ed <= args.max_adapter1_ed:
 
-                    if min_qv >= args.min_barcode_qv:
-                        chrom_barcode_counts[barcode] += 1
-                    # Strip out insertions from align to get read barcode seq
-                    barcode = barcode.replace("-", "")
+                if bc_min_qv >= args.min_barcode_qv:
+                    barcode_counts[barcode] += 1
+                    # nh: I think if we are not including a barcode in the
+                    # count due to low min qual, then we should also be
+                    # ommiting from the records -or is it filtered out later?
+                records.append(
+                    (align.query_name, barcode, bc_qscores, umi, umi_qscores))
 
-                    # Uncorrected cell barcode = CR:Z
-                    align.set_tag("CR", barcode, value_type="Z")
-                    # Cell barcode quality score = CY:Z
-                    align.set_tag("CY", qscores, value_type="Z")
-
-                    # Only write BAM entry in output file if it will have
-                    # CR and CY tags
-                    bam_out.write(align)
-
-    return chrom_bam.name, chrom_barcode_counts
-
-
-def load_superlist(superlist):
-    """
-    Read contents of the file containing all possible cell barcode sequences. \
-    File can be uncompressed or gzipped.
-
-    :param superlist: Path to file containing all possible cell barcodes, e.g.
-        3M-february-2018.txt
-    :type superlist: Path
-    :return: Set of all possible cell barcodes
-    :rtype: set
-    """
-    ext = superlist.suffix
-    fn = superlist.name
-    wl = []
-    if ext == ".gz":
-        with gzip.open(superlist, "rt") as file:
-            for line in tqdm(
-                    file,
-                    desc=f"Loading barcodes in {fn}",
-                    unit=" barcodes"):
-                wl.append(line.strip())
-    elif ext == ".txt":
-        with open(superlist) as file:
-            for line in tqdm(
-                    file,
-                    desc=f"Loading barcodes in {fn}",
-                    unit=" barcodes"):
-                wl.append(line.strip())
-    wl = set(wl)
-    return wl
+    bc_tags = pd.DataFrame.from_records(
+        records, columns=['read_id', 'CR', 'CY', 'UR', 'UY'])
+    bc_counts = pd.DataFrame.from_dict(
+        barcode_counts,
+        columns=['count'],
+        orient='index').sort_values('count', ascending=False)
+    return bc_tags, bc_counts
 
 
 def main(args):
     """Run entry point."""
     logger = get_named_logger('ExtractBC')
     args.adapter1_seq = kit_adapters[args.kit]['adapter1']
+    wl = pd.read_csv(args.superlist, header=None).iloc[:, 0].values
 
-    # Create temp dir and add that to the args object
-    p = args.output_bam
-    output_dir = p.parents[0]
-    tempdir = tempfile.TemporaryDirectory(prefix="tmp.", dir=output_dir)
-    args.tempdir = tempdir.name
-
-    wl = load_superlist(args.superlist)
-
-    # Create temporary directory
-    if os.path.exists(args.tempdir):
-        shutil.rmtree(args.tempdir, ignore_errors=True)
-    os.mkdir(args.tempdir)
-
-    # Process BAM alignments from each chrom separately
     logger.info(f"Extracting uncorrected barcodes from {args.bam}")
-    func_args = []
 
-    func_args.append((str(args.bam), args.contig, args))
-
-    results = launch_pool(align_adapter, func_args, args.threads)
-    chrom_bam_fns, chrom_barcode_counts = list(zip(*results))
-    barcode_counts = sum(chrom_barcode_counts, collections.Counter())
+    read_tags, barcode_counts = align_adapter(args)
 
     # Filter barcode counts against barcode superlist
     logger.info(
-        f"Writing superlist-filtered barcode counts to {args.output_barcodes}")
-    f_barcode_counts = open(args.output_barcodes, "w")
-    barcode_counts_sorted = sorted(
-        barcode_counts.items(), key=lambda item: item[1], reverse=True
-    )
-    for barcode, n in barcode_counts_sorted:
-        if barcode in wl:
-            f_barcode_counts.write(f"{barcode}\t{n}\n")
-    f_barcode_counts.close()
+        f"Writing superlist-filtered barcode counts to "
+        f"{args.output_barcode_counts}")
+
+    bc_counts = barcode_counts[barcode_counts.index.isin(wl)]
+    bc_counts.to_csv(
+        args.output_barcode_counts, index=True, sep='\t', header=False)
 
     logger.info(
-        f"Writing BAM with uncorrected barcode tags to {args.output_bam}")
-    tmp_bam = tempfile.NamedTemporaryFile(
-        prefix="tmp.align.",
-        suffix=".unsorted.bam",
-        dir=args.tempdir,
-        delete=False)
-    merge_parameters = ["-f", tmp_bam.name] + list(chrom_bam_fns)
-    pysam.merge(*merge_parameters)
-
-    pysam.sort(
-        "-@", str(args.threads), "-o", str(args.output_bam), tmp_bam.name)
-
-    logger.info("Cleaning up temporary files")
-    shutil.rmtree(args.tempdir, ignore_errors=True)
+        f"Writing BAM with uncorrected barcode tags to "
+        f"{args.output_read_tags}")
+    read_tags.to_csv(
+        args.output_read_tags, index=False, sep='\t', header=False)
 
 
 if __name__ == "__main__":
-    args = argparser().parse_args()
-    main(args)
+    args_ = argparser().parse_args()
+    main(args_)

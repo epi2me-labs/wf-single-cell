@@ -214,7 +214,7 @@ def group_directional(clusters, adj_list, counts):
     return groups
 
 
-def cluster(counts_dict, threshold=3):
+def cluster(counts_dict, threshold=2):
     """Cluster."""
     adj_list = get_adj_list_directional(
         counts_dict.keys(), counts_dict, threshold)
@@ -242,7 +242,7 @@ def correct_umis(umis):
     return umis.replace(umi_map)
 
 
-def add_tags(chrom, umis, genes, transcripts, args):
+def add_tags(chrom, umis, genes, transcripts, tags, args):
     """
     Add tags.
 
@@ -255,7 +255,7 @@ def add_tags(chrom, umis, genes, transcripts, args):
     with pysam.AlignmentFile(args.bam, "rb") as bam:
         with pysam.AlignmentFile(bam_out_fn, "wb", template=bam) as bam_out:
 
-            for align in bam.fetch(chrom):
+            for align in bam.fetch(contig=chrom):
                 read_id = align.query_name
 
                 if (umis.get(read_id) is not None) & \
@@ -263,18 +263,26 @@ def add_tags(chrom, umis, genes, transcripts, args):
 
                     # TODO: Allow transcripts to be added to tags even
                     # if no gene if found
-
+                    # Uncorrectred cell barcode
+                    align.set_tag('CR', tags.at[read_id, 'CR'], value_type="Z")
+                    # Correctred cell barcode
+                    align.set_tag('CB', tags.at[read_id, 'CB'], value_type="Z")
+                    # barcode qscores
+                    align.set_tag('CY', tags.at[read_id, 'CY'], value_type="Z")
+                    # Uncorrected UMI
+                    align.set_tag('UR', tags.at[read_id, 'UR'], value_type="Z")
+                    # UMI quality score
+                    align.set_tag('UY', tags.at[read_id, 'UY'], value_type="Z")
                     # Corrected UMI = UB:Z
                     align.set_tag("UB", umis[read_id], value_type="Z")
                     # Annotated gene name = GN:Z
                     align.set_tag("GN", genes[read_id], value_type="Z")
-
-                    # Annotated transwcript name = TR:Z
+                    # Annotated transcript name = TR:Z
                     align.set_tag("TR", transcripts[read_id], value_type="Z")
 
-                    # Up to this point in the workflow, reads are in reverse
-                    # orientation relative to mRNA. Toggle reverse flag
-                    # for the output bams
+                    # Up to this point in the workflow the reads are in reverse
+                    # orientation in relation to the mRNA.
+                    # Flip this for the output BAMs.
                     align.flag ^= 16  # reverse read alignment flag
 
                     bam_out.write(align)
@@ -287,28 +295,6 @@ def add_tags(chrom, umis, genes, transcripts, args):
 
     header = ['read_id', 'gene', 'transcript', 'barcode', 'umi']
     return pd.DataFrame.from_records(read_tags, columns=header)
-
-
-def get_bam_info(bam):
-    """
-    Get bam info.
-
-    Use `samtools idxstat` to get number of alignments and names of all contigs
-    in the reference.
-
-    :param bam: Path to sorted BAM file
-    :type bame: str
-    :return: Sum of all alignments in the BAM index file and list of all chroms
-    :rtype: int,list
-    """
-    with pysam.AlignmentFile(bam, "rb") as bam:
-        stats = bam.get_index_statistics()
-        n_aligns = int(sum([contig.mapped for contig in stats]))
-        chroms = dict(
-            [(contig.contig, contig.mapped)
-                for contig in stats if contig.mapped > 0])
-
-    return n_aligns, chroms
 
 
 def create_region_name(read, args):
@@ -491,7 +477,7 @@ def process_records(tag_file, args):
     transcripts = df.to_dict()["transcript"]
 
     # Add corrected UMIs to each chrom-specific BAM entry via the UB:Z tag
-    read_tags = add_tags(args.chrom, umis, genes, transcripts, args)
+    read_tags = add_tags(args.chrom, umis, genes, transcripts, tags, args)
     read_tags['sample_id'] = args.sample_id
     read_tags.to_csv(args.output_read_tags, sep='\t', index=False)
 
