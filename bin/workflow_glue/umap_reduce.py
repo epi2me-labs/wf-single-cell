@@ -72,7 +72,8 @@ def argparser():
 
 def pca(x, args):
     """Run PCA to generate args.pcn principal components."""
-    pcn = min(args.pcn, x.shape[1])  # pcn must not exceed N features
+    # pcn must not exceed N samples or features
+    pcn = min(args.pcn, x.shape[0], x.shape[1])
     transformer = IncrementalPCA(n_components=pcn)
     return transformer.fit_transform(x)
 

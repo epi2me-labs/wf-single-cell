@@ -586,6 +586,13 @@ def main(args):
     if not shutil.which('vsearch'):
         raise OSError('vsearch installation not found')
 
+    # Create temp dir and add that to the args object
+    p = Path(args.output_tsv)
+    tempdir = tempfile.TemporaryDirectory(prefix="tmp.", dir=p.parents[0])
+    args.tempdir = tempdir.name
+    if not shutil.which('vsearch'):
+        raise OSError('vsearch installation not found')
+
     # If specified batch size is > total number of reads, reduce batch size
     logger.debug("Counting reads")
     n_reads = count_reads(args.fastq)

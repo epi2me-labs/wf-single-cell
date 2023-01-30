@@ -34,12 +34,11 @@ process extract_barcodes{
     output:
         // TODO: Do not write bams. Write mapping of read_id to barcode
         tuple val(meta.sample_id), 
-              path("*.bc_extract.sorted.bam"), 
-              path("*.bc_extract.sorted.bam.bai"), 
+              path("*.bc_extract.sorted.tsv"),
               val(chrom),
-              emit: bam_bc_uncorr
+              emit: bc_uncorr_tsv
         tuple val(meta.sample_id),
-              path("*.tsv"), emit: barcode_counts
+              path("*.uncorrected_bc_counts.tsv"), emit: barcode_counts
 
     """
     workflow-glue extract_barcode \
@@ -50,11 +49,9 @@ process extract_barcodes{
     --min_barcode_qv $params.barcode_min_quality \
     --barcode_length ${meta['barcode_length']} \
     --umi_length ${meta['umi_length']} \
-    --output_bam "${meta.sample_id}.bc_extract.sorted.bam" \
-    --output_barcodes "${meta.sample_id}.${chrom}.uncorrected_bc_counts.tsv" \
+    --output_read_tags "${meta.sample_id}.bc_extract.sorted.tsv" \
+    --output_barcode_counts "${meta.sample_id}.${chrom}.uncorrected_bc_counts.tsv" \
     --contig ${chrom}
-
-    samtools index "${meta.sample_id}.bc_extract.sorted.bam"
     """
 }
 
@@ -88,13 +85,9 @@ process assign_barcodes{
                val(meta),
                path("align.bam"),
                path("align.bam.bai"),
+               path("extract_barcodes.tsv"),
                val(chr)
     output:
-        tuple val(meta.sample_id), 
-            val(chr),
-            path("*.bc_assign.bam"),
-            path("*.bc_assign.bam.bai"),
-            emit: chrom_bam_bc_bai
         tuple val(meta.sample_id),
               val(chr),
               path("*.bc_assign_counts.tsv"), 
@@ -105,8 +98,6 @@ process assign_barcodes{
               emit: bc_ur_tags
     """
     workflow-glue assign_barcodes \
-        -t ${task.cpus} \
-        --output_bam "${meta.sample_id}_${chr}.bc_assign.bam" \
         --output_tags "${meta.sample_id}_${chr}.bc_ur_tags.tsv" \
         --output_counts "${meta.sample_id}_${chr}.bc_assign_counts.tsv" \
         --max_ed $params.barcode_max_ed \
@@ -116,10 +107,9 @@ process assign_barcodes{
         --barcode_length ${meta['barcode_length']} \
         --umi_length ${meta['umi_length']} \
         --contig ${chr} \
+        --extract_barcode_tags extract_barcodes.tsv \
         align.bam whitelist.tsv
-    
-    samtools index "${meta.sample_id}_${chr}.bc_assign.bam"
-"""
+    """
 }
 
 process split_gtf_by_chroms {
@@ -159,9 +149,9 @@ process cluster_umis {
     cpus params.umi_cluster_max_threads
     input:
         tuple val(sample_id),
+              path("align.bam"),
+              path("align.bam.bai"),
               val(chr),
-              path("chr.bam"),
-              path("chr.bam.bai"),
               path("chrom_gene_assigns.tsv"),
               path("chrom_tr_assigns.tsv"),
               path(bc_ur_tags)
@@ -175,7 +165,7 @@ process cluster_umis {
               emit: tags
     """
     workflow-glue cluster_umis \
-    chr.bam \
+    align.bam \
     --threads $task.cpus \
     --chrom ${chr} \
     --ref_interval $params.umi_genomic_interval \
@@ -190,6 +180,23 @@ process cluster_umis {
     samtools index "${sample_id}_${chr}.tagged.bam"
     """
 }
+
+process combine_tag_files {
+    // collectFile does 'name' argument does not work when being applied to
+    // A channel that returns tuples. It groups and names according to the
+    // first element of the tuple. Hence this process.
+    label "singlecell"
+    input:
+        tuple val(sample_id),
+              path("tags*.tsv")
+        output:
+            tuple val(sample_id),
+                  path("${sample_id}_read_tags.tsv")
+    """
+    awk 'FNR>1 || NR==1' *.tsv > "${sample_id}_read_tags.tsv"
+    """
+}
+
 
 
 process combine_chrom_bams {
@@ -219,9 +226,9 @@ process stringtie {
         path 'ref_genome.fa'
         path 'ref_genome.fa.fai'
         tuple val(sample_id),
-              val(chr),
               path("align.bam"),
               path("align.bam.bai"),
+              val(chr),
               path("chr.gtf")
     output:
         tuple val(sample_id),
@@ -234,7 +241,7 @@ process stringtie {
               emit: read_tr_map
     """
     # Build transcriptome. 
-    samtools view -h align.bam  \
+    samtools view -h align.bam ${chr}  \
         | tee >(stringtie -L  -p ${task.cpus} -G chr.gtf -l stringtie \
             -o stringtie.gff - ) \
         | samtools fastq - \
@@ -547,8 +554,9 @@ workflow process_bams {
 
         assign_barcodes(generate_whitelist.out.whitelist
             .join(meta)
-            .cross(extract_barcodes.out.bam_bc_uncorr)
-            .map {it -> it.flatten()[1, 2, 4, 5, 6]})
+            .join(bam)
+            .cross(extract_barcodes.out.bc_uncorr_tsv)
+            .map {it -> it.flatten()[1, 2, 3, 4, 6, 7]})
 
         // combine all chr bams with chr gtfs
         chr_beds_gtf = chr_gtf.cross(
@@ -559,14 +567,10 @@ workflow process_bams {
 
         assign_genes(chr_beds_gtf)
 
-        stringtie( 
+        stringtie(
             ref_genome_fasta,
             ref_genome_idx,
-            chr_gtf
-                .cross(
-                    assign_barcodes.out.chrom_bam_bc_bai
-                    .map {it -> it[1, 0, 2, 3]}
-                ).map {it -> it.flatten()[3, 0, 4, 5, 1]})
+            bam.combine(chr_gtf))
         
         align_to_transcriptome(
             stringtie.out.read_tr_map
@@ -575,17 +579,18 @@ workflow process_bams {
         assign_transcripts {
             align_to_transcriptome.out.read_tr_map
         }
-        
+
         cluster_umis(
-            assign_barcodes.out.chrom_bam_bc_bai
+            bam.cross(
+            // Cross on sample_id
+            assign_genes.out.chrom_tsv_gene_assigns
             //join on sample_id + chr
-            .join(assign_genes.out.chrom_tsv_gene_assigns, by:[0, 1])
             .join(assign_transcripts.out.transcript_assigns, by: [0, 1])
             .join(assign_barcodes.out.bc_ur_tags, by: [0, 1]))
-        
-        read_tags = cluster_umis.out.tags.collectFile(
-            keepHeader: true, name: "umis")
-            .map {it -> [it.name, it]}
+            .map {it -> it.flatten()[0, 1, 2, 4, 5, 6, 7]})
+
+        read_tags = combine_tag_files(
+            cluster_umis.out.tags.groupTuple())
 
         umi_gene_saturation(read_tags)
 
