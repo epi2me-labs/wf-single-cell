@@ -4,10 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v0.2.0]
 ### Added
-- workflow-glue to allow script to be run as a module.
+- workflow-glue to allow scripts to be run as a module.
 - pytest testing using workflow container.
+### Fixed
+- Incorrectly stranded reads causing stringtie2 to generate incorrect transcripts.
+### Changed
+- Combine barcode and umi extraction into single step.
 
 ## [v0.1.9]
 ### Fixed
@@ -22,9 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated description in manifest.
 
 ## [v0.1.6]
-## Added
+### Added
 - A workflow report using ezcharts.
-## Chnaged
+### Changed
 - Updates for the new Labs Launcher.
 
 ## [v0.1.5]

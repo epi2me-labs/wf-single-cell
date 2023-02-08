@@ -20,7 +20,7 @@ docker-run:
     parallel:
       matrix:
         - MATRIX_NAME: [
-          "standard_run",
+          "standard",
           "integration-test"
         ]
     rules:
@@ -37,13 +37,11 @@ docker-run:
 
 integration_test:
   extends: .branchsetup-alpine
-  dependencies:
-    - docker-run
+  dependencies: ["docker-run: [integration-test]"]
   stage: post-test
   script:
     - echo "ls" && ls
     - ls wf-single-cell
     - SHA=$(./nextflow config -properties|grep ${PYTEST_CONTAINER_CONFIG_KEY}|awk -F= '{print $2}')
     - IMAGE="${DOCKERHUB_NAMESPACE}/${CI_PROJECT_NAME}:${SHA}"
-    - docker run -v ${PWD}:/host $IMAGE pytest /host/bin/workflow_glue/tests/workflow_integration.py;
-
+    - docker run -v ${PWD}:/host $IMAGE pytest /host/test/workflow_integration.py;

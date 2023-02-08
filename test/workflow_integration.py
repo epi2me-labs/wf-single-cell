@@ -32,9 +32,15 @@ def test_workflow(wf_out_dir, sample_id):
     df[['true_gene', 'true_transcript', 'true_bc', 'true_umi', 'true_status', '_']] \
         = df['read_id'].str.split('|', expand=True)
 
-    # Check barcode and umis are correctly identified
+    # Check barcode and umis are correctly identified. Allow for 2 incorrect values
     df_barcode_mismatches = df[df.barcode != df.true_bc]
-    assert (len(df_barcode_mismatches) < 2)
+    assert len(df_barcode_mismatches) < 2
 
     df_umi_mismatches = df[df.true_umi != df.umi]
-    assert (len(df_umi_mismatches) < 2)
+    assert len(df_umi_mismatches) < 2
+
+    # We should be getting more than 85% of the transcritps correctly called,
+    # especially on this contrived synthetic dataset.
+    df_tr_matches = df[df.transcript == df.true_transcript]
+    perc_correct = 100 / len(df) * len(df_tr_matches)
+    assert perc_correct > 85.0
