@@ -50,7 +50,7 @@ def process_tag_tsv(read_tags_tsv):
 
     df_gene = process_dataframe('gene')
     df_transcript = process_dataframe('transcript')
-    df_transcript = df_transcript.drop('-')
+    df_transcript = df_transcript.drop('-', errors='ignore')
 
     return df_gene, df_transcript
 

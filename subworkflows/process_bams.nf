@@ -241,7 +241,7 @@ process stringtie {
               emit: read_tr_map
     """
     # Build transcriptome. 
-    samtools view -h align.bam ${chr}  \
+    workflow-glue process_bam_for_stringtie align.bam ${chr}  \
         | tee >(stringtie -L  -p ${task.cpus} -G chr.gtf -l stringtie \
             -o stringtie.gff - ) \
         | samtools fastq - \
