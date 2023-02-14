@@ -48,6 +48,7 @@ process extract_barcodes{
     --adapter1_suff_length $params.barcode_adapter1_suff_length \
     --min_barcode_qv $params.barcode_min_quality \
     --barcode_length ${meta['barcode_length']} \
+    --barcode_length ${meta['barcode_length']} \
     --umi_length ${meta['umi_length']} \
     --output_read_tags "${meta.sample_id}.bc_extract.sorted.tsv" \
     --output_barcode_counts "${meta.sample_id}.${chrom}.uncorrected_bc_counts.tsv" \
@@ -81,34 +82,27 @@ process assign_barcodes{
     label "singlecell"
     cpus 1
     input:
-         tuple path("whitelist.tsv"),
-               val(meta),
-               path("align.bam"),
-               path("align.bam.bai"),
+         tuple val(sample_id),
+               path("whitelist.tsv"),
                path("extract_barcodes.tsv"),
                val(chr)
     output:
-        tuple val(meta.sample_id),
+        tuple val(sample_id),
               val(chr),
-              path("*.bc_assign_counts.tsv"), 
+              path("bc_assign_counts.tsv"),
               emit: chrom_assigned_barcode_counts
-        tuple val(meta.sample_id),
+        tuple val(sample_id),
               val(chr),
-              path("*bc_ur_tags.tsv"),
-              emit: bc_ur_tags
+              path("extract_barcodes_with_bc.tsv"),
+              emit: tags
     """
     workflow-glue assign_barcodes \
-        --output_tags "${meta.sample_id}_${chr}.bc_ur_tags.tsv" \
-        --output_counts "${meta.sample_id}_${chr}.bc_assign_counts.tsv" \
+        --output_tags extract_barcodes_with_bc.tsv \
+        --output_counts bc_assign_counts.tsv \
         --max_ed $params.barcode_max_ed \
         --min_ed_diff $params.barcode_min_ed_diff \
-        --kit ${meta['kit_name']} \
-        --adapter1_suff_length $params.barcode_adapter1_suff_length \
-        --barcode_length ${meta['barcode_length']} \
-        --umi_length ${meta['umi_length']} \
-        --contig ${chr} \
         --extract_barcode_tags extract_barcodes.tsv \
-        align.bam whitelist.tsv
+        --whitelist whitelist.tsv
     """
 }
 
@@ -552,11 +546,10 @@ workflow process_bams {
             .join(meta).map {it -> it.tail()} // Remove sample_id
         )
 
-        assign_barcodes(generate_whitelist.out.whitelist
-            .join(meta)
-            .join(bam)
-            .cross(extract_barcodes.out.bc_uncorr_tsv)
-            .map {it -> it.flatten()[1, 2, 3, 4, 6, 7]})
+        assign_barcodes(
+            generate_whitelist.out.whitelist
+            .join(extract_barcodes.out.bc_uncorr_tsv)
+       )
 
         // combine all chr bams with chr gtfs
         chr_beds_gtf = chr_gtf.cross(
@@ -586,7 +579,7 @@ workflow process_bams {
             assign_genes.out.chrom_tsv_gene_assigns
             //join on sample_id + chr
             .join(assign_transcripts.out.transcript_assigns, by: [0, 1])
-            .join(assign_barcodes.out.bc_ur_tags, by: [0, 1]))
+            .join(assign_barcodes.out.tags, by: [0, 1]))
             .map {it -> it.flatten()[0, 1, 2, 4, 5, 6, 7]})
 
         read_tags = combine_tag_files(
