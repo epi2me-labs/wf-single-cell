@@ -53,7 +53,7 @@ def make_bam(
 
 @fixture
 def make_superlist():
-    """Make a samll superlist(whitrlist) of barcodes."""
+    """Make a samll superlist(whitelist) of barcodes."""
     superlist = (
         "AAACCCAAGAAACACT\n"
         "AAACCCAAGAAACCAT")
@@ -94,9 +94,9 @@ def args(make_superlist):
 def test_main(args):
     """Test the final output from main()."""
     counts_file = tempfile.NamedTemporaryFile(
-            mode='w', suffix='.tsv', delete=False)
+            mode='w', suffix='.tsv')
     tags_file = tempfile.NamedTemporaryFile(
-        mode='w', suffix='.tsv', delete=False)
+        mode='w', suffix='.tsv')
 
     args.bam = make_bam(read_adapter1=args.adapter1_seq)
 
@@ -110,12 +110,11 @@ def test_main(args):
     assert counts_result.iat[0, 0] == 'AAACCCAAGAAACACT'
     assert counts_result.iat[0, 1] == 1
 
-    tags_result = pd.read_csv(
-        tags_file.name, sep='\t',
-        names=['read_id', 'bc', 'bc_qual', 'umi', 'umi_qual'])
-    assert tags_result.shape == (1, 5)
-    assert tags_result.iloc[0].bc == 'AAACCCAAGAAACACT'
-    assert tags_result.iloc[0].umi == 'GACTGACTGACT'
+    tags_result = pd.read_csv(tags_file.name, sep='\t', index_col=0)
+
+    assert tags_result.shape == (1, 7)
+    assert tags_result.loc['test_id', 'CR'] == 'AAACCCAAGAAACACT'
+    assert tags_result.loc['test_id', 'UR'] == 'GACTGACTGACT'
 
     # TODO: test if barcode missing from superlist
 
@@ -123,9 +122,9 @@ def test_main(args):
 @pytest.mark.parametrize(
     'adapter1_seq,tags_results_shape,counts_results_shape',
     [
-        ['CTACACGACGCTCTTCCGATCT', (1, 5), (1, 1)],  # ED 0
-        ['CTACACGACGCTCTTCCGAggg', (1, 5), (1, 1)],  # ED 3
-        ['CTACACGACGCTCTTCCGgggg', (0, 5), (0, 1)]   # ED 4
+        ['CTACACGACGCTCTTCCGATCT', (1, 8), (1, 1)],  # ED 0
+        ['CTACACGACGCTCTTCCGAggg', (1, 8), (1, 1)],  # ED 3
+        ['CTACACGACGCTCTTCCGgggg', (0, 8), (0, 1)]   # ED 4
     ]
 )
 def test_align_adapter(args, adapter1_seq, tags_results_shape, counts_results_shape):

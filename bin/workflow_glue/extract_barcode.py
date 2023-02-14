@@ -336,10 +336,13 @@ def align_adapter(args):
                     # count due to low min qual, then we should also be
                     # ommiting from the records -or is it filtered out later?
                 records.append(
-                    (align.query_name, barcode, bc_qscores, umi, umi_qscores))
+                    (align.query_name, barcode, bc_qscores,
+                     umi, umi_qscores, args.contig,
+                     align.get_reference_positions()[0],
+                     align.get_reference_positions()[-1]))
 
     bc_tags = pd.DataFrame.from_records(
-        records, columns=['read_id', 'CR', 'CY', 'UR', 'UY'])
+        records, columns=['read_id', 'CR', 'CY', 'UR', 'UY', 'chr', 'start', 'end'])
     bc_counts = pd.DataFrame.from_dict(
         barcode_counts,
         columns=['count'],
@@ -370,9 +373,4 @@ def main(args):
         f"Writing BAM with uncorrected barcode tags to "
         f"{args.output_read_tags}")
     read_tags.to_csv(
-        args.output_read_tags, index=False, sep='\t', header=False)
-
-
-if __name__ == "__main__":
-    args_ = argparser().parse_args()
-    main(args_)
+        args.output_read_tags, index=False, sep='\t')
