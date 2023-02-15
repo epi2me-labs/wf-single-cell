@@ -548,7 +548,8 @@ workflow process_bams {
 
         assign_barcodes(
             generate_whitelist.out.whitelist
-            .join(extract_barcodes.out.bc_uncorr_tsv)
+            .cross(extract_barcodes.out.bc_uncorr_tsv)
+            .map {it -> it.flatten()[0, 1, 3, 4]}
        )
 
         // combine all chr bams with chr gtfs

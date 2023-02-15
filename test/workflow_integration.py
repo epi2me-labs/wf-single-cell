@@ -28,6 +28,10 @@ def test_workflow(wf_out_dir, sample_id):
 
     df = pd.read_csv(read_tags, sep='\t')
 
+    # As all reads should be assigned a barcode and UMI, there should be the
+    # same number of output rows (2050).
+    assert len(df) == 2050
+
     # Extract the expected values from the read_id
     df[['true_gene', 'true_transcript', 'true_bc', 'true_umi', 'true_status', '_']] \
         = df['read_id'].str.split('|', expand=True)
