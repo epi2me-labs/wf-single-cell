@@ -82,17 +82,9 @@ def argparser():
     )
 
     parser.add_argument(
-        "--gene_assigns",
-        help="TSV read/gene assignments file. \
-        IMPORTANT: reads in the input BAM and gene_assigns file must have the \
-        same order.",
-        type=Path,
-    ),
-
-    parser.add_argument(
-        "--transcript_assigns",
-        help="TSV read/transcript assignments file. \
-        IMPORTANT: reads in the input BAM and gene_assigns file must have the \
+        "--feature_assigns",
+        help="TSV read gene/transcript assignments file. \
+        IMPORTANT: reads in the input BAM and feature_assigns file must have \
         same order.",
         type=Path,
     ),
@@ -100,8 +92,8 @@ def argparser():
     parser.add_argument(
         "--bc_ur_tags",
         help="TSV read/BC/UR tag assignments file. \
-        IMPORTANT: reads in the input BAM and gene_assigns file must have the \
-        same order? .",
+        IMPORTANT: reads in the input BAM and feature_assigns file must have \
+        the same order? .",
         type=Path,
     ),
 
@@ -383,23 +375,11 @@ def process_records(tag_file, args):
     """
     tags = pd.read_csv(tag_file, sep='\t', index_col=0)
 
-    ga_header = ['read_id', 'status', 'mapq', 'gene']
-    gene_assigns = pd.read_csv(
-        args.gene_assigns, sep='\t', names=ga_header, index_col=0,
+    df_features = pd.read_csv(
+        args.feature_assigns, sep='\t', index_col=0,
         keep_default_na=False)
 
-    try:
-        transcript_assigns = pd.read_csv(
-            args.transcript_assigns, sep='\t', index_col=0,
-            keep_default_na=False)
-    except pd.errors.EmptyDataError:
-        transcript_assigns = pd.DataFrame()
-
-    df = gene_assigns.merge(
-        transcript_assigns,
-        left_index=True,
-        right_index=True,
-    ).merge(
+    df = df_features.merge(
         tags,
         left_index=True,
         right_index=True,
@@ -419,13 +399,10 @@ def process_records(tag_file, args):
 
         gene = row.gene
 
-        if transcript_assigns is not None:
-            transcript = transcript_assigns.loc[read_id, 'ref_id']
-        else:
-            transcript = '-'
+        transcript = row.transcript
 
         # If no gene annotation exists
-        if gene == "NA":
+        if gene == "-":
             # Group by region if no gene annotation
             gene = create_region_name(row, args)
 

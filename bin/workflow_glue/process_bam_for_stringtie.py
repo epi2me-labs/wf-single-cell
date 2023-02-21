@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Preprocess bam ready for transcript assemble with stringtie.
 
-Toggle the reverse flag to effectively invert the alignment to correct
+Toggle the reverese flag to effectively invert the alignment to put in correct
 orientation for stringtie.
 """
 from pysam import AlignmentFile as AlnFile

@@ -309,7 +309,6 @@ def align_adapter(args):
         barcode_counts = collections.Counter()
 
         for align in bam.fetch(contig=args.contig):
-
             prefix_seq = align.get_forward_sequence()[: args.window]
             prefix_qv = align.get_forward_qualities()[: args.window]
 
@@ -339,10 +338,12 @@ def align_adapter(args):
                     (align.query_name, barcode, bc_qscores,
                      umi, umi_qscores, args.contig,
                      align.get_reference_positions()[0],
-                     align.get_reference_positions()[-1]))
+                     align.get_reference_positions()[-1],
+                     align.mapping_quality))
 
     bc_tags = pd.DataFrame.from_records(
-        records, columns=['read_id', 'CR', 'CY', 'UR', 'UY', 'chr', 'start', 'end'])
+        records, columns=[
+            'read_id', 'CR', 'CY', 'UR', 'UY', 'chr', 'start', 'end', 'mapq'])
     bc_counts = pd.DataFrame.from_dict(
         barcode_counts,
         columns=['count'],
