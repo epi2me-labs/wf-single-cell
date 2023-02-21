@@ -203,7 +203,6 @@ workflow pipeline {
 
         process_bams(
             align.out.bam_sort,
-            align.out.chr_beds,
             meta,
             ref_genes_gtf,
             umap_genes,

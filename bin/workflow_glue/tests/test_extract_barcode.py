@@ -112,7 +112,7 @@ def test_main(args):
 
     tags_result = pd.read_csv(tags_file.name, sep='\t', index_col=0)
 
-    assert tags_result.shape == (1, 7)
+    assert tags_result.shape == (1, 8)
     assert tags_result.loc['test_id', 'CR'] == 'AAACCCAAGAAACACT'
     assert tags_result.loc['test_id', 'UR'] == 'GACTGACTGACT'
 
@@ -122,9 +122,9 @@ def test_main(args):
 @pytest.mark.parametrize(
     'adapter1_seq,tags_results_shape,counts_results_shape',
     [
-        ['CTACACGACGCTCTTCCGATCT', (1, 8), (1, 1)],  # ED 0
-        ['CTACACGACGCTCTTCCGAggg', (1, 8), (1, 1)],  # ED 3
-        ['CTACACGACGCTCTTCCGgggg', (0, 8), (0, 1)]   # ED 4
+        ['CTACACGACGCTCTTCCGATCT', (1, 9), (1, 1)],  # ED 0
+        ['CTACACGACGCTCTTCCGAggg', (1, 9), (1, 1)],  # ED 3
+        ['CTACACGACGCTCTTCCGgggg', (0, 9), (0, 1)]   # ED 4
     ]
 )
 def test_align_adapter(args, adapter1_seq, tags_results_shape, counts_results_shape):

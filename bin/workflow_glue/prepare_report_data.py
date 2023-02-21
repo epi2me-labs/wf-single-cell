@@ -14,10 +14,10 @@ def argparser():
 
     parser.add_argument(
         "--sample_id",
-        help="TSV with read id gene, transcript, barcode, umi assignments ")
+        help="ID of the sample being processed")
     parser.add_argument(
         "--read_tags",
-        help="TSV with read id gene, transcript, barcode, umi assignments ")
+        help="TSV with read id gene, transcript, barcode, umi assignments")
     parser.add_argument(
         "--config_stats",
         help="Workflow sumamry statistics")

@@ -36,22 +36,13 @@ process align_to_ref {
             path("*sorted.bam"), 
             path("*sorted.bam.bai"), 
             emit: bam_sort
-        tuple val(sample_id),
-              path("beds/*.bed"),
-              emit: chr_beds
     """
      minimap2 -ax splice -uf --MD -t $task.cpus \
       --junc-bed ref_genes.bed $params.resources_mm2_flags  \
       ref_genome.fasta reads.fastq* \
         | samtools view -F 2304 -b --no-PG -t ref_chrom_sizes - \
-        | samtools sort -@ 2 --no-PG  - \
-            | tee "${sample_id}_sorted.bam" \
-        | bedtools bamtobed -i stdin \
-        | gawk '/^[^#]/ {print>\$1".bed"}'
+        | samtools sort -@ 2 --no-PG  - > "${sample_id}_sorted.bam"
     samtools index -@ ${task.cpus} "${sample_id}_sorted.bam"
-
-    mkdir beds
-    mv *.bed beds
     """
 }
 
@@ -73,5 +64,4 @@ workflow align {
             get_chrom_sizes.out.ref_chrom_sizes)
     emit:
         bam_sort = align_to_ref.out.bam_sort
-        chr_beds =  align_to_ref.out.chr_beds
 }

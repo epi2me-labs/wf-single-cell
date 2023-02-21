@@ -48,7 +48,6 @@ process extract_barcodes{
     --adapter1_suff_length $params.barcode_adapter1_suff_length \
     --min_barcode_qv $params.barcode_min_quality \
     --barcode_length ${meta['barcode_length']} \
-    --barcode_length ${meta['barcode_length']} \
     --umi_length ${meta['umi_length']} \
     --output_read_tags "${meta.sample_id}.bc_extract.sorted.tsv" \
     --output_barcode_counts "${meta.sample_id}.${chrom}.uncorrected_bc_counts.tsv" \
@@ -118,26 +117,6 @@ process split_gtf_by_chroms {
     """
 }   
 
-process assign_genes {
-    label "singlecell"
-    cpus 1
-    input:
-        tuple val(sample_id),
-              val(chr),
-              path("chrom_bc.bed"),
-              path("chrom.gtf")
-    output:
-        tuple val(sample_id),
-              val(chr),
-              path("*.read.gene_assigns.tsv"),
-              emit: chrom_tsv_gene_assigns
-    """
-    workflow-glue assign_genes \
-    --output "${sample_id}_${chr}.read.gene_assigns.tsv" \
-    chrom_bc.bed chrom.gtf
-    """
-}
-
 process cluster_umis {
     label "singlecell"
     cpus params.umi_cluster_max_threads
@@ -146,8 +125,7 @@ process cluster_umis {
               path("align.bam"),
               path("align.bam.bai"),
               val(chr),
-              path("chrom_gene_assigns.tsv"),
-              path("chrom_tr_assigns.tsv"),
+              path("chrom_feature_assigns.tsv"),
               path(bc_ur_tags)
     output:
          tuple val(sample_id),
@@ -164,8 +142,7 @@ process cluster_umis {
     --chrom ${chr} \
     --ref_interval $params.umi_genomic_interval \
     --cell_gene_max_reads $params.umi_cell_gene_max_reads \
-    --gene_assigns chrom_gene_assigns.tsv \
-    --transcript_assigns chrom_tr_assigns.tsv \
+    --feature_assigns chrom_feature_assigns.tsv \
     --bc_ur_tags ${bc_ur_tags} \
     --output "${sample_id}_${chr}.tagged.bam" \
     --output_read_tags "${sample_id}_${chr}.read_tags.tsv" \
@@ -176,8 +153,9 @@ process cluster_umis {
 }
 
 process combine_tag_files {
-    // collectFile does 'name' argument does not work when being applied to
-    // A channel that returns tuples. It groups and names according to the
+    // A file named 'read_tags' is a required output.
+    // collectFile's 'name' argument does not work when being applied to
+    // a channel that returns tuples. It groups and names according to the
     // first element of the tuple. Hence this process.
     label "singlecell"
     input:
@@ -230,7 +208,6 @@ process stringtie {
               path("transcriptome.fa"),
               path("chr.gtf"),
               path("stringtie.gff"),
-              path("read_order.tsv"),
               path("reads.fastq"),
               emit: read_tr_map
     """
@@ -238,13 +215,10 @@ process stringtie {
     workflow-glue process_bam_for_stringtie align.bam ${chr}  \
         | tee >(stringtie -L  -p ${task.cpus} -G chr.gtf -l stringtie \
             -o stringtie.gff - ) \
-        | samtools fastq - \
-        | tee reads.fastq \
-        | seqkit seq -n > read_order.tsv 
-    
-    # Get transcriptome sequence
-    gffread -g ref_genome.fa -w transcriptome.fa stringtie.gff  
+        | samtools fastq > reads.fastq
 
+    # Get transcriptome sequence
+    gffread -g ref_genome.fa -w transcriptome.fa stringtie.gff
     """
 }
 
@@ -258,15 +232,13 @@ process align_to_transcriptome {
               path('transcriptome.fa'),
               path('chr.gtf'),
               path('stringtie.gff'),
-              path('read_order.tsv'),
               path("reads.fastq")
     output:
         tuple val(sample_id),
               val(chr),
               path("chr.gtf"),
-              path("*read_query_tr_map.tsv"), 
+              path("read_query_tr_map.tsv"),
               path('stringtie.gff'),
-              path("read_order.tsv"),
               emit: read_tr_map
     """  
     minimap2 -ax map-ont \
@@ -281,32 +253,32 @@ process align_to_transcriptome {
 }
 
 
-process assign_transcripts {
+process assign_features {
     label "singlecell"
     cpus 1
     input:
         tuple val(sample_id),
               val(chr),
               path("chr.gtf"),
-              path("read_query_tr_map.tsv"),
+              path("query_transcript_read_assign.tsv"),
               path('stringtie.gff'),
-              path('read_order.tsv')
+              path('tags.tsv')
     output:
         tuple val(sample_id),
               val(chr),
-              path("*transcript_assigns.tsv"), 
-              emit: transcript_assigns
+              path("${sample_id}.${chr}.feature_assigns.tsv"),
+              emit: feature_assigns
     """
-    if [ \$(wc -l <read_query_tr_map.tsv) -eq 0 ]; then
+    if [ \$(wc -l <read_feature_map.tsv) -eq 0 ]; then
         touch ${sample_id}.${chr}_empty.transcript_assigns.tsv  
     else
         gffcompare -o gffcompare -r chr.gtf stringtie.gff
         
-        workflow-glue isoform_read_mapping \
-            --read_tr_map read_query_tr_map.tsv \
-            --all_read_ids read_order.tsv \
+        workflow-glue assign_features \
+            --query_transcript_read_assign query_transcript_read_assign.tsv \
             --gffcompare_tmap gffcompare.stringtie.gff.tmap \
-            --output "${sample_id}.${chr}.transcript_assigns.tsv"
+            --tags tags.tsv \
+            --output "${sample_id}.${chr}.feature_assigns.tsv"
     fi
     """
 }
@@ -493,7 +465,6 @@ process umap_plot_mito_genes {
 workflow process_bams {
     take:
         bam
-        chr_beds
         meta
         gtf
         umap_genes
@@ -502,18 +473,6 @@ workflow process_bams {
         ref_genome_idx
    
     main:
-        beds = chr_beds
-            .flatMap{
-                l = []
-                for (i=0; i<it[1].size(); i++){
-                    sample_id = it[0]
-                    chr = it[1][i].getSimpleName()
-                    bed_file = it[1][i]
-                    l.add(tuple(chr, sample_id, bed_file))
-                }
-                return l
-            }
-        
         chr_gtf = split_gtf_by_chroms(gtf)
             .flatten()
             .map {file -> 
@@ -546,20 +505,11 @@ workflow process_bams {
             .join(meta).map {it -> it.tail()} // Remove sample_id
         )
 
-        assign_barcodes(
+       assign_barcodes(
             generate_whitelist.out.whitelist
             .cross(extract_barcodes.out.bc_uncorr_tsv)
             .map {it -> it.flatten()[0, 1, 3, 4]}
        )
-
-        // combine all chr bams with chr gtfs
-        chr_beds_gtf = chr_gtf.cross(
-            beds)
-            // [sample_id, chr, bed, gtf]
-            .map {it -> it.flatten()[3, 0, 4, 1]}
-            
-
-        assign_genes(chr_beds_gtf)
 
         stringtie(
             ref_genome_fasta,
@@ -569,19 +519,17 @@ workflow process_bams {
         align_to_transcriptome(
             stringtie.out.read_tr_map
         )
-        
-        assign_transcripts {
+
+        assign_features(
             align_to_transcriptome.out.read_tr_map
-        }
+            .join(assign_barcodes.out.tags, by: [0, 1]))
 
         cluster_umis(
             bam.cross(
-            // Cross on sample_id
-            assign_genes.out.chrom_tsv_gene_assigns
-            //join on sample_id + chr
-            .join(assign_transcripts.out.transcript_assigns, by: [0, 1])
-            .join(assign_barcodes.out.tags, by: [0, 1]))
-            .map {it -> it.flatten()[0, 1, 2, 4, 5, 6, 7]})
+                //join on sample_id + chr
+                assign_features.out.feature_assigns
+                .join(assign_barcodes.out.tags, by: [0, 1]))
+                .map {it -> it.flatten()[0, 1, 2, 4, 5, 6]})
 
         read_tags = combine_tag_files(
             cluster_umis.out.tags.groupTuple())
