@@ -6,7 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Changed
+- Add multiprocessing to calc_saturation.py for ~ 2X speedup
 - Use rapidfuzz for finding barcode matches in whielist; ~10x speedup
+- Use multithreading to speed up sequencing saturation calcualtion
 
 ## [v0.2.0]
 ### Added

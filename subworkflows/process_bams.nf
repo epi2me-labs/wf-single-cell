@@ -285,7 +285,7 @@ process assign_features {
 
 process umi_gene_saturation {
     label "singlecell"
-    cpus 1
+    cpus 4
     input:
         tuple val(sample_id),
               path("read_tags.tsv")
@@ -296,7 +296,8 @@ process umi_gene_saturation {
     """
     workflow-glue calc_saturation \
         --output "${sample_id}.saturation_curves.png" \
-        read_tags.tsv
+        --threads ${task.cpus} \
+        --read_tags read_tags.tsv
     """
 }
 

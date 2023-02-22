@@ -1,33 +1,39 @@
 #!/usr/bin/env python
 """Calculate saturation."""
+import multiprocessing
+
 from matplotlib import pyplot as plt
 import pandas as pd
-from tqdm import tqdm
 
 from .util import get_named_logger, wf_parser  # noqa: ABS101
 
 
 def argparser():
     """Create argument parser."""
-    parser = wf_parser("CalSat")
+    parser = wf_parser("Calculate satutation")
 
-    # Positional mandatory arguments
     parser.add_argument(
-        "gene_cell_umi",
+        "--read_tags",
         help="TSV file with read_id, gene, barcode, and UMI"
     )
 
-    # Optional arguments
     parser.add_argument(
         "--output",
         help="Output plot file with saturation curves [output.png]",
         default="output.png",
     )
 
+    parser.add_argument(
+        "--threads",
+        help="Number of threads to use [4]",
+        type=int,
+        default=4,
+    )
+
     return parser
 
 
-def plot_saturation_curves(res, umi_sat, args):
+def plot_saturation_curves(res, args):
     """Plot saturation curves.
 
     Output a single file with two subplots:
@@ -50,17 +56,6 @@ def plot_saturation_curves(res, umi_sat, args):
     ax1.set_ylabel("Genes per cell")
     ax1.set_title("Gene saturation")
 
-    # ax1.xaxis.set_major_locator(MultipleLocator(2000))
-    # ax1.xaxis.set_major_formatter(FormatStrFormatter('%d'))
-    # ax1.xaxis.set_minor_locator(MultipleLocator(500))
-
-    # ax1.yaxis.set_major_locator(MultipleLocator(2000))
-    # ax1.yaxis.set_major_formatter(FormatStrFormatter('%d'))
-    # ax1.yaxis.set_minor_locator(MultipleLocator(500))
-    #
-    # ax1.set_xlim([-5,20000])
-    # ax1.set_ylim([-5,20000])
-    # custom_legend(ax1)
     plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45, ha="right")
     ax1.grid()
 
@@ -91,6 +86,7 @@ def plot_saturation_curves(res, umi_sat, args):
     ax3.set_ylim([0, 1])
     ax3.set_xlabel("Median reads per cell")
     ax3.set_ylabel("Sequencing saturation")
+    umi_sat = res.iat[1, res.columns.get_loc('umi_sat')]
     ax3.set_title(f"Sequencing saturation: {umi_sat:.2f}")
     plt.setp(ax3.xaxis.get_majorticklabels(), rotation=45, ha="right")
     ax3.grid()
@@ -99,21 +95,45 @@ def plot_saturation_curves(res, umi_sat, args):
     fig.savefig(args.output)
 
 
-def calc_umi_saturation(df):
-    """Calculate UMI saturation.
+def downsample_dataframe(args):
+    """Downsample dataframe of read tags and tabulate genes and UMIs per cell."""
+    logger = get_named_logger('ClcSat')
 
-    Sequencing Saturation = 1 - (n_deduped_reads / n_reads)
-    """
-    n_reads = df.shape[0]
-    df["gene_bc_umi"] = df["gene"] + "_" + df["barcode"] + "_" + df["umi"]
-    n_deduped_reads = df["gene_bc_umi"].nunique()
-    saturation = 1 - (n_deduped_reads / n_reads)
+    df, fraction = args
+    logger.info(f"Doing {fraction}")
+    df_ = df.sample(frac=fraction)
+    n_reads = df_.shape[0]
 
-    return saturation
+    # Get the unique number of reads, genes and UMIs per cell barcode
+    gb = df_.groupby("barcode").nunique().median()
+    reads_per_cell = gb['read_id']
+    genes_per_cell = gb['gene']
+    umis_per_cell = gb['umi']
+
+    n_deduped_reads = len(df.groupby(['gene', 'barcode', 'umi']))
+    umi_saturation = 1 - (n_deduped_reads / n_reads)
+
+    record = (
+        (
+            fraction,
+            n_reads,
+            reads_per_cell,
+            genes_per_cell,
+            umis_per_cell,
+            umi_saturation,
+        )
+    )
+    return record
 
 
-def downsample_reads(df):
-    """Downsample dataframe of reads and tabulate genes and UMIs per cell."""
+def run_jobs(args):
+    """Create job to send off to workers, and collate results."""
+    logger = get_named_logger('ClcSat')
+
+    df = pd.read_csv(
+        args.read_tags, sep="\t", usecols=['read_id', 'barcode', 'umi', 'gene'])
+
+    logger.info("Downsampling reads for saturation curves")
     fractions = [
         0.01,
         0.02,
@@ -133,24 +153,18 @@ def downsample_reads(df):
     ]
 
     records = [(0.0, 0, 0, 0, 0, 0.0)]
-    for fraction in tqdm(fractions, total=len(fractions)):
-        df_ = df.sample(frac=fraction)
-        downsamp_reads = df_.shape[0]
-        # Get the unique number of reads, genes and UMIs per cell barcode
-        reads_per_cell = df_.groupby("barcode")["read_id"].nunique().median()
-        genes_per_cell = df_.groupby("barcode")["gene"].nunique().median()
-        umis_per_cell = df_.groupby("barcode")["umi"].nunique().median()
-        umi_sat = calc_umi_saturation(df_)
-        records.append(
-            (
-                fraction,
-                downsamp_reads,
-                reads_per_cell,
-                genes_per_cell,
-                umis_per_cell,
-                umi_sat,
-            )
-        )
+    p = multiprocessing.Pool(processes=args.threads)
+    func_args = [(df, x) for x in fractions]
+
+    try:
+        results = list(
+            p.imap(downsample_dataframe, func_args))
+        p.close()
+        p.join()
+    except KeyboardInterrupt:
+        p.terminate()
+
+    records.extend(results)
 
     res = pd.DataFrame.from_records(
         records,
@@ -168,19 +182,5 @@ def downsample_reads(df):
 
 def main(args):
     """Entry point."""
-    logger = get_named_logger('calc_saturation')
-
-    df = pd.read_csv(args.gene_cell_umi, sep="\t")
-
-    umi_sat = calc_umi_saturation(df)
-    logger.info(f"Sequencing saturation: {umi_sat:.2f}")
-
-    logger.info("Downsampling reads for saturation curves")
-    res = downsample_reads(df)
-
-    plot_saturation_curves(res, umi_sat, args)
-
-
-if __name__ == "__main__":
-    args = argparser().parse_args()
-    main(args)
+    result = run_jobs(args)
+    plot_saturation_curves(result, args)
