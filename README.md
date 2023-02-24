@@ -8,6 +8,10 @@ It was initially created as a Nextflow port of [Sockeye](https://github.com/nano
 
 
 
+
+
+
+
 ## Introduction
 
 The following single-cell kits from 10x Genomics are currently supported:
@@ -22,7 +26,11 @@ instrument and reference files that can be downloaded from [10x](https://support
 The pipeline outputs gene x cell, and transcript x cell expression matrices, as well as a BAM file of
 aligned reads tagged with cell barcode and UMI information.
 
-The BLAZE preprint provided useful benchmarking of the original sockeye implementation. This assisted in the selection of appropriate parameters for cell cut-off thresholds and for defining the limits of the cell x gene matrix.## Quickstart
+The [BLAZE](https://github.com/shimlab/BLAZE) preprint provided useful benchmarking of the original sockeye implementation. This assisted in the selection of appropriate parameters for cell cut-off thresholds and for defining the limits of the cell x gene matrix.
+
+
+
+## Quickstart
 
 The workflow uses [nextflow](https://www.nextflow.io/) to manage compute and 
 software resources, as such nextflow will need to be installed before attempting
@@ -176,7 +184,11 @@ TSV file witjh the following columns:
   - gene (assigned gene)
   - transcript (assigned transcript id)  
   - barcode (corrected barcode)
-  - umi )corrected umi## Useful links
+  - umi )corrected umi
+
+
+
+## Useful links
 
 * [nextflow](https://www.nextflow.io/)
 * [docker](https://www.docker.com/products/docker-desktop)
