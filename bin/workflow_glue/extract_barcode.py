@@ -219,38 +219,72 @@ def update_matrix(match, mismatch, acg_to_n_match, t_to_n_match):
     return matrix
 
 
+def ascii_encode_qscores(integers):
+    """Convert integer quality values into ASCII characters."""
+    return "".join(map(lambda x: chr(x + 33), integers))
+
+
+def ascii_decode_qscores(string):
+    """Convert ASCII character quality values into integers."""
+    return list(map(lambda x: ord(x) - 33, string))
+
+
 def parse_probe_alignment(
         p_alignment, adapter1_probe_seq, barcode_length, umi_length,
         prefix_qual
         ):
     """Parse probe alignment."""
+    ref_alignment = p_alignment.traceback.ref
+    query_alignment = p_alignment.traceback.query
+
     # Find the position of the Ns in the alignment. These correspond
     # to the cell barcode + UMI sequences bound by the read1 and polyT
-    bc_start = p_alignment.traceback.ref.find('N')
-    if bc_start > -1:
-        # The Ns in the probe successfully aligned to sequence
-        # The read1 adapter comprises the first part of the alignment
-        adapter1 = p_alignment.traceback.query[0:bc_start]
+    bc_start_pos = ref_alignment.find('N')
+    if bc_start_pos > -1:
+        # umi_end_pos = bc_start_pos + barcode_length + umi_length
+
+        # The alignment of the first N=<args.window> bases of the read
+        # to the probe sequence results in the following output, where
+        # the alignment around the Ns is anchored by adapter1 and polyT.
+        # The positions in the alignment might contain deletions, marked
+        # as a dash (-) in the query_alignment:
+        #
+        #      bc_start_pos               umi_end_pos
+        #           v                          v
+        # CTTCCGATCTNNNNNNNNNNNNNNNNNNNNNNNNNNNNTTTTTTTTT <-ref_alignment
+        # |||||||||||||||||||||||||||||||||||||||||||||||
+        # CTTCCGATCT-ATCAGTGATCCACTAGAGGGAGCCGTGTTTTTTTTT <-query_alignment
+        # |________||__________________________|
+        #  adapter1         barcode_umi
+
+        # The adapter1 sequence comprises the first part of the alignment
+        adapter1 = query_alignment[0:bc_start_pos]
         adapter1_ed = ed.eval(adapter1, adapter1_probe_seq)
 
-        # The barcode + UMI sequences in the read correspond to the
-        # positions of the aligned Ns in the probe sequence
-        barcode_umi_end = bc_start + barcode_length + umi_length
-        barcode_umi = p_alignment.traceback.query[
-            bc_start: barcode_umi_end]
+        # Extract the corresponding positions from both the query sequence
+        # and qscores (prefix_qual)
+        ascii_q = ascii_encode_qscores(prefix_qual)
 
-        barcode_umi_qual = prefix_qual[bc_start: barcode_umi_end]
+        barcode = query_alignment[bc_start_pos: bc_start_pos + barcode_length]
+        umi = query_alignment[
+            bc_start_pos + barcode_length: bc_start_pos + barcode_length + umi_length]
 
-        # Split features and strip feature alignment string of deletions (-)
-        barcode = barcode_umi[:barcode_length].replace("-", "")
-        umi = barcode_umi[barcode_length:].replace("-", "")
+        barcode_n_del = barcode.count('-')
+        umi_n_del = umi.count('-')
+        adapter1_n_del = adapter1.count('-')
 
-        barcode_q = barcode_umi_qual[:barcode_length]
-        barcode_q_ascii = "".join(map(lambda x: chr(x + 33), barcode_q))
-        bc_min_q = min(barcode_q)
+        if any((barcode_n_del, umi_n_del, adapter1_n_del)):
+            barcode = barcode.replace("-", "")
+            umi = umi.replace("-", "")
 
-        umi_q = barcode_umi_qual[barcode_length:]
-        umi_q_ascii = "".join(map(lambda x: chr(x + 33), umi_q))
+        barcode_q_ascii = ascii_q[
+            bc_start_pos - adapter1_n_del:
+            bc_start_pos - adapter1_n_del + barcode_length - barcode_n_del]
+
+        umi_q_ascii = ascii_q[
+            bc_start_pos - adapter1_n_del + barcode_length - barcode_n_del:
+            bc_start_pos - adapter1_n_del + barcode_length - barcode_n_del +
+            umi_length - umi_n_del]
 
     else:
         # No Ns in the probe successfully aligned -- we will ignore this read
@@ -259,9 +293,8 @@ def parse_probe_alignment(
         umi = ""
         barcode_q_ascii = ""
         umi_q_ascii = ""
-        bc_min_q = 0
 
-    return adapter1_ed, barcode, umi, barcode_q_ascii, umi_q_ascii, bc_min_q
+    return adapter1_ed, barcode, umi, barcode_q_ascii, umi_q_ascii
 
 
 def align_adapter(args):
@@ -320,15 +353,17 @@ def align_adapter(args):
                 matrix=matrix,
             )
 
-            adapter1_ed, barcode, umi, bc_qscores, umi_qscores, bc_min_qv \
+            adapter1_ed, barcode, umi, bc_qscores, umi_qscores \
                 = parse_probe_alignment(
                     p_alignment, adapter1_probe_seq, args.barcode_length,
                     args.umi_length, prefix_qv
                     )
 
             # Require minimum read1 edit distance
-            if adapter1_ed <= args.max_adapter1_ed:
+            if (adapter1_ed <= args.max_adapter1_ed) & \
+                    (len(barcode) > 0) & (len(umi) > 0):
 
+                bc_min_qv = min(ascii_decode_qscores(bc_qscores))
                 if bc_min_qv >= args.min_barcode_qv:
                     barcode_counts[barcode] += 1
                     # nh: I think if we are not including a barcode in the
