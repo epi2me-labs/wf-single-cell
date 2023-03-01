@@ -4,7 +4,6 @@ import subprocess as sub
 import tempfile
 from unittest.mock import Mock
 
-import numpy as np
 import pandas as pd
 import pytest
 from pytest import fixture
@@ -104,10 +103,12 @@ def test_main(args):
     args.output_read_tags = tags_file.name
     main(args)
 
+    expected_barcode = 'AAACCCAAGAAACACT'
+
     counts_result = pd.read_csv(
         counts_file.name, sep='\t', names=['barcode', 'count'])
     assert counts_result.shape == (1, 2)
-    assert counts_result.iat[0, 0] == 'AAACCCAAGAAACACT'
+    assert counts_result.iat[0, 0] == expected_barcode
     assert counts_result.iat[0, 1] == 1
 
     tags_result = pd.read_csv(tags_file.name, sep='\t', index_col=0)
@@ -141,120 +142,82 @@ def test_align_adapter(args, adapter1_seq, tags_results_shape, counts_results_sh
     assert df_counts.shape == counts_results_shape
 
 
+def ascii_encode_qscores(integers):
+    """Convert integer quality values into ASCII characters."""
+    return "".join(map(lambda x: chr(x + 33), integers))
+
+
 @pytest.mark.parametrize(
-    'align_adapter1,align_barcode,adapter1_edit_dist',
+    'align_adapter1,align_barcode,align_umi,adapter1_edit_dist',
     [
-        ['CTTCCGATCT', 'AAACCCAAGAAACACT', 0],  # full match
-        ['CTTCCGAggg', 'AAACCCAAGAAACACT', 3],
-        # ['CTTCCGATCT', 'AAACCCAAGAAA-ACT', 0],
+        # Full adpt1 match, no deletions in BC/UMI
+        ['CTTCCGATCT', 'AAACCCAAGAAACACT', 'GACTGACTGACT', 0],
+        # 3 ED for adpt1
+        ['gaaCCGATCT', 'AAACCCAAGAAACACT', 'GACTGACTGACT', 3],
+        # Deletion in barcode
+        ['CTTCCGATCT', 'AAACCCAAGAAACA-T', 'GACTGACTGACT', 0],
+        # Deletion in UMI
+        ['CTTCCGATCT', 'AAACCCAAGAAACA-T', '-ACTGACTGACT', 0],
+        # Deletion in barcode and umi
+        ['CTTCCGATCT', 'A--CCCAAGAAACACT', 'GA--GACTGACT', 0],
+        # Deletion in adapter, barcode, and umi
+        ['CTTCCGAT-T', 'A--CCCAAGAAACACT', 'GA--GACTGACT', 1],
+
     ]
+
 )
 def test_parse_probe_alignment(
-        args, align_adapter1, align_barcode, adapter1_edit_dist):
+        args, align_adapter1, align_barcode, align_umi, adapter1_edit_dist):
     """Test_parse_probe_alignment.
 
     Mock various parasail alignments to test alignment parsing.
     """
     # Some defaults for the 3prime kit. These are passed to parse_probe_alignemtn
-    barcode_length = args.barcode_length
-    umi_length = args.umi_length
-    umi = 'GACTGACTGACT'  # Use same for probe and alignment
-    # Only the 10bp suffix of the adapter1 is included in the probe.
+    barcode_length = 16
+    umi_length = 12
+
+    # Get real barcode and UMI by stripping any deletion characters form the alignment
+    actual_bc = align_barcode.replace('-', '')
+    actual_bc_len = len(actual_bc)
+    actual_umi = align_umi.replace('-', '')
+    actual_umi_len = len(actual_umi)
+    actual_a1_len = len(align_adapter1.replace('-', ''))
+
+    # build probe - only the 10bp suffix of the adapter1 is included in the probe.
     adapter1_probe_suffix = 'CTTCCGATCT'
 
-    # These go into making up the probe sequence and are condtant
-    barcode_probe = 'AAACCCAAGAAACACT'
-    umi_probe = 'GACTGACTGACT'
-    polyt = 't' * 12  # same
-
-    # Give each component of the read a unique quality score.
-    # Only the 10bp adapter1 suffix is used in the probe
-    read_adapter1_q = np.repeat(23, len(adapter1_probe_suffix))
-    read_barcode_q = np.repeat(24, len(barcode_probe))
-    read_umi_q = np.repeat(25, len(umi_probe))
-    read_polyt_q = np.repeat(26, len(polyt))
-    gene_q = np.repeat(27, len(gene()))
-
-    prefix_qual = np.concatenate((
-        read_adapter1_q,
-        read_barcode_q,
-        read_umi_q,
-        read_polyt_q,
-        gene_q
-    ))
-
-    read_umi_q_ascii = "".join(
-        map(lambda x: chr(x + 33), read_umi_q))
-    read_barcode_q_ascii = "".join(
-        map(lambda x: chr(x + 33), read_barcode_q))
-
-    # Build alignments and return the parsed results."""
-    # Mock a parasail alignemnt result
-    # 100 bp prefic sequence
     p_alignment = Mock()
-    p_alignment.traceback.query = \
-        f"{align_adapter1}{align_barcode}{umi}{polyt}"
-
-    # The probe (reference) would contain Ns at the barcode and UMI
-    # positions. The first N will be at position 10 as the
     reference_probe = \
-        f"{adapter1_probe_suffix}{'N'* barcode_length}{'N'*umi_length}{polyt}"
+        f"{adapter1_probe_suffix}{'N'* barcode_length}{'N'* umi_length}{'T' * 12}"
     p_alignment.traceback.ref = reference_probe
+
+    # Build query alignment from the first 100bp of the read
+    read_prefix = f"{align_adapter1}{align_barcode}{align_umi}{'T' * 20}{gene}"[:100]
+    # The aligned query sequence
+    p_alignment.traceback.query = (
+        f"{align_adapter1}{align_barcode}{align_umi}{'T' * 12}")
+    # The read prefix used as query
+    p_alignment.query = read_prefix
+    # The last aligned position in the query
+    p_alignment.end_query = \
+        len(align_adapter1) + actual_bc_len + actual_umi_len + 12 - 1
+
+    aln_quality = range(len(read_prefix))
+
+    actual_bc_qual = ascii_encode_qscores(
+        aln_quality[actual_a1_len: actual_a1_len + actual_bc_len])
+    actual_umi_qual = ascii_encode_qscores(aln_quality[
+        actual_a1_len + actual_bc_len: actual_a1_len + actual_bc_len + actual_umi_len])
 
     (
         adapter1_editdist, barcode_result, umi_result,
-        bc_qscores, umi_qscores, bc_min_q
+        bc_qscores, umi_qscores
     ) = parse_probe_alignment(
             p_alignment, adapter1_probe_suffix,
-            barcode_length, umi_length, prefix_qual)
+            barcode_length, umi_length, aln_quality)
 
     assert adapter1_editdist == adapter1_edit_dist
-    assert barcode_result == barcode_probe
-    assert umi_result == umi
-    assert bc_qscores == read_barcode_q_ascii
-    assert umi_qscores == read_umi_q_ascii
-    assert bc_min_q == min(read_barcode_q)
-
-    # assert adapter1_editdist == 0
-    # assert barcode_result == barcode
-    # assert umi_result == umi
-    # assert bc_qscores == setup.read_barcode_q_ascii
-    # assert umi_qscores == setup.read_umi_q_ascii
-    # assert bc_min_q == min(setup.read_barcode_q)
-    #
-    # # no Ns found in reference probe
-    # (
-    #     adapter1_editdist, barcode_result, umi_result,
-    #     bc_qscores, umi_qscores, bc_min_q
-    # ) = run(first_n_pos=-1)
-    # assert adapter1_editdist == 10
-    # assert barcode_result == ""
-    # assert umi_result == ""
-    # assert bc_min_q == 0
-    #
-    # # Single substitution in the adapter1 read
-    # a1_test = list(adapter1_probe_seq)
-    # a1_test[5] = 'A'
-    # a1_test = ''.join(a1_test)
-    # (
-    #     adapter1_editdist, barcode_result, umi_result,
-    #     bc_qscores, umi_qscores, bc_min_q
-    # ) = run(adapter1_probe_test=a1_test)
-    # assert adapter1_editdist == 1
-    #
-    # # Test a deletion in the read barcode
-    # bc_del = list(barcode)
-    # bc_del[5] = '-'
-    # bc_del = ''.join(bc_del)
-    # (
-    #     adapter1_editdist, barcode_result, umi_result,
-    #     bc_qscores, umi_qscores, bc_min_q
-    # ) = run(barcode_test=bc_del)
-    # assert adapter1_editdist == 0
-    # # The deltion character should have been stripped
-    # assert barcode_result == bc_del.replace('-', '')
-    # assert umi_result == umi
-    # # Check quality scores.
-    # assert bc_qscores == setup.read_barcode_q_ascii
-    # assert umi_qscores == setup.read_umi_q_ascii
-    # assert bc_min_q == min(setup.read_barcode_q)
+    assert barcode_result == actual_bc
+    assert umi_result == actual_umi
+    assert bc_qscores == actual_bc_qual
+    assert umi_qscores == actual_umi_qual
