@@ -24,7 +24,7 @@ def test_run_jobs():
 
     # Create df with 1000 rows of fake data.
     with open(args.read_tags, 'w') as fh:
-        fh.write('read_id\tbarcode\tumi\tgene\n')
+        fh.write('read_id\tCB\tUB\tgene\n')
         row = 'id\tagtcgatcgatcgta\tatcgtacaatct\tYFG'
         for i in range(1000):
             fh.write(f'{row}\n')
@@ -38,6 +38,7 @@ def test_run_jobs():
         assert row.downsamp_reads == 1000 * row.downsamp_frac
 
 
+# @pytest.mark.skip
 def test_downsample_dataframe():
     """Test calc_saturation."""
     header = ['read_id', 'barcode', 'umi', 'gene']

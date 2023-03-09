@@ -40,9 +40,9 @@ def process_tag_tsv(read_tags_tsv):
     df = pd.read_csv(read_tags_tsv, sep='\t', index_col=0)
 
     def process_dataframe(feature='gene'):
-        dfg = df[[feature, 'barcode', 'umi']]
-        dfg = dfg.groupby([feature, 'barcode']).nunique()['umi'].reset_index()
-        dfg = pd.pivot(dfg, index=feature, columns='barcode', values='umi')
+        dfg = df[[feature, 'CB', 'UB']]
+        dfg = dfg.groupby([feature, 'CB']).nunique()['UB'].reset_index()
+        dfg = pd.pivot(dfg, index=feature, columns='CB', values='UB')
         dfg = dfg.dropna(how='all', axis=1)
         dfg.fillna(0, inplace=True)
         dfg = dfg.loc[~dfg.index.str.contains(regex, regex=True)]

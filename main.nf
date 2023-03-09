@@ -211,7 +211,7 @@ workflow pipeline {
             ref_genome_idx)
         
         prepare_report_data(
-            process_bams.out.read_tags
+            process_bams.out.final_read_tags
             .join(stranding.out.config_stats)
             .join(process_bams.out.white_list))
         

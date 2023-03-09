@@ -119,36 +119,51 @@ process split_gtf_by_chroms {
 
 process cluster_umis {
     label "singlecell"
-    cpus params.umi_cluster_max_threads
     input:
         tuple val(sample_id),
-              path("align.bam"),
-              path("align.bam.bai"),
               val(chr),
               path("chrom_feature_assigns.tsv"),
-              path(bc_ur_tags)
+              path("read_tags.tsv")
     output:
-         tuple val(sample_id),
-              path("*.tagged.bam"),
-              path("*.tagged.bam.bai"),
-              emit: bam_bc_bai
         tuple val(sample_id),
-              path("*tags.tsv"),
-              emit: tags
+              val(chr),
+              path("${sample_id}_${chr}.read_tags.tsv"),
+              emit: read_tags  // For BAM tagging
+        tuple val(sample_id),
+              path("${sample_id}_${chr}.final_tags.tsv"),
+              emit: final_read_tags  // For user output
     """
     workflow-glue cluster_umis \
-    align.bam \
-    --threads $task.cpus \
-    --chrom ${chr} \
-    --ref_interval $params.umi_genomic_interval \
-    --cell_gene_max_reads $params.umi_cell_gene_max_reads \
-    --feature_assigns chrom_feature_assigns.tsv \
-    --bc_ur_tags ${bc_ur_tags} \
-    --output "${sample_id}_${chr}.tagged.bam" \
-    --output_read_tags "${sample_id}_${chr}.read_tags.tsv" \
-    --sample_id ${sample_id}
+        --chrom ${chr} \
+        --cell_gene_max_reads $params.umi_cell_gene_max_reads \
+        --feature_assigns chrom_feature_assigns.tsv \
+        --read_tags read_tags.tsv \
+        --output_read_tags "${sample_id}_${chr}.read_tags.tsv" \
+        --workflow_output "${sample_id}_${chr}.final_tags.tsv"
+    """
+}
 
-    samtools index "${sample_id}_${chr}.tagged.bam"
+process tag_bams {
+    label "singlecell"
+    cpus 1
+    input:
+        tuple val(sample_id),
+              val(chr),
+              path("align.bam"),
+              path("align.bam.bai"),
+              path('tags.tsv')
+    output:
+         tuple val(sample_id),
+              path("tagged.bam"),
+              path("tagged.bam.bai"),
+              emit: tagged_bam
+    """
+    workflow-glue tag_bam \
+        --in_bam align.bam \
+        --tags tags.tsv \
+        --out_bam tagged.bam
+
+    samtools index tagged.bam
     """
 }
 
@@ -161,9 +176,23 @@ process combine_tag_files {
     input:
         tuple val(sample_id),
               path("tags*.tsv")
-        output:
-            tuple val(sample_id),
-                  path("${sample_id}_read_tags.tsv")
+    output:
+        tuple val(sample_id),
+              path("${sample_id}_read_tags.tsv")
+    """
+    awk 'FNR>1 || NR==1' *.tsv > "${sample_id}_read_tags.tsv"
+    """
+}
+
+process combine_final_tag_files {
+    // Combine the final
+    label "singlecell"
+    input:
+        tuple val(sample_id),
+              path("tags*.tsv")
+    output:
+        tuple val(sample_id),
+              path("${sample_id}_read_tags.tsv")
     """
     awk 'FNR>1 || NR==1' *.tsv > "${sample_id}_read_tags.tsv"
     """
@@ -504,37 +533,42 @@ workflow process_bams {
             extract_barcodes.out.barcode_counts
             .collectFile()
             .map {it -> tuple(it.getSimpleName(), it)}
-            .join(meta).map {it -> it.tail()} // Remove sample_id
-        )
+            .join(meta).map {it -> it.tail()}) // Remove sample_id
+
 
        assign_barcodes(
             generate_whitelist.out.whitelist
             .cross(extract_barcodes.out.bc_uncorr_tsv)
-            .map {it -> it.flatten()[0, 1, 3, 4]}
-       )
+            .map {it -> it.flatten()[0, 1, 3, 4]})
 
         stringtie(
             ref_genome_fasta,
             ref_genome_idx,
             bam.combine(chr_gtf))
         
-        align_to_transcriptome(
-            stringtie.out.read_tr_map
-        )
+        align_to_transcriptome(stringtie.out.read_tr_map)
 
         assign_features(
             align_to_transcriptome.out.read_tr_map
-            .join(assign_barcodes.out.tags, by: [0, 1]))
+            // Join on sample_id,chr
+            .join(assign_barcodes.out.tags, by : [0, 1]))
 
         cluster_umis(
+            assign_features.out.feature_assigns
+            // Join on sample_id,chr
+            .join(assign_barcodes.out.tags, by: [0, 1]))
+
+        tag_bams(
             bam.cross(
-                //join on sample_id + chr
-                assign_features.out.feature_assigns
-                .join(assign_barcodes.out.tags, by: [0, 1]))
-                .map {it -> it.flatten()[0, 1, 2, 4, 5, 6]})
+                cluster_umis.out.read_tags
+            ).map {it ->it.flatten()[0, 4, 1, 2, 5]})
 
         read_tags = combine_tag_files(
-            cluster_umis.out.tags.groupTuple())
+            cluster_umis.out.read_tags
+             .map {it -> it[0, 2]}.groupTuple())
+
+       final_read_tags = combine_final_tag_files(
+            cluster_umis.out.final_read_tags.groupTuple())
 
         umi_gene_saturation(read_tags)
 
@@ -568,13 +602,13 @@ workflow process_bams {
 
         
         if (params.merge_bam) {
-            combine_chrom_bams(cluster_umis.out.bam_bc_bai
+            combine_chrom_bams(tag_bams.out.tagged_bam
                 .groupTuple())
             // [sample_id, bam]
             tagged_bams = combine_chrom_bams.out.bam_fully_tagged
 
         }else{
-            tagged_bams = cluster_umis.out.bam_bc_bai
+            tagged_bams = tag_bams.out.tagged_bam
             // [sample_id, bam, bai]
             .map {it -> it[0, 1, 2]}
             .groupTuple()
@@ -603,7 +637,7 @@ workflow process_bams {
 
      emit:
         results = umi_gene_saturation.out.saturation_curve
-             .join(read_tags)
+             .join(final_read_tags)
              .join(construct_expression_matrix.out)
              .join(process_expression_matrix.out.matrix_processed_tsv)
              .join(process_expression_matrix.out.matrix_mito_tsv)
@@ -619,7 +653,7 @@ workflow process_bams {
              .map{it -> it.flatten()}
         
         // Emit these sperately for use in the report
-        read_tags = read_tags
+        final_read_tags = final_read_tags
         plots = pack_images.out.collect()
         white_list = generate_whitelist.out.whitelist
 }
