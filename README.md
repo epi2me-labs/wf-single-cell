@@ -59,13 +59,20 @@ to see the options for the workflow.
 The main options are:
 * `fastq`: A fastq file or directory containing fastq input files or directories of input files.
 * `ref_genome_dir` The path to the 10x reference genome directory (see `Downloading reference data` below)
-* 10x sample data, which can be supplied per sample with either of:
-  *  `single_cell_sample_sheet`
-  (__not to be confused with the optional MinKNOW `sample_sheet`__)
-  * The following parameters which are applied to all samples:
-    * kit_name [3prime] 
-    * kit_version [v3]
+* 10x sample metadata using either:
+  * The following parameters, which are applied to all samples (the default):
+    * kit_name 
+      * options: `3prime` (default), `5prime`, `multiome`
+    * kit_version
+      * 3prime options: `v2`, `v3` (default)
+      * 5prime options: `v1`
+      * multiome options: `v1`
     * expected_cells [500]
+
+  or
+
+  *  `single_cell_sample_sheet`
+  (__not to be confused with the optional MinKNOW `sample_sheet`__) allowing per sample configuration.
 
 
 

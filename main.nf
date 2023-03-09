@@ -293,7 +293,7 @@ workflow {
             meta = it[2] + it[3] // Join the 2 meta maps  
             kit_name = meta['kit_name']
             kit_version = meta['kit_version']
-            // and Get the appropriate cell barcode longlist based on the kit_name specified for this sample_id.
+            // Get the appropriate cell barcode longlist based on the kit_name specified for this sample_id.
             switch(kit_name){
                 case '3prime':
                     switch(kit_version){
