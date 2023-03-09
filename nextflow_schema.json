@@ -46,7 +46,7 @@
                 "kit_version": {
                     "type": "string",
                     "description": "10x kit version",
-                    "help_text": "If `single_cell_sample_sheet` is not defined, kit_version is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied.",
+                    "help_text": "If `single_cell_sample_sheet` is not defined, kit_version is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied. 3prime kit options: [v2, v3]. For 5prime and multiome kits only `v1` is available.",
                     "default": "v3"
                 },
                 "expected_cells": {
