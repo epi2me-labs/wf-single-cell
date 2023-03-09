@@ -37,10 +37,10 @@ def test_workflow(wf_out_dir, sample_id):
         = df['read_id'].str.split('|', expand=True)
 
     # Check barcode and umis are correctly identified. Allow for 2 incorrect values
-    df_barcode_mismatches = df[df.barcode != df.true_bc]
+    df_barcode_mismatches = df[df.corrected_barcode != df.true_bc]
     assert len(df_barcode_mismatches) < 2
 
-    df_umi_mismatches = df[df.true_umi != df.umi]
+    df_umi_mismatches = df[df.true_umi != df.corrected_umi]
     assert len(df_umi_mismatches) < 2
 
     # We should be getting more than 85% of the transcritps correctly called,

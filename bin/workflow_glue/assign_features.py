@@ -8,7 +8,7 @@ from .util import get_named_logger, wf_parser  # noqa: ABS101
 
 def argparser():
     """Create argument parser."""
-    parser = wf_parser("isoform_read_mapping")
+    parser = wf_parser("assign_features")
 
     parser.add_argument(
         "--query_transcript_read_assign",

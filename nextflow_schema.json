@@ -141,20 +141,10 @@
                     "description": "Minimum alignment qscore allowed for a read to be assigned to a gene or transcript.",
                     "default": 40
                 },
-                "umi_genomic_interval": {
-                    "type": "integer",
-                    "description": "Size of genomic window (bp) to assign to a read if alignment falls outside of an annotated gene.",
-                    "default": 1000
-                },
                 "umi_cell_gene_max_reads": {
                     "type": "integer",
                     "description": "Maximum number of reads to cluster for a particular barcode/gene combination.",
                     "default": 20000
-                },
-                "umi_cluster_max_threads": {
-                    "type": "integer",
-                    "description": "Maximum number of threads to use per-chromosome in UMI clustering step.",
-                    "default": 4
                 },
                 "matrix_min_genes": {
                     "type": "integer",

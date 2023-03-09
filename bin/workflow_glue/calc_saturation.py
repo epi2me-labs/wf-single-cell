@@ -111,7 +111,10 @@ def downsample_dataframe(args):
     umis_per_cell = gb['umi']
 
     n_deduped_reads = len(df.groupby(['gene', 'barcode', 'umi']))
-    umi_saturation = 1 - (n_deduped_reads / n_reads)
+    if n_reads < 1:
+        umi_saturation = 0
+    else:
+        umi_saturation = 1 - (n_deduped_reads / n_reads)
 
     record = (
         (
@@ -131,7 +134,8 @@ def run_jobs(args):
     logger = get_named_logger('ClcSat')
 
     df = pd.read_csv(
-        args.read_tags, sep="\t", usecols=['read_id', 'barcode', 'umi', 'gene'])
+        args.read_tags, sep="\t", usecols=['read_id', 'CB', 'UB', 'gene'])\
+        .rename(columns={'CB': 'barcode', 'UB': 'umi'})
 
     logger.info("Downsampling reads for saturation curves")
     fractions = [
