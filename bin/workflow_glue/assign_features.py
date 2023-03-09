@@ -33,7 +33,8 @@ def argparser():
     parser.add_argument(
         "--min_mapq",
         help="mapq threshold from genomic alignment above which reads will be assigned "
-             "a gene and transcript"
+             "a gene and transcript",
+        type=int, default=30
     )
     return parser
 

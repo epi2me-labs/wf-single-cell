@@ -61,18 +61,6 @@ def argparser():
     )
 
     parser.add_argument(
-        "-t", "--threads", help="Threads to use [4]", type=int, default=4
-    )
-
-    parser.add_argument(
-        "-b",
-        "--batch_size",
-        help="Number of reads per batch [100000]",
-        type=int,
-        default=100000,
-    )
-
-    parser.add_argument(
         "-k",
         "--kit",
         help="Specify either the 10X 3' gene expression kit (3prime), the 5' \
@@ -162,8 +150,7 @@ def call_vsearch(fastq, min_adapter_id, adapters_fasta):
     tmp_vsearch = fastq.with_suffix(".vsearch.tsv")
 
     vsearch_cmd = "seqkit fq2fa {fastq} | vsearch --usearch_global -  \
-    --db {adapters} \
-    --threads 1 --minseqlength 20 --maxaccepts 5 --id {id} --strand plus \
+    --db {adapters} --minseqlength 20 --maxaccepts 5 --id {id} --strand plus \
     --wordlength 3 --minwordmatches 10 --output_no_hits --userfields \
     'query+target+id+alnlen+mism+opens+qilo+qihi+qstrand+tilo+tihi+ql+tl' \
     --userout {output}".format(
