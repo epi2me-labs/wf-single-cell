@@ -278,7 +278,8 @@ process assign_features {
             --query_transcript_read_assign query_transcript_read_assign.tsv \
             --gffcompare_tmap gffcompare.stringtie.gff.tmap \
             --tags tags.tsv \
-            --output "${sample_id}.${chr}.feature_assigns.tsv"
+            --output "${sample_id}.${chr}.feature_assigns.tsv" \
+            --min_mapq ${params.gene_assigns_minqv}
     fi
     """
 }

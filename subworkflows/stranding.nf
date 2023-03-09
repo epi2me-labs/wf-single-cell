@@ -12,11 +12,9 @@ process call_adapter_scan {
     """    
     workflow-glue adapter_scan_vsearch \
     chunk.fq.gz \
-    -t 1 \
     --kit ${meta['kit_name']} \
     --output_fastq "${sample_id}_adapt_scan.fastq.gz" \
-    --output_tsv  "${sample_id}_adapt_scan.tsv" \
-    --batch_size $params.read_structure_batch_size \
+    --output_tsv  "${sample_id}_adapt_scan.tsv"
     """
 }
 

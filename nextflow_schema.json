@@ -112,12 +112,6 @@
                     "help_text": "The total CPU resource used by the workflow is constrained by the executor configuration.",
                     "default": 4
                 },
-                "read_structure_batch_size": {
-                    "type": "integer",
-                    "description": "Batch size when processing reads using adapter_scan_vsearch.py (changing not recommended).",
-                    "default": 40000,
-                    "hidden": true
-                },
                 "barcode_adapter1_suff_length": {
                     "type": "integer",
                     "description": "Suffix length of the read1 adapter to use in creating the probe sequence for identifying barcode/UMI bases.",
@@ -144,8 +138,8 @@
                 },
                 "gene_assigns_minqv": {
                     "type": "integer",
-                    "description": "Minimum alignment qscore allowed for a read to be assigned to a gene or genomic region.",
-                    "default": 60
+                    "description": "Minimum alignment qscore allowed for a read to be assigned to a gene or transcript.",
+                    "default": 40
                 },
                 "umi_genomic_interval": {
                     "type": "integer",
