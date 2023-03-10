@@ -192,9 +192,22 @@ process combine_final_tag_files {
               path("tags*.tsv")
     output:
         tuple val(sample_id),
-              path("${sample_id}_read_tags.tsv")
+              path("${sample_id}.read_tags.tsv")
     """
-    awk 'FNR>1 || NR==1' *.tsv > "${sample_id}_read_tags.tsv"
+    awk 'FNR>1 || NR==1' *.tsv > "${sample_id}.read_tags.tsv"
+    """
+}
+
+process combine_uncorrect_bcs {
+    label "singlecell"
+    input:
+        tuple val(sample_id),
+              path("uncorrected_bcs*.tsv")
+        output:
+            tuple val(sample_id),
+                  path("${sample_id}.uncorrected_bc_counts.tsv")
+    """
+    cat *.tsv > "${sample_id}.uncorrected_bc_counts.tsv"
     """
 }
 
@@ -357,23 +370,27 @@ process process_expression_matrix {
               path("gene_matrix_counts.tsv"),
               path("transcript_matrix_counts.tsv")
     output:
-        tuple val(sample_id), 
-              path("*gene_expression.processed.tsv"),
-              path("*transcript_expression.processed.tsv"),
-              emit: matrix_processed_tsv
         tuple val(sample_id),
-              path("*gene_expression.mito.tsv"),
-              emit: matrix_mito_tsv
+              val('gene'),
+              path("${sample_id}.gene_expression.processed.tsv"),
+              emit: gene_matrix_processed_tsv
+        tuple val(sample_id),
+              val('transcript'),
+              path("${sample_id}.transcript_expression.processed.tsv"),
+              emit: transcript_matrix_processed_tsv
+        tuple val(sample_id),
+              path("${sample_id}.gene_expression.mito.tsv"),
+              emit: mito_expression_tsv
     """
     workflow-glue process_matrix \
-    --min_genes $params.matrix_min_genes \
-    --min_cells $params.matrix_min_cells \
-    --max_mito $params.matrix_max_mito \
-    --mito_prefix ${params.mito_prefix} \
-    --norm_count $params.matrix_norm_count \
-    --output_prefix ${sample_id} \
-    --gene_counts gene_matrix_counts.tsv \
-    --transcript_counts transcript_matrix_counts.tsv
+        --min_genes $params.matrix_min_genes \
+        --min_cells $params.matrix_min_cells \
+        --max_mito $params.matrix_max_mito \
+        --mito_prefix ${params.mito_prefix} \
+        --norm_count $params.matrix_norm_count \
+        --gene_counts gene_matrix_counts.tsv \
+        --sample_id ${sample_id} \
+        --transcript_counts transcript_matrix_counts.tsv
     """
 }
 
@@ -382,83 +399,21 @@ process umap_reduce_expression_matrix {
     label "singlecell"
     cpus 1
     input:
-        tuple val(sample_id),
-              path("gene_matrix_processed.tsv"),
-              path("transcript_matrix_processed.tsv")
+        tuple val(repeat_num),
+              val(sample_id),
+              val(data_type),
+              path(matrix)
     output:
-         tuple val(sample_id),
-              path("*gene_expression*umap.tsv"),
-              path("*transcript_expression*umap.tsv"),
-            //   path("gene_matrix_processed.tsv"),
-            //   path("transcript_matrix_processed.tsv"),
-              emit: matrix_umap_tsv
+        tuple val(sample_id),
+                path("${data_type}_umap_${repeat_num}.tsv"),
+                emit: matrix_umap_tsv
     """
     workflow-glue umap_reduce \
-        --output_prefix "${sample_id}.gene_expression" \
-        gene_matrix_processed.tsv
-
-    workflow-glue umap_reduce \
-        --output_prefix "${sample_id}.transcript_expression" \
-        transcript_matrix_processed.tsv
+        --output ${data_type}_umap_${repeat_num}.tsv \
+        ${matrix}
     """
 }
 
-
-process umap_plot_total_umis {
-    label "singlecell"
-    cpus 1
-    input:
-        tuple val(sample_id),
-              path(gene_matrix_umap),
-              path(transcript_matrix_umap),
-              path("gene_matrix_processed.tsv"),
-              path("transcript_matrix_processed.tsv")
-    output:
-          tuple val(sample_id),
-              path("*.genes*.png"), 
-              emit: gene_umap_plot_total
-          tuple val(sample_id),
-              path("*transcripts*.png"), 
-              emit: transcript_umap_plot_total
-
-    """
-    workflow-glue plot_umap \
-        --output_prefix "${sample_id}.umap.genes.total" \
-        --umap ${gene_matrix_umap} \
-        --full_matrix gene_matrix_processed.tsv
-    
-    workflow-glue plot_umap \
-        --output_prefix "${sample_id}.umap.transcripts.total" \
-        --umap ${transcript_matrix_umap} \
-        --full_matrix transcript_matrix_processed.tsv
-    """
-}
-
-
-process annotate_umap_genes {
-    // TODO: make a channle of input genes for thes process
-    label "singlecell"
-    cpus 1
-    input:
-        tuple val(sample_id),
-              path(matrix_umap_gene),
-              path(matrix_umap_transcript),
-              path("matrix_processed_gene.tsv"),
-              path("matrix_processed_transcript.tsv"),
-              val(gene)
-    output:
-        tuple val(sample_id),
-              path("*.png"),
-              emit: umaps
-    script:
-    """
-    workflow-glue plot_umap \
-        --gene $gene \
-        --output_prefix "${sample_id}.umap.gene_annotate.${gene}" \
-        --umap ${matrix_umap_gene} \
-        --full_matrix matrix_processed_gene.tsv
-    """
-}
 
 process pack_images {
     label "singlecell"
@@ -467,38 +422,19 @@ process pack_images {
         tuple val(sample_id),
               path("images_${sample_id}/*")
     output:
-        path "images_${sample_id}"
+         tuple val(sample_id),
+              path("images_${sample_id}")
     """
     echo packing images
     """
 }
 
-process umap_plot_mito_genes {
-    label "singlecell"
-    cpus 1
-    input:
-        tuple val(sample_id),
-              path(gene_matrix_umaps),
-              path("matrix_mito_processed.tsv")
-    output:
-        tuple val(sample_id),
-              path("*.png"), 
-              emit: matrix_umap_plot_mito
-    """
-    workflow-glue plot_umap \
-        --mito_genes \
-        --output_prefix "${sample_id}.umap.mitochondrial" \
-        --umap ${gene_matrix_umaps} \
-        --full_matrix matrix_mito_processed.tsv
-    """
-}
-    
+
 workflow process_bams {
     take:
         bam
         meta
         gtf
-        umap_genes
         bc_longlist_dir
         ref_genome_fasta
         ref_genome_idx
@@ -519,8 +455,7 @@ workflow process_bams {
         contigs = chr_gtf.map {[it[1], it[0]]}
             .cross(contigs) {it -> it[1]}
             .map {it -> it.flatten()[2, 3]}
-        
-        // barcodes()
+
         extract_barcodes(
             bam
             .cross(
@@ -528,6 +463,8 @@ workflow process_bams {
                 .cross(contigs).map{it -> it.flatten()})
                 .map{it -> it.flatten()[1, 2, 4, 6]},
             bc_longlist_dir)
+
+        un_corr_bcs = combine_uncorrect_bcs(extract_barcodes.out.barcode_counts)
 
         generate_whitelist(
             extract_barcodes.out.barcode_counts
@@ -550,8 +487,7 @@ workflow process_bams {
 
         assign_features(
             align_to_transcriptome.out.read_tr_map
-            // Join on sample_id,chr
-            .join(assign_barcodes.out.tags, by : [0, 1]))
+            .join(assign_barcodes.out.tags, by: [0, 1]))
 
         cluster_umis(
             assign_features.out.feature_assigns
@@ -577,30 +513,20 @@ workflow process_bams {
         process_expression_matrix(
             construct_expression_matrix.out.matrix_counts_tsv)
 
-         umap_reduce_expression_matrix(
-            process_expression_matrix.out.matrix_processed_tsv)
+        if (params.plot_umaps == true) {
+            umap_reduce_expression_matrix(
+                Channel.from(1..params.umap_n_repeats)
+                .combine(
+                    process_expression_matrix.out.gene_matrix_processed_tsv
+                    .concat(
+                        process_expression_matrix.out.transcript_matrix_processed_tsv)))
+             umaps = umap_reduce_expression_matrix.out.matrix_umap_tsv.groupTuple()
+        }else{
+            umaps = process_expression_matrix.out.gene_matrix_processed_tsv
+                // Make optinal file for each sample - [sample_id, OPTIONAL_FILE]
+                .map {[it[0], file("$projectDir/data/OPTIONAL_FILE")]}
+        }
 
-         umap_plot_total_umis(
-            umap_reduce_expression_matrix.out.matrix_umap_tsv
-            .join(process_expression_matrix.out.matrix_processed_tsv))
-
-         genes_to_plot = Channel.fromPath(umap_genes)
-             .splitCsv()
-        
-         annotate_umap_genes(
-             umap_reduce_expression_matrix.out.matrix_umap_tsv
-             .join(process_expression_matrix.out.matrix_processed_tsv)
-             // Combine each umap with a gene to annotate with
-             .transpose()
-             .combine(genes_to_plot)
-             .transpose())
-        
-        umap_plot_mito_genes(
-            umap_reduce_expression_matrix.out.matrix_umap_tsv
-            .join(process_expression_matrix.out.matrix_mito_tsv)
-            .map {it -> it[0, 1, 3]})
-
-        
         if (params.merge_bam) {
             combine_chrom_bams(tag_bams.out.tagged_bam
                 .groupTuple())
@@ -614,46 +540,36 @@ workflow process_bams {
             .groupTuple()
         }
 
-    // Select the first replicate of each umap for report plotting.
-    umaps = umap_plot_total_umis.out.gene_umap_plot_total
-        .concat(
-            umap_plot_total_umis.out.transcript_umap_plot_total,
-            umap_plot_mito_genes.out,
-            annotate_umap_genes.out.umaps.groupTuple())
-        .flatMap {it -> 
-                l = []
-                for (i=0; i<it[1].size(); i++){
-                    l.add([it[0], it[1][i]])
-                }
-                return l
-        }.filter {it -> it[1] ==~ /.*_0\.png$/}
-
-
     pack_images(
-           umaps
-            .concat(generate_whitelist.out.kneeplot,
-                umi_gene_saturation.out.saturation_curve)
-            .groupTuple())
+        generate_whitelist.out.kneeplot
+       .concat(umi_gene_saturation.out.saturation_curve)
+       .groupTuple())
 
-     emit:
-        results = umi_gene_saturation.out.saturation_curve
-             .join(final_read_tags)
-             .join(construct_expression_matrix.out)
-             .join(process_expression_matrix.out.matrix_processed_tsv)
-             .join(process_expression_matrix.out.matrix_mito_tsv)
-             .join(generate_whitelist.out.whitelist)
-             .join(generate_whitelist.out.kneeplot)
-             .join(tagged_bams)
-             .join(extract_barcodes.out.barcode_counts)
-             .join(annotate_umap_genes.out.umaps)
-             .join(umap_reduce_expression_matrix.out.matrix_umap_tsv)
-             .join(umap_plot_total_umis.out.gene_umap_plot_total)
-             .join(umap_plot_mito_genes.out.matrix_umap_plot_mito)
-             .join(umap_plot_total_umis.out.transcript_umap_plot_total)
-             .map{it -> it.flatten()}
+    // Tidy up channels prior to output
+    proc_expresion_out = process_expression_matrix.out.gene_matrix_processed_tsv
+        .concat(process_expression_matrix.out.transcript_matrix_processed_tsv)
+        .map {it -> it[0, 2]}.groupTuple()
+
+    emit:
+        results = umaps
+            .mix(umi_gene_saturation.out.saturation_curve)
+            .join(final_read_tags)
+            .join(construct_expression_matrix.out)
+            .join(proc_expresion_out)
+            .join(process_expression_matrix.out.mito_expression_tsv)
+            .join(generate_whitelist.out.whitelist)
+            .join(generate_whitelist.out.kneeplot)
+            .join(tagged_bams)
+            .join(combine_uncorrect_bcs.out)
+            .join(pack_images.out)
+            .map{it -> it.flatten()}
         
-        // Emit these sperately for use in the report
+        // Emit sperately for use in the report
         final_read_tags = final_read_tags
-        plots = pack_images.out.collect()
+        plots = pack_images.out.collect{it -> it[1]}.collect()
         white_list = generate_whitelist.out.whitelist
+        gene_expression = process_expression_matrix.out.gene_matrix_processed_tsv.map {it -> it[0, 2]}
+        transcript_expression = process_expression_matrix.out.transcript_matrix_processed_tsv.map {it -> it[0, 2]}
+        mitochondrial_expression = process_expression_matrix.out.mito_expression_tsv
+        umap_matrices = umaps
 }

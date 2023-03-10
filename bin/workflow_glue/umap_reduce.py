@@ -19,16 +19,7 @@ def argparser():
         help="Gene expression matrix: rows=genes/transcripts, \
             columns=barcodes, values=UMIs",
     )
-
-    # Optional arguments
     parser.add_argument(
-        "-o",
-        "--output_prefix",
-        help="write to current directory with this prefix",
-        default="")
-
-    parser.add_argument(
-        "-p",
         "--pcn",
         help="Number of principal components to generate prior to UMAP \
         dimensionality reduction [100]",
@@ -37,7 +28,6 @@ def argparser():
     )
 
     parser.add_argument(
-        "-d",
         "--dimensions",
         help="Number of dimensions to reduce to [2]",
         type=int,
@@ -61,16 +51,15 @@ def argparser():
     )
 
     parser.add_argument(
-        "--num_umaps",
-        help="Make multiple umap plots with different initial random states",
-        type=int,
-        default=10,
+        "--output",
+        help="UMAP TSV output file path.",
+        type=Path
     )
 
     return parser
 
 
-def pca(x, args):
+def run_pca(x, args):
     """Run PCA to generate args.pcn principal components."""
     # pcn must not exceed N samples or features
     pcn = min(args.pcn, x.shape[0], x.shape[1])
@@ -78,53 +67,52 @@ def pca(x, args):
     return transformer.fit_transform(x)
 
 
+def run_umap(x_pca, index, args):
+    """Create UMAP projections."""
+    reducer = umap.UMAP(
+        n_neighbors=args.n_neighbors,
+        min_dist=args.min_dist,
+        n_components=args.dimensions,
+        verbose=2
+    )
+
+    # If there's only a single transcript column, the reducer
+    # step will fail. For now just write an empty file.
+    # TODO: Have a better way of detcting if transcript data does not have
+    # enough transciript columns. Probably only an issue with test data
+    try:
+        x_embedded = reducer.fit_transform(x_pca)
+    except TypeError:
+        return None
+    else:
+        cols = [f"D{i+1}" for i in range(args.dimensions)]
+        df_umap = pd.DataFrame(x_embedded, columns=cols, index=index)
+        return df_umap
+
+
 def main(args):
     """Run entry point."""
     logger = get_named_logger('UmapReduce')
-    df = pd.read_csv(args.matrix, delimiter="\t")
-    feature_header = df.columns[0]
-    if feature_header == "gene":
-        df = df.set_index("gene")
-    elif feature_header == "transcript":
-        df = df.set_index("transcript")
-    else:
-        raise Exception("Did not find expected gene/transcript header")
+    df = pd.read_csv(args.matrix, delimiter="\t", index_col=0)
 
-    # Switch from barcodes as columns to barcodes as rows
+    # Switch barcodes columns to rows
     x = df.transpose()
 
     logger.info(
         f"Running PCA: {x.shape[1]} features --> \
             {args.pcn} prinicipal components")
-    x_pca = pca(x, args)
+    x_pca = run_pca(x, args)
 
     logger.info(
         f"Running UMAP: {x_pca.shape[1]} features --> \
             {args.dimensions} dimensions")
 
-    for n in range(args.num_umaps):
-        reducer = umap.UMAP(
-            n_neighbors=args.n_neighbors,
-            min_dist=args.min_dist,
-            n_components=args.dimensions,
-            verbose=2
-        )
-        outpath = Path() / f"{args.output_prefix}_{n}_umap.tsv"
-
-        # If there's only a single transcript column, the reducer
-        # step will fail. For now just write an empty file.
-        # TODO: Have a better way of detcting if transcript data does not have
-        # enough transciript columns. Probably only an issue with test data
-        try:
-            x_embedded = reducer.fit_transform(x_pca)
-        except TypeError:
-            open(outpath, 'w').close()
-        else:
-            cols = [f"D{i+1}" for i in range(args.dimensions)]
-            df_umap = pd.DataFrame(x_embedded, columns=cols, index=x.index)
-
-            df_umap.to_csv(
-                outpath, sep="\t", index=True, index_label="barcode")
+    df_umap = run_umap(x_pca, x.index, args)
+    if df_umap is not None:
+        df_umap.to_csv(
+            args.output, sep="\t", index=True, index_label="barcode")
+    else:
+        open(args.output, 'w').close()
 
 
 if __name__ == "__main__":

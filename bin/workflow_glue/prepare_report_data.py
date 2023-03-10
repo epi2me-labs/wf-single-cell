@@ -35,8 +35,7 @@ def _get_sample_summaries(read_tags, white_list):
     total_cells = len(pd.read_csv(white_list, sep='\t'))
     # The df contains only reads with a barcode and umi tag
     total_tagged = len(df)
-    gene_tagged_df = df.loc[
-        ~df.gene.str.contains(r"[a-zA-Z0-9]+_\d+_\d+", regex=True)]
+    gene_tagged_df = df[df.gene != '-']
     gene_tagged = len(gene_tagged_df)
     total_genes = len(gene_tagged_df['gene'].unique())
     transcript_tagged_df = df[df.transcript != '-']

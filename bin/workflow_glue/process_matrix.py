@@ -55,18 +55,15 @@ def argparser():
     )
 
     parser.add_argument(
+        "--sample_id",
+        help="prefix for output file name"
+    )
+
+    parser.add_argument(
         "--norm_count",
         help="Normalize to this number of counts per cell [10000]",
         type=int,
         default=10000,
-    )
-
-    parser.add_argument(
-        "--output_prefix",
-        help="Output TSV file containing processed gene expression matrix, \
-            where genes are rows and cells are columns \
-            [expression.processed.tsv]",
-        required=True
     )
 
     return parser
@@ -99,8 +96,7 @@ def filter_cells(df_gene, df_tr, args):
 
     df_gene["mito_total"] = df_gene.loc[:, mito_genes].sum(axis=1)
     df_gene["mito_pct"] = 100 * df_gene["mito_total"] / df_gene["total"]
-    df_gene["mito_pct"].to_csv(
-        f"{args.output_prefix}gene_expression.mito.tsv", sep="\t")
+    df_gene["mito_pct"].to_csv(f"{args.sample_id}.gene_expression.mito.tsv", sep="\t")
     n_mito = df_gene[df_gene["mito_pct"] > args.max_mito].shape[0]
     logger.info(
         f"Dropping {n_mito} cells with > {args.max_mito}% mitochondrial reads")
@@ -181,14 +177,13 @@ def main(args):
     logger.info(
         f"Processed gene matrix: {df_gene.shape[0]} "
         f"genes x {df_gene.shape[1]} cells")
-    df_gene.to_csv(
-        f"{args.output_prefix}.gene_expression.processed.tsv", sep="\t")
+    df_gene.to_csv(f"{args.sample_id}.gene_expression.processed.tsv", sep="\t")
 
     logger.info(
         f"Processed transcript matrix: {df_transcript.shape[0]} "
         f"transcripts x {df_transcript.shape[1]} cells")
     df_transcript.to_csv(
-        f"{args.output_prefix}.transcript_expression.processed.tsv", sep="\t")
+        f"{args.sample_id}.transcript_expression.processed.tsv", sep="\t")
 
 
 if __name__ == "__main__":

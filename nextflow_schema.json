@@ -96,6 +96,12 @@
                     "default": "output",
                     "format": "directory-path",
                     "description": "Directory for output of all workflow results."
+                },
+                "plot_umaps": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Optionally generate UMAP plots.",
+                    "help_text": "If set to false (the default), UMAP projection and plotting will be skipped, which will speed up the workflow."
                 }
             }
         },
@@ -188,6 +194,12 @@
                     "description": "Gene name prefix to identify for mitochondrial genes.",
                     "help_text": "Parts of the workflow analyse mitochondrial genes seperately. These genes are identified by searching for a gene name prefix. Human mitochondrial genes can be identified with prefix 'MT-' and mouse genes with prefix 'mt-'. If the reference genome contains data from multiple organisms with different nomencalture,e multiple prefixes can be supplied like so: 'MT-,mt-'",
                     "default": "MT-"
+                },
+                "umap_n_repeats": {
+                    "type": "integer",
+                    "default": 6,
+                    "description": "Number of UMAP projection to to repeat for each dataset.",
+                    "help_text": "The UMAP algorithm contains elements of randomness that can misleaad users into seeing assocations between cells that are not meaningful. It is recommended to view multiple plots generated with the same parameters and check that any observed structure is consistent across runs."
                 }
             }
         },
