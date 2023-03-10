@@ -4,11 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v0.2.1]
 ### Changed
 - Add multiprocessing to calc_saturation.py for ~ 2X speedup
 - Use rapidfuzz for finding barcode matches in whielist; ~10x speedup
 - Use multithreading to speed up sequencing saturation calcualtion
+- Put UMAPs in report and make optional
 
 ## [v0.2.0]
 ### Added

@@ -85,7 +85,9 @@ process makeReport {
         path 'read_stats.csv'
         path 'survival.tsv'
         path 'wf_summary.tsv'
+        path umap_dirs
         path images
+        path umap_genes
 
     output:
         path "wf-single-cell-*.html"
@@ -99,7 +101,9 @@ process makeReport {
         --survival survival.tsv \
         --wf_summary wf_summary.tsv \
         --output ${report_name} \
+        --umap_dirs ${umap_dirs} \
         --images ${images} \
+        --umap_genes ${umap_genes}
     """
 }
 
@@ -116,7 +120,7 @@ process output {
     publishDir "${params.out_dir}", mode: 'copy', pattern: "*umap*.{tsv,png}",
         saveAs: { filename -> "${sample_id}/umap/$filename" }
     publishDir "${params.out_dir}", mode: 'copy', 
-        pattern: "*{counts,processed,kneeplot,saturation,config,tags}*",
+        pattern: "*{images,counts,processed,kneeplot,saturation,config,tags,whitelist}*",
         saveAs: { filename -> "${sample_id}/$filename" }
 
     input:
@@ -150,12 +154,21 @@ process prepare_report_data {
         tuple val(sample_id),
               path('read_tags'),
               path('config_stats'),
-              path('white_list')
+              path('white_list'),
+              path('gene_expression'),
+              path('transcript_expression'),
+              path('mitochondrial_expression'),
+              path(umaps)
     output:
         path 'survival_data.tsv',
             emit: survival
         path 'sample_summary.tsv',
             emit: summary
+        path "${sample_id}_umap",
+            emit: umap_dir
+
+    script:
+        opt_umap = umaps.name != 'OPTIONAL_FILE'
     """
     workflow-glue prepare_report_data \
         --read_tags read_tags \
@@ -163,6 +176,19 @@ process prepare_report_data {
         --white_list white_list \
         --sample_id ${sample_id}
 
+    umd=${sample_id}_umap
+    mkdir \$umd
+
+    if [ "$opt_umap" = true ]; then
+        echo "Adding umap data to sample directory"
+        # Add data required for umap plottiong into sample directory
+        mv *umap*.tsv \$umd
+        mv ${gene_expression} \$umd
+        mv ${transcript_expression} \$umd
+        mv ${mitochondrial_expression} \$umd
+    else
+        touch "\$umd"/OPTIONAL_FILE
+    fi
     """
 }
 
@@ -205,7 +231,6 @@ workflow pipeline {
             align.out.bam_sort,
             meta,
             ref_genes_gtf,
-            umap_genes,
             bc_longlist_dir,
             ref_genome_fasta,
             ref_genome_idx)
@@ -213,19 +238,25 @@ workflow pipeline {
         prepare_report_data(
             process_bams.out.final_read_tags
             .join(stranding.out.config_stats)
-            .join(process_bams.out.white_list))
+            .join(process_bams.out.white_list)
+            .join(process_bams.out.gene_expression)
+            .join(process_bams.out.transcript_expression)
+            .join(process_bams.out.mitochondrial_expression)
+            .join(process_bams.out.umap_matrices))
         
         makeReport(
             software_versions,
             workflow_params,
             summariseCatChunkReads.out.stats
                 .map {it -> it[1]}
-                .collectFile(keepHeader:true, name: 'stats'),
+                .collectFile(keepHeader:true),
             prepare_report_data.out.survival
                 .collectFile(keepHeader:true),
             prepare_report_data.out.summary
                 .collectFile(keepHeader:true),
-            process_bams.out.plots)
+            prepare_report_data.out.umap_dir,
+            process_bams.out.plots,
+            umap_genes)
     emit:
         results = process_bams.out.results
         config_stats = stranding.out.config_stats

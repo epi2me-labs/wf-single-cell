@@ -1,18 +1,16 @@
 #!/usr/bin/env python
 """Make report."""
 import base64
-from collections import defaultdict
 from pathlib import Path
-import re
 
-from dominate.tags import b, figure, img, li, p, ul
+from dominate.tags import b, figure, h6, img, li, p, ul
 import ezcharts
 from ezcharts.components.ezchart import EZChart
 from ezcharts.components.fastcat import SeqSummary
 from ezcharts.components.reports.labs import LabsReport
 from ezcharts.components.theme import LAB_head_resources
 from ezcharts.layout.snippets import DataTable, Grid, Tabs
-from ezcharts.plots import util
+from ezcharts.plots import Plot, util
 from ezcharts.util import get_named_logger
 import pandas as pd
 
@@ -25,61 +23,130 @@ REPORT_TITLE = f'{WORKFLOW_NAME} report'
 Colors = util.Colors
 
 
-def umap_plots(img_dirs):
-    """Plot representative UMAp plots."""
-    plots = defaultdict(dict)
-    annotated_plots = defaultdict(list)
+def umap_plots(umaps_dirs, genes_file):
+    """Plot UMAPs."""
+    # Raad single column gene list file
+    genes = pd.read_csv(genes_file, header=None)[0]
 
-    for imgdir in img_dirs:
-        sample_id = imgdir.replace('images_', '')
-        sample_dir = Path(imgdir)
+    sample_tabs = Tabs()
 
-        for img_path in sample_dir.iterdir():
-            umap_match = re.search(
-                r'(genes|gene_annotate|transcript|mito)', str(img_path))
-            if umap_match:
-                umap_type = umap_match.groups()[0]
-                if umap_type == 'gene_annotate':
-                    annotated_plots[sample_id].append(img_path)
-                else:
-                    plots[sample_id][umap_type] = img_path
+    def _plot(data, title, hue):
+        plt = Plot()
+        plt.title = dict(text=title)
+        plt.title.textStyle = dict(fontSize=14)
+        plt.xAxis = dict(name='D1')
+        plt.yAxis = dict(name='D2')
+        plt.add_dataset(dict(
+            source=data.values))
 
-    tabs = Tabs()
-    active = True
+        plt.visualMap = [
+            {
+                'show': True,
+                'text': [str(round(max(data[hue]), 2)), str(round(min(data[hue]), 2))],
+                'left': 'right',
+                'type': "continuous",
+                'min': min(data[hue]),
+                'max': max(data[hue]),
+                'inRange': {
+                    'color': ['blue', 'green', 'yellow',  'red'],
+                    'opacity': 0.7,
 
-    for sample_id in plots.keys():
-        with tabs.add_tab(sample_id, active):
-            active = False
-            with Grid(columns=2):
-                for dtype in ['genes', 'transcript', 'mito']:
-                    plot_path = plots[sample_id][dtype]
-                    with open(plot_path, 'rb') as fh:
-                        b64img = base64.b64encode(fh.read()).decode()
-                    with figure():
-                        img(src=f'data:image/png;base64,{b64img}', width=600)
-            if len(annotated_plots[sample_id]) > 0:
-                b(
-                    """Gene expression umaps overlaid with expression levels of
-                    genes of interest""")
-                with Grid(columns=2):
-                    for plot_path in annotated_plots[sample_id]:
-                        with open(plot_path, 'rb') as fh:
-                            b64img = base64.b64encode(fh.read()).decode()
-                        with figure():
-                            img(
-                                src=f'data:image/png;base64,{b64img}',
-                                width=600)
+                },
+                'dimension': 2
+            }]
+        plt.add_series(dict(
+            type='scatter',
+            datasetIndex=0,
+            symbolSize=2,
+            symbol='circle'))
+        EZChart(plt, theme='epi2melabs')
+
+    # Get data from each sample folder
+    for d in umaps_dirs:
+
+        sample_id = d.replace('_umap', '')
+        sample_dir = Path(d)
+
+        with sample_tabs.add_tab(sample_id):
+
+            repl_tabs = Tabs()
+
+            gene_umap_files = sample_dir.glob('*gene_umap*')
+            transcript_umap_files = sample_dir.glob('*transcript_umap*')
+
+            for i, (
+                gene_umap_file, transcript_umap_file
+            ) in enumerate(zip(gene_umap_files, transcript_umap_files)):
+
+                with repl_tabs.add_tab(f'umap #{i}'):
+
+                    gene_umap = pd.read_csv(gene_umap_file, sep='\t', index_col=0)
+                    gene_expression_file = sample_dir / 'gene_expression'
+                    gene_expression = pd.read_csv(
+                        gene_expression_file, sep='\t', index_col=0)
+                    gene_mean_expression = pd.DataFrame(
+                        gene_expression.mean(axis=0), columns=['gene mean expression'])
+
+                    transcript_umap = pd.read_csv(
+                        transcript_umap_file, sep='\t', index_col=0)
+                    transcript_expression_file = sample_dir / 'transcript_expression'
+                    transcript_expression = pd.read_csv(
+                        transcript_expression_file, sep='\t', index_col=0)
+                    transcript_mean_expression = pd.DataFrame(
+                        transcript_expression.mean(axis=0),
+                        columns=['transcript mean expression'])
+
+                    mito_expression_file = sample_dir / "mitochondrial_expression"
+                    mito_expression = pd.read_csv(
+                        mito_expression_file, sep='\t', index_col=0)
+
+                    # Make the plots
+                    with Grid(columns=2):
+
+                        gdata = gene_umap.merge(
+                            gene_mean_expression, left_index=True, right_index=True)
+                        _plot(
+                            gdata, title='Gene UMAP / mean gene expression annotation',
+                            hue='gene mean expression')
+
+                        tdata = transcript_umap.merge(
+                            transcript_mean_expression, left_index=True,
+                            right_index=True)
+                        _plot(
+                            tdata,
+                            title='Transcript UMAP / '
+                                  'mean transcript expression annotation',
+                            hue='transcript mean expression')
+
+                        mdata = gene_umap.merge(
+                            mito_expression, left_index=True, right_index=True)
+                        _plot(
+                            mdata,
+                            title='Gene UMAP / mean mito. expression '
+                                  'annotation', hue='mito_pct')
+
+                        # Plot expresion levels from a single gene over gene UMAP.
+                        for gene in genes:
+                            if gene in gene_expression.index:
+                                go_data = gene_umap.merge(
+                                    gene_expression.loc[gene],
+                                    left_index=True, right_index=True)
+                                _plot(
+                                    go_data,
+                                    title=f'Gene umap / single gene expression '
+                                          f'annotation: {gene}',
+                                    hue=gene)
+                        else:
+                            h6(f'{gene} not in dataset / has been filtered out')
 
 
 def diagnostic_plots(img_dirs):
     """Diagnostic plots."""
     tabs = Tabs()
-    active = True
 
     for imgdir in img_dirs:
         sample_id = imgdir.replace('images_', '')
-        with tabs.add_tab(sample_id, active):
-            active = False
+        with tabs.add_tab(sample_id):
             with Grid(columns=2):
                 sample_dir = Path(imgdir)
                 knee_plot_path = next(
@@ -97,8 +164,6 @@ def diagnostic_plots(img_dirs):
 def main(args):
     """wf-single-cell report generation."""
     logger = get_named_logger("Report")
-
-    logger.info('Building plots')
 
     logger.info('Building report')
 
@@ -238,25 +303,27 @@ def main(args):
 
         diagnostic_plots(args.images)
 
-    with report.add_section('UMAP projections', 'UMAP'):
-        p(
-            """This section presents various UMAP projections
-            of the data.
-            UMAP is an unsupervised algorithm that projects the
-            multidimensional single cell expression data into 2
-            dimensions. This can reveal structure in the data representing
-            different cell types or cells that share common regulatory
-            pathways, for example.
+    # Check if umaps were skipped
+    if not (Path(args.umap_dirs[0]) / 'OPTIONAL_FILE').is_file():
+        with report.add_section('UMAP projections', 'UMAP'):
+            p(
+                """This section presents various UMAP projections
+                of the data.
+                UMAP is an unsupervised algorithm that projects the
+                multidimensional single cell expression data into 2
+                dimensions. This could reveal structure in the data representing
+                different cell types or cells that share common regulatory
+                pathways, for example.
 
-            The UMAP algorithm is stochastic, which means running the same data
-            multiple times through UMAP with the same settings can lead to
-            different projections.
-            In order to to have some confidence in the observed clusters,
-            it can be useful to run the projection multiple times.
-            A single plot for each resulting expression matrix is shown here,
-            but 10 replicated plots can be found in the output folder:
-            "{out_dir}/{sample_id}/UMAP""")
-        umap_plots(args.images)
+                The UMAP algorithm is stochastic; analysing the same data
+                multiple times with UMAP, using identical parameters, can lead to
+                visually different projections.
+                In order to have some confidence in the observed results,
+                it can be useful to run the projection multiple times and so a series of
+                UMAP projections can be viewed below.""")
+            umap_plots(args.umap_dirs, args.umap_genes)
+    else:
+        logger.info('Skipping UMAP plotting')
 
     report.write(args.output)
     logger.info('Report writing finished')
@@ -271,7 +338,7 @@ def argparser():
         help="fastcat read stats file, with multiple samples concatenated")
     parser.add_argument(
         "--images", nargs='+',
-        help="various images to put in report")
+        help="Sample directories containing various images to put in report")
     parser.add_argument(
         "--survival",
         help="Read survival data in TSV format")
@@ -283,7 +350,15 @@ def argparser():
     parser.add_argument(
         "--versions", help="Workflow versions file")
     parser.add_argument(
-        "--output", help="Output HTML file.")
+        "--output", help="Output HTML file")
+    parser.add_argument(
+        "--umap_dirs", nargs='+',
+        help="Sample directories containing umap and gene expression files")
+    parser.add_argument(
+        "--gene_expression", help="Paths to UMAP TSVs",
+        nargs='+')
+    parser.add_argument(
+        "--umap_genes", help="File containing list of genes to annnotate UMAPs")
     return parser
 
 
