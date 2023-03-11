@@ -154,16 +154,16 @@ process tag_bams {
               path('tags.tsv')
     output:
          tuple val(sample_id),
-              path("tagged.bam"),
-              path("tagged.bam.bai"),
+              path("${sample_id}.${chr}.tagged.bam"),
+              path("${sample_id}.${chr}.tagged.bam.bai"),
               emit: tagged_bam
     """
     workflow-glue tag_bam \
         --in_bam align.bam \
         --tags tags.tsv \
-        --out_bam tagged.bam
+        --out_bam ${sample_id}.${chr}.tagged.bam
 
-    samtools index tagged.bam
+    samtools index ${sample_id}.${chr}.tagged.bam
     """
 }
 
