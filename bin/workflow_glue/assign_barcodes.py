@@ -154,7 +154,11 @@ def process_records(
             corrected_bcs, index='read_id',
             columns=['read_id', 'CB'])
     else:
-        return barcode_counter, pd.DataFrame()
+        result_tags_df = pd.DataFrame(
+            columns=['read_id', 'CR', 'CY', 'UR', 'chr', 'start', 'end', 'mapq', 'CB']
+        ).set_index('read_id', drop=True)
+
+        return barcode_counter, result_tags_df
 
     # Join the corrected barcode back to the rest of the orginal tags.
     result_tags_df = df_tags.merge(

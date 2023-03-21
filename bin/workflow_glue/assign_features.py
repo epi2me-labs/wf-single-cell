@@ -51,7 +51,7 @@ def main(args):
 
     df_mapq = pd.read_csv(args.tags, sep='\t', index_col=0, usecols=['read_id', 'mapq'])
 
-    # Dataframe with read_id and wuery_transcript (transcript built by strintie)
+    # Dataframe with read_id and query_transcript (transcript built by strintie)
     df_stringtie_assign = pd.read_csv(  # Add headers to the files
         args.query_transcript_read_assign,
         names=['read_id', 'qry_id'],

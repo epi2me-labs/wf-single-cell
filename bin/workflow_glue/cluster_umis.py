@@ -206,8 +206,14 @@ def main(args):
         )
 
     else:
-        df_tags_out = pd.DataFrame()
-        df_workflow_out = pd.DataFrame()
+        df_tags_out = pd.DataFrame(columns=[
+            'read_id', 'CR', 'CB', 'CY', 'UR', 'UB', 'UY', 'gene', 'transcript', 'chr']
+        ).set_index('read_id', drop=True)
+
+        df_workflow_out = pd.DataFrame(columns=[
+            'read_id', 'gene', 'transcript', 'corrected_barcode',
+            'corrected_umi', 'chr', 'start', 'end']
+        ).set_index('read_id', drop=True)
 
     df_tags_out.to_csv(args.output_read_tags, sep='\t', index=True)
     df_workflow_out.to_csv(args.workflow_output, sep='\t')
