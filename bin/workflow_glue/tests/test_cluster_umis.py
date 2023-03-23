@@ -53,16 +53,21 @@ def umi_gene_df():
 
 
 def test_process_records(umi_gene_df):
-    """Check that process_records is clustering and correcting umis appropriately."""
-    df = process_records(umi_gene_df)
-    assert 'UB' in df
+    """Check that process_records is clustering and correcting UMIs appropriately."""
+    class Args:
+        ref_interval = 1000
+    process_records(umi_gene_df, Args)
+
+    assert 'UB' in umi_gene_df
     # Check for the correct number of clusters
-    assert df['UB'].nunique() == 4
+    assert umi_gene_df['UB'].nunique() == 4
 
     # Check that UMI2 is corrected to the 'true' UMI of cluster1
-    assert all(df.loc[df['UR'] == 'ttAAAAAAAAAA'].loc[:, 'UB'] == 'AAAAAAAAAAAA')
+    assert all(
+        umi_gene_df.loc[
+            umi_gene_df['UR'] == 'ttAAAAAAAAAA'].loc[:, 'UB'] == 'AAAAAAAAAAAA')
 
     # Check that the rest of the UMIs map back to themselves
     # as they are all single-UMI clsuters
-    df_no_clust1 = df[~df.UR.isin(['AAAAAAAAAAAA', 'ttAAAAAAAAAA'])]
+    df_no_clust1 = umi_gene_df[~umi_gene_df.UR.isin(['AAAAAAAAAAAA', 'ttAAAAAAAAAA'])]
     assert all(df_no_clust1.UR == df_no_clust1.UB)

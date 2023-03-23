@@ -5,6 +5,7 @@ import itertools
 from pathlib import Path
 
 from editdistance import eval as edit_distance
+import numpy as np
 import pandas as pd
 from umi_tools import UMIClusterer
 
@@ -30,6 +31,15 @@ def argparser():
         "--output_read_tags",
         help="Output file for read tags TSV. USed for tagging BAM files.",
         type=Path
+    )
+
+    parser.add_argument(
+        "-i",
+        "--ref_interval",
+        help="Size of genomic window (bp) to assign as gene name if no gene \
+          assigned by featureCounts [1000]",
+        type=int,
+        default=1000,
     )
 
     parser.add_argument(
@@ -104,6 +114,37 @@ def umi_clusterer_call(self, umis, threshold):
     return final_umis
 
 
+def create_region_name(row, ref_interval):
+    """
+    Create region name.
+
+    Create a 'gene name' based on the aligned chromosome and coordinates.
+    The midpoint of the alignment determines which genomic interval to use
+    for the 'gene name'.
+
+    :param read: read tags and location
+    :type read: tuple
+    :param args: object containing all supplied arguments
+    :type args: class 'argparse.Namespace'
+    :return: Newly created 'gene name' based on aligned chromosome and coords
+    :rtype: str
+    """
+    chrom = row.chr
+    start_pos = row.start
+    end_pos = row.end
+
+    # Find the midpoint of the alignment
+    midpoint = int((start_pos + end_pos) / 2)
+
+    # Pick the genomic interval based on this alignment midpoint
+    interval_start = np.floor(midpoint / ref_interval) * ref_interval
+    interval_end = np.ceil(midpoint / ref_interval) * ref_interval
+
+    # New 'gene name' will be <chr>_<interval_start>_<interval_end>
+    gene = f"{chrom}_{int(interval_start)}_{int(interval_end)}"
+    return gene
+
+
 def cluster(df):
     """Clsuter UMIs.
 
@@ -148,10 +189,10 @@ def cluster(df):
     # UB: corrected UMI tag
     df["UB"] = df.groupby(
         ["gene_cell"])["UR"].transform(umi_tools_cluster)
-    return df.set_index('read_id', drop=True)
+    df.set_index('read_id', drop=True, inplace=True)
 
 
-def process_records(df):
+def process_records(df, args):
     """Process records from tags file.
 
     For each read, get the gene, barcode and unorrecdted UMI.
@@ -161,16 +202,24 @@ def process_records(df):
     :param df: DataFrame with columns: read_id, UR, gene
     :type df: pd.DataFrame
     """
-    # Only process recoreds with gene, corrected barcode and uncorrected UMIs.
-    df = df.loc[(df.gene != '-') & (df.CB != '-') & (df.UR != '-')]
-
+    df_no_gene = df.loc[df.gene == '-']
+    # Create column to keep track of non-assigned genes
+    df['no_gene'] = False
+    if len(df_no_gene) > 0:
+        # For reads with no asssignment, create a temporary gene name
+        # based on chr and location. Use that for clustering and reset back to '-' later
+        regions = df_no_gene.apply(
+            create_region_name, axis=1, args=(args.ref_interval,))
+        df.loc[regions.index, 'gene'] = regions
+        df.loc[df.index.isin(regions.index), 'no_gene'] = True
     # Create gene/cell index for subsetting reads prior to clustering.
     df["gene_cell"] = df["gene"] + ":" + df["CB"]
     df['read_id'] = df.index
     df.set_index('gene_cell', inplace=True, drop=True)
-
-    df_ub = cluster(df)
-    return df_ub
+    cluster(df)
+    # Reset unassigned genes to '-'
+    df.loc[df.no_gene, 'gene'] = '-'
+    df.drop(columns='no_gene', inplace=True)
 
 
 def main(args):
@@ -181,28 +230,27 @@ def main(args):
     # Merge genes and transcripts onto tags.
     df_tag_feature = df_features.merge(df_tags, left_index=True, right_index=True)
 
-    df_ub = process_records(df_tag_feature)
-    if len(df_ub) > 0:
-        # Merge The corrected UMIs back onto the orignal dataframe
-        # What happend to non-assigned rows?
-        df_ub = df_tag_feature.merge(
-            df_ub[['UB']],
-            how='left', left_index=True, right_index=True)
-        df_ub.UB.fillna('-', inplace=True)
+    # Only process reads with a corrected barcode and uncorrected UMI
+    df_tag_feature = df_tag_feature.loc[
+        (df_tag_feature.CB != '-') & (df_tag_feature.UR != '-')]
 
+    # Process the tag and feature df by adding UB tags inplace.
+    process_records(df_tag_feature, args)
+
+    if len(df_tag_feature) > 0:
         # Write a CSV used for tagging BAMs
-        df_tags_out = df_ub[
+        df_tags_out = df_tag_feature[
             ['CR', 'CB', 'CY', 'UR', 'UB', 'UY', 'gene', 'transcript']
         ].assign(chr=args.chrom)
 
         # Write a subset of columns with human-readable names for the final output.
-        df_workflow_out = df_ub[
+        df_workflow_out = df_tag_feature[
             ['gene', 'transcript', 'CB', 'UB', 'chr', 'start', 'end']]
-        df_workflow_out.rename(
+        df_workflow_out = df_workflow_out.rename(
             columns={
                 'CB': 'corrected_barcode',
                 'UB': 'corrected_umi'
-            }, inplace=True
+            }
         )
 
     else:
