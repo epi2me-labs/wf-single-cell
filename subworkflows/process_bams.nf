@@ -282,7 +282,8 @@ process align_to_transcriptome {
               path("read_query_tr_map.tsv"),
               path('stringtie.gff'),
               emit: read_tr_map
-    """  
+    """
+    echo "read_id\tqry_id\n" > read_query_tr_map.tsv;
     minimap2 -ax map-ont \
         --end-bonus 10 \
         -t $task.cpus \
@@ -290,7 +291,7 @@ process align_to_transcriptome {
         reads.fastq \
         | samtools view -F 2304 \
         |  gawk 'BEGIN{OFS="\t";} /^[^@]/ {print \$1,\$3}' \
-        > read_query_tr_map.tsv;
+        >> read_query_tr_map.tsv;
     """
 }
 
@@ -319,6 +320,7 @@ process assign_features {
         workflow-glue assign_features \
             --query_transcript_read_assign query_transcript_read_assign.tsv \
             --gffcompare_tmap gffcompare.stringtie.gff.tmap \
+            --gtf chr.gtf \
             --tags tags.tsv \
             --output "${sample_id}.${chr}.feature_assigns.tsv" \
             --min_mapq ${params.gene_assigns_minqv}

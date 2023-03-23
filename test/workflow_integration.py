@@ -43,6 +43,12 @@ def test_workflow(wf_out_dir, sample_id):
     df_umi_mismatches = df[df.true_umi != df.corrected_umi]
     assert len(df_umi_mismatches) < 2
 
+    # Check gene assignment
+    df_gene_matches = df[df.gene == df.true_gene]
+    perc_correct = 100 / len(df) * len(df_gene_matches)
+    assert perc_correct == 100.0
+
+    # Check transcript assignment
     # We should be getting more than 85% of the transcritps correctly called,
     # especially on this contrived synthetic dataset.
     df_tr_matches = df[df.transcript == df.true_transcript]
