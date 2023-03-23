@@ -231,7 +231,7 @@ def ascii_decode_qscores(string):
 
 def parse_probe_alignment(
         p_alignment, adapter1_probe_seq, barcode_length, umi_length,
-        prefix_qual
+        prefix_qual, prefix_seq
         ):
     """Parse probe alignment."""
     ref_alignment = p_alignment.traceback.ref
@@ -269,32 +269,25 @@ def parse_probe_alignment(
         umi = query_alignment[
             bc_start_pos + barcode_length: bc_start_pos + barcode_length + umi_length]
 
-        barcode_n_del = barcode.count('-')
-        umi_n_del = umi.count('-')
-        adapter1_n_del = adapter1.count('-')
+        barcode_no_ins = barcode.replace("-", "")
+        prefix_seq_bc_start = prefix_seq.find(barcode_no_ins)
+        prefix_seq_bc_end = prefix_seq_bc_start + len(barcode_no_ins)
+        bc_q_ascii = ascii_q[prefix_seq_bc_start:prefix_seq_bc_end]
 
-        if any((barcode_n_del, umi_n_del, adapter1_n_del)):
-            barcode = barcode.replace("-", "")
-            umi = umi.replace("-", "")
-
-        barcode_q_ascii = ascii_q[
-            bc_start_pos - adapter1_n_del:
-            bc_start_pos - adapter1_n_del + barcode_length - barcode_n_del]
-
-        umi_q_ascii = ascii_q[
-            bc_start_pos - adapter1_n_del + barcode_length - barcode_n_del:
-            bc_start_pos - adapter1_n_del + barcode_length - barcode_n_del +
-            umi_length - umi_n_del]
+        umi_no_ins = umi.replace("-", "")
+        prefix_seq_umi_start = prefix_seq.find(umi_no_ins)
+        prefix_seq_umi_end = prefix_seq_umi_start + len(umi_no_ins)
+        umi_q_ascii = ascii_q[prefix_seq_umi_start:prefix_seq_umi_end]
 
     else:
         # No Ns in the probe successfully aligned -- we will ignore this read
         adapter1_ed = len(adapter1_probe_seq)
         barcode = ""
         umi = ""
-        barcode_q_ascii = ""
+        bc_q_ascii = ""
         umi_q_ascii = ""
 
-    return adapter1_ed, barcode, umi, barcode_q_ascii, umi_q_ascii
+    return adapter1_ed, barcode, umi, bc_q_ascii, umi_q_ascii
 
 
 def align_adapter(args):
@@ -356,7 +349,7 @@ def align_adapter(args):
             adapter1_ed, barcode, umi, bc_qscores, umi_qscores \
                 = parse_probe_alignment(
                     p_alignment, adapter1_probe_seq, args.barcode_length,
-                    args.umi_length, prefix_qv
+                    args.umi_length, prefix_qv, prefix_seq
                     )
 
             # Require minimum read1 edit distance

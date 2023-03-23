@@ -87,6 +87,7 @@ def args(make_superlist):
         polyt_length = 10
         superlist = make_superlist
         verbosity = 2
+
     return Args
 
 
@@ -125,7 +126,7 @@ def test_main(args):
     [
         ['CTACACGACGCTCTTCCGATCT', (1, 9), (1, 1)],  # ED 0
         ['CTACACGACGCTCTTCCGAggg', (1, 9), (1, 1)],  # ED 3
-        ['CTACACGACGCTCTTCCGgggg', (0, 9), (0, 1)]   # ED 4
+        ['CTACACGACGCTCTTCCGgggg', (0, 9), (0, 1)]   # ED 4; no results
     ]
 )
 def test_align_adapter(args, adapter1_seq, tags_results_shape, counts_results_shape):
@@ -142,82 +143,83 @@ def test_align_adapter(args, adapter1_seq, tags_results_shape, counts_results_sh
     assert df_counts.shape == counts_results_shape
 
 
-def ascii_encode_qscores(integers):
-    """Convert integer quality values into ASCII characters."""
-    return "".join(map(lambda x: chr(x + 33), integers))
+def ascii_decode_qscores(string):
+    """Convert ASCII character quality values into integers."""
+    return list(map(lambda x: ord(x) - 33, string))
 
 
 @pytest.mark.parametrize(
-    'align_adapter1,align_barcode,align_umi,adapter1_edit_dist',
+    'query,query_aln,query_ascii_q,expected_adapter1_ed',
     [
-        # Full adpt1 match, no deletions in BC/UMI
-        ['CTTCCGATCT', 'AAACCCAAGAAACACT', 'GACTGACTGACT', 0],
-        # 3 ED for adpt1
-        ['gaaCCGATCT', 'AAACCCAAGAAACACT', 'GACTGACTGACT', 3],
-        # Deletion in barcode
-        ['CTTCCGATCT', 'AAACCCAAGAAACA-T', 'GACTGACTGACT', 0],
-        # Deletion in UMI
-        ['CTTCCGATCT', 'AAACCCAAGAAACA-T', '-ACTGACTGACT', 0],
-        # Deletion in barcode and umi
-        ['CTTCCGATCT', 'A--CCCAAGAAACACT', 'GA--GACTGACT', 0],
-        # Deletion in adapter, barcode, and umi
-        ['CTTCCGAT-T', 'A--CCCAAGAAACACT', 'GA--GACTGACT', 1],
+        # Adapter 1             BC                UMI          polyT
+
+        # 100% match of the query adapter1 and the 10bp adapter1 prefix in the ref probe
+        ["CTACACGACGCTCTTCCGATCT AAACCCAAGAAACACT GACTGACTGACT TTTTTTTTTTTT",
+         "            CTTCCGATCT AAACCCAAGAAACACT GACTGACTGACT TTTTTTTTTTTT",
+         "?????????????????????? ()*+,-./01234567 89:;<=>?@ABC ????????????",
+         0],
+
+        # 2 bp substitution in the adapter1 query
+        ["CTACACGACGCTCTTCCGATaa AAACCCAAGAAACACT GACTGACTGACT TTTTTTTTTTTT",
+         "            CTTCCGATaa AAACCCAAGAAACACT GACTGACTGACT TTTTTTTTTTTT",
+         "?????????????????????? ()*+,-./01234567 89:;<=>?@ABC ????????????",
+         2],
+
+        # 2 bp deletion in the adapter1 query
+        ["CTACACGACGCTCTTCCGAT   AAACCCAAGAAACACT GACTGACTGACT TTTTTTTTTTTT",
+         "            CTTCCGAT-- AAACCCAAGAAACACT GACTGACTGACT TTTTTTTTTTTT",
+         "????????????????????   ()*+,-./01234567 89:;<=>?@ABC ????????????",
+         2],
 
     ]
 
 )
-def test_parse_probe_alignment(
-        args, align_adapter1, align_barcode, align_umi, adapter1_edit_dist):
+def test_parse_probe_alignment(query, query_aln, query_ascii_q, expected_adapter1_ed):
     """Test_parse_probe_alignment.
 
-    Mock various parasail alignments to test alignment parsing.
+    In this test a mocked parasail alignment is created. We want to test that the
+    correct barcode, UMI and asscoatated quality scores are extracted from the
+    query.
+
+    :param query: read query
+    :param query_aln: the query alignment that would result from parasail alignment to
+        the reference probe
+    :param query_ascii_q: the ascii-encoded qualitey string associated with the query
+    :param: expected_adapter1_ed: the expected edit distance of the adapter1
     """
-    # Some defaults for the 3prime kit. These are passed to parse_probe_alignemtn
-    barcode_length = 16
-    umi_length = 12
+    # Build a mock parasail alignment result. Although there would be geen sequrnce
+    # after the polyT, we can omit it here.
 
-    # Get real barcode and UMI by stripping any deletion characters form the alignment
-    actual_bc = align_barcode.replace('-', '')
-    actual_bc_len = len(actual_bc)
-    actual_umi = align_umi.replace('-', '')
-    actual_umi_len = len(actual_umi)
-    actual_a1_len = len(align_adapter1.replace('-', ''))
+    # This is the read including the full 22bp adapter1 probe
+    #       adapter1                BC               UMI          PolyT
+    barcode, umi = query.split()[1:3]
+    barcode_q, umi_q = query_ascii_q.split()[1:3]
+    query = query.replace(' ', '')
+    query_aln = query_aln.replace(' ', '')
+    query_ascii_q = query_ascii_q.replace(' ', '')
+    qual_ints = ascii_decode_qscores(query_ascii_q)
 
-    # build probe - only the 10bp suffix of the adapter1 is included in the probe.
-    adapter1_probe_suffix = 'CTTCCGATCT'
+    # The parasail reference alignment. Contains only the 10 bp suffix of the adapter1
+    ref_align = (
+        # 10 bp A1  Ns for BC        Ns for UMI   PolyT
+        "CTTCCGATCT NNNNNNNNNNNNNNNN NNNNNNNNNNNN TTTTTTTTTTTT"
+    ).replace(' ', '')
 
     p_alignment = Mock()
-    reference_probe = \
-        f"{adapter1_probe_suffix}{'N'* barcode_length}{'N'* umi_length}{'T' * 12}"
-    p_alignment.traceback.ref = reference_probe
+    p_alignment.traceback.query = query_aln
+    p_alignment.traceback.ref = ref_align
 
-    # Build query alignment from the first 100bp of the read
-    read_prefix = f"{align_adapter1}{align_barcode}{align_umi}{'T' * 20}{gene}"[:100]
-    # The aligned query sequence
-    p_alignment.traceback.query = (
-        f"{align_adapter1}{align_barcode}{align_umi}{'T' * 12}")
-    # The read prefix used as query
-    p_alignment.query = read_prefix
-    # The last aligned position in the query
-    p_alignment.end_query = \
-        len(align_adapter1) + actual_bc_len + actual_umi_len + 12 - 1
-
-    aln_quality = range(len(read_prefix))
-
-    actual_bc_qual = ascii_encode_qscores(
-        aln_quality[actual_a1_len: actual_a1_len + actual_bc_len])
-    actual_umi_qual = ascii_encode_qscores(aln_quality[
-        actual_a1_len + actual_bc_len: actual_a1_len + actual_bc_len + actual_umi_len])
+    adapter1_probe_suffix = 'CTTCCGATCT'
 
     (
         adapter1_editdist, barcode_result, umi_result,
         bc_qscores, umi_qscores
     ) = parse_probe_alignment(
-            p_alignment, adapter1_probe_suffix,
-            barcode_length, umi_length, aln_quality)
+        p_alignment, adapter1_probe_suffix,
+        16, 12, qual_ints, query)
 
-    assert adapter1_editdist == adapter1_edit_dist
-    assert barcode_result == actual_bc
-    assert umi_result == actual_umi
-    assert bc_qscores == actual_bc_qual
-    assert umi_qscores == actual_umi_qual
+    assert adapter1_editdist == expected_adapter1_ed
+    assert barcode_result == barcode
+    assert umi_result == umi
+    assert bc_qscores == barcode_q
+    assert umi_qscores == umi_q
