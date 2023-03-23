@@ -27,18 +27,19 @@ process summariseCatChunkReads {
     label "singlecell"
     cpus 2
     input:
-        tuple path(directory), val(meta)
+        tuple val(meta),
+              path(reads)
     output:
-        tuple val("${meta.sample_id}"), 
-              path("${meta.sample_id}.stats"), 
+        tuple val("${meta.alias}"),
+              path("${meta.alias}.stats"),
               emit: stats
-        tuple val("${meta.sample_id}"), 
+        tuple val("${meta.alias}"),
               path("chunks/*"),
               emit: fastq_chunks
     
     """
-    fastcat -s ${meta.sample_id} -r ${meta.sample_id}.stats -x ${directory} | \
-        seqkit split2 -p ${params.max_threads} -O chunks -o ${meta.sample_id} -e .gz
+    fastcat -s ${meta.alias} -r ${meta.alias}.stats -x ${reads} | \
+        seqkit split2 -p ${params.max_threads} -O chunks -o ${meta.alias} -e .gz
     """
 }
 
@@ -287,8 +288,9 @@ workflow {
             "input":params.fastq,
             "sample":params.sample,
             "sample_sheet":params.sample_sheet])
+            .map {it[0, 1]}
 
-    fastqingress_ids = reads.map{it -> it[1]['sample_id']}
+    fastqingress_ids = reads.map{it -> it[0]['alias']}
 
     if (!params.single_cell_sample_sheet) {
         //build_a single_cell_sample_sheet channel applying the same kit values to each sample

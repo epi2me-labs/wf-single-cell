@@ -31,11 +31,11 @@ def test_run_jobs():
 
     result = run_jobs(args)
 
-    # Simply check correct number of sampled dataframes are reuturned
-    # and that each is the correct size.
+    # Simply check correct number of results are returned
+    # and that the dowsampled reads are the correct size.
     assert len(result) == 16
     for row in result.itertuples():
-        assert row.downsamp_reads == 1000 * row.downsamp_frac
+        assert row.downsamp_reads == 1000 * row.Index
 
 
 # @pytest.mark.skip

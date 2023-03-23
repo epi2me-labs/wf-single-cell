@@ -86,7 +86,7 @@ def plot_saturation_curves(res, args):
     ax3.set_ylim([0, 1])
     ax3.set_xlabel("Median reads per cell")
     ax3.set_ylabel("Sequencing saturation")
-    umi_sat = res.iat[1, res.columns.get_loc('umi_sat')]
+    umi_sat = res.at[1, 'umi_sat']  # saturation at zero subsampling
     ax3.set_title(f"Sequencing saturation: {umi_sat:.2f}")
     plt.setp(ax3.xaxis.get_majorticklabels(), rotation=45, ha="right")
     ax3.grid()
@@ -101,16 +101,16 @@ def downsample_dataframe(args):
 
     df, fraction = args
     logger.info(f"Doing {fraction}")
-    df_ = df.sample(frac=fraction)
-    n_reads = df_.shape[0]
+    df_scaled = df.sample(frac=fraction)
+    n_reads = df_scaled.shape[0]
 
     # Get the unique number of reads, genes and UMIs per cell barcode
-    gb = df_.groupby("barcode").nunique().median()
+    gb = df_scaled.groupby("barcode").nunique().median()
     reads_per_cell = gb['read_id']
     genes_per_cell = gb['gene']
     umis_per_cell = gb['umi']
 
-    n_deduped_reads = len(df.groupby(['gene', 'barcode', 'umi']))
+    n_deduped_reads = len(df_scaled.groupby(['gene', 'barcode', 'umi']))
     if n_reads < 1:
         umi_saturation = 0
     else:
@@ -136,6 +136,8 @@ def run_jobs(args):
     df = pd.read_csv(
         args.read_tags, sep="\t", usecols=['read_id', 'CB', 'UB', 'gene'])\
         .rename(columns={'CB': 'barcode', 'UB': 'umi'})
+
+    df = df[(df.barcode != '-') & (df.umi != '-')]
 
     logger.info("Downsampling reads for saturation curves")
     fractions = [
@@ -180,6 +182,7 @@ def run_jobs(args):
             "umis_pc",
             "umi_sat",
         ],
+        index='downsamp_frac'
     )
     return res
 
