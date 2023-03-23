@@ -177,7 +177,7 @@ def main(args):
     """Run entry point."""
     df_tags = pd.read_csv(args.read_tags, sep='\t', index_col=0)
     df_features = pd.read_csv(
-        args.feature_assigns, sep='\t', index_col=0)  # ?keep_default_na=False
+        args.feature_assigns, sep='\t', index_col=0)
     # Merge genes and transcripts onto tags.
     df_tag_feature = df_features.merge(df_tags, left_index=True, right_index=True)
 
@@ -206,13 +206,13 @@ def main(args):
         )
 
     else:
-        df_tags_out = pd.DataFrame(columns=[
-            'read_id', 'CR', 'CB', 'CY', 'UR', 'UB', 'UY', 'gene', 'transcript', 'chr']
+        df_tags_out = pd.DataFrame(
+            columns=[
+                'read_id', 'CR', 'CB', 'CY', 'UR', 'UB', 'UY', 'gene', 'transcript']
         ).set_index('read_id', drop=True)
 
-        df_workflow_out = pd.DataFrame(columns=[
-            'read_id', 'gene', 'transcript', 'corrected_barcode',
-            'corrected_umi', 'chr', 'start', 'end']
+        df_workflow_out = pd.DataFrame(
+            columns=['read_id', 'gene', 'transcript', 'CB', 'UB', 'chr', 'start', 'end']
         ).set_index('read_id', drop=True)
 
     df_tags_out.to_csv(args.output_read_tags, sep='\t', index=True)
