@@ -198,7 +198,7 @@ def main(args):
                     row.n_reads, row.total_cells, row.total_genes,
                     row.total_transcripts])
 
-    with report.add_section('Read surivival by stage', 'Attrition'):
+    with report.add_section('Read survival by stage', 'Attrition'):
         p(
             """These plots detail the number of remaining reads at different
             stages of the workflow.""")
