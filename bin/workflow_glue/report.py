@@ -136,8 +136,8 @@ def umap_plots(umaps_dirs, genes_file):
                                     title=f'Gene umap / single gene expression '
                                           f'annotation: {gene}',
                                     hue=gene)
-                        else:
-                            h6(f'{gene} not in dataset / has been filtered out')
+                            else:
+                                h6(f'{gene} not in dataset / has been filtered out')
 
 
 def diagnostic_plots(img_dirs):
