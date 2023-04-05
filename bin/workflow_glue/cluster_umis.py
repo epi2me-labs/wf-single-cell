@@ -228,7 +228,8 @@ def main(args):
     df_features = pd.read_csv(
         args.feature_assigns, sep='\t', index_col=0)
     # Merge genes and transcripts onto tags.
-    df_tag_feature = df_features.merge(df_tags, left_index=True, right_index=True)
+    df_tag_feature = df_tags.merge(
+        df_features, how='left', left_index=True, right_index=True).fillna('-')
 
     # Only process reads with a corrected barcode and uncorrected UMI
     df_tag_feature = df_tag_feature.loc[

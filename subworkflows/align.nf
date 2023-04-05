@@ -37,10 +37,10 @@ process align_to_ref {
             path("*sorted.bam.bai"), 
             emit: bam_sort
     """
-     minimap2 -ax splice -uf --MD -t $task.cpus \
+     minimap2 -ax splice -uf --secondary=no --MD -t $task.cpus \
       --junc-bed ref_genes.bed $params.resources_mm2_flags  \
       ref_genome.fasta reads.fastq* \
-        | samtools view -F 2304 -b --no-PG -t ref_chrom_sizes - \
+        | samtools view -b --no-PG -t ref_chrom_sizes - \
         | samtools sort -@ 2 --no-PG  - > "${sample_id}_sorted.bam"
     samtools index -@ ${task.cpus} "${sample_id}_sorted.bam"
     """

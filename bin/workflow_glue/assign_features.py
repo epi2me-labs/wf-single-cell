@@ -4,6 +4,7 @@
 import re
 
 import pandas as pd
+from pysam import AlignmentFile
 
 from .util import get_named_logger, wf_parser  # noqa: ABS101
 
@@ -13,8 +14,8 @@ def argparser():
     parser = wf_parser("assign_features")
 
     parser.add_argument(
-        "--query_transcript_read_assign",
-        help="TSV with columns: read_id, query_transcript"
+        "--transcriptome_bam",
+        help="Bam file from alignment of reads to the assembled transcriptome."
     )
 
     parser.add_argument(
@@ -70,44 +71,79 @@ def parse_gtf(annotation_file):
         return df
 
 
-def main(args):
-    """Entry point.
+def parse_bam(transcriptome_bam):
+    """Parse the transcriptome alignemnt BAM."""
+    with AlignmentFile(transcriptome_bam, "rb", check_sq=False) as bam:
+        ref_lengths = dict(zip(bam.header.references, bam.header.lengths))
+        records = []
+        for align in bam.fetch(until_eof=True):
+            if align.reference_name is None:
+                continue
+            try:
+                aln_score = align.get_tag('AS')
+            except KeyError:
+                aln_score = 0
+            map_st = align.reference_start
+            map_en = align.reference_end
+            tr_cov = float(map_en - map_st) / ref_lengths[align.reference_name]
 
-    Merge the stringtie output containing read_id and query_transcript (transcript built
-    by Stringtie) with the gffcompare output, which maps query transcript to reference
-    transcritpt.
+            tr_mapq = align.mapping_quality
+            # Query transcript built by stringtie is the refernce here
+            query_transcript = align.reference_name
+            query_coverage = float(
+                align.query_alignment_length / align.infer_read_length())
+
+            records.append([
+                align.query_name, query_transcript,
+                aln_score, tr_cov, query_coverage, tr_mapq
+            ])
+    cols = [
+        'read_id', 'query_transcript', 'aln_score', 'tr_cov', 'q_cov', 'tr_mapq']
+    df = pd.DataFrame.from_records(records, columns=cols)
+
+    return df
+
+
+def main(args):
+    """Assign gene and transcript to reads.
+
+    Parse the transcriptome-aligned BAM and attempt to disambiquate reads that map
+    to multiple transcripts.
+
+    Filtering criteria borrowed from FLAMES:
+    https://github.com/LuyiTian/FLAMES/blob/774e16ae53a1430e03081970827e93f1fbaecead/
+    python/count_tr.py#L101
     """
     logger = get_named_logger('AssignFeat')
-    logger.info('Mapping reference info to reads.')
+    logger.info('Assigning genes and transcripts to reads.')
 
-    # Mapq is from the genome alignemnt
-    df_mapq = pd.read_csv(args.tags, sep='\t', index_col=0, usecols=['read_id', 'mapq'])
+    # Load genomic alignment mapq scores for filtering gene calls
+    df_genomic_mapq = pd.read_csv(
+        args.tags, sep='\t', index_col=0, usecols=['read_id', 'mapq'])
+    df_genomic_mapq.rename(columns={'mapq': 'genome_mapq'}, inplace=True)
 
-    # Dataframe with read_id and query_transcript (transcript built by strintie)
-    df_query_transcript = pd.read_csv(
-        args.query_transcript_read_assign,
-        index_col=None,
-        sep='\t')
-
-    # DataFrame which maps query transcript to reference transcript
+    # Load gffcompare output that maps query transcript to reference transcript
     df_gffcompare_tmap = pd.read_csv(
         args.gffcompare_tmap,
         index_col=None,
         sep='\t')
 
-    # Merge on query_id to assign read_id to reference transcript.
-    # Only keep reads that have been assigned a query_id
-    df_tr = df_query_transcript.merge(
+    df = parse_bam(args.transcriptome_bam)
+
+    # Merge the read alignments with the gffcompare tmap output to
+    # assign read_id to the reference transcript.
+    # Any entries in the tmap file that do not have a ref_id (reference transcript)
+    # are potentially novel but are currently unhandled.
+    df_tr = df.merge(
         df_gffcompare_tmap[['qry_id', 'ref_id', 'class_code']],
-        left_on='qry_id',
+        left_on='query_transcript',
         right_on='qry_id')
 
     # Merge the gene names from the original input annotation gtf.
-    # It is possible to get the gene name and reference transcript map from the
-    # gffcompare *.refmap file, but this file seems to be been missing
-    # some query_ids/ref_ids.
     df_ann = parse_gtf(args.gtf)
-    df_tr = df_tr.merge(df_ann, how='left', left_on='ref_id', right_on='ref_id')
+    # This merging discards reads that were not present in the input tags file
+    # These would have been discarded at earlier parts of the workflow.
+    df_tr = df_tr.merge(df_ann, how='inner', left_on='ref_id', right_on='ref_id')
     df_tr.gene_name = df_tr.gene_name.fillna('-')
     df_tr.rename(
         columns={
@@ -115,16 +151,66 @@ def main(args):
             'gene_name': 'gene',
         }, inplace=True)
 
-    # Set status based on gffcompare class code
-    # If any of these classes, call transcript as unclassified.
-    df_tr.loc[df_tr['class_code'].isin(['i', 'p', 's', 'u']), 'transcript'] = '-'
+    # Remove unwanted categories of transcripts:
+    # https://ccb.jhu.edu/software/stringtie/gffcompare.shtml
+    df_tr = df_tr.loc[~df_tr['class_code'].isin(['i', 'y', 'p', 's'])]
 
-    # If genomic mapq below threshold, set both gene and transcript status to unassigned
-    df_tr = df_tr.merge(df_mapq, how='left', left_on='read_id', right_on='read_id')
-    df_tr.loc[df_tr.mapq < args.min_mapq, 'gene'] = '-'
-    df_tr.loc[df_tr.mapq < args.min_mapq, 'transcript'] = '-'
+    df_tr = df_tr.merge(
+        df_genomic_mapq, how='left', left_on='read_id', right_on='read_id')
 
-    df_tr.set_index('read_id', drop=True, inplace=True)
+    multimaped_idxs = df_tr.read_id.duplicated(keep=False)
+    df_multimap = df_tr.loc[multimaped_idxs]
+    df_uniqmap = df_tr.loc[~multimaped_idxs]
 
-    df_tr.fillna('-', inplace=True)
-    df_tr.to_csv(args.output, sep='\t')
+    # Process the uniquely-mapping isoforms
+    df_uniqmap.loc[df_uniqmap.genome_mapq < args.min_mapq, 'gene'] = '-'
+    df_uniqmap = df_uniqmap.loc[
+        df_uniqmap.tr_mapq > 0][['read_id', 'transcript', 'gene']]
+
+    assigned = []
+
+    min_tr_coverage = 0.4
+    min_read_coverage = 0.4
+
+    # Attempt to choose one of the alignments
+    for read_id, df_read in df_multimap.groupby('read_id'):
+        df_read.sort_values(
+            ['aln_score', 'q_cov', 'tr_cov'], ascending=False, inplace=True)
+
+        tr = '-'
+        # Choose alignment with the best alignment score or query coverage
+        if (
+                df_read.iloc[0].aln_score > df_read.iloc[1].aln_score
+                or df_read.iloc[0].q_cov > df_read.iloc[1].q_cov
+        ):
+            # Assign if there is enough read coverage
+            if df_read.iloc[0].tr_cov >= min_tr_coverage and \
+                    df_read.iloc[0].q_cov >= min_read_coverage:
+                tr = df_read.iloc[0].transcript
+
+        # If there's an AS and read coverage tie, but a higher transcript coverage
+        elif df_read.iloc[0].tr_cov > df_read.iloc[1].tr_cov:
+            if df_read.iloc[0].tr_cov > 0.8:
+                tr = df_read.iloc[0].transcript
+
+        # Assign gene
+        top_gene = df_read.sort_values('genome_mapq').iloc[0]
+        if top_gene.genome_mapq > args.min_mapq:
+            gene = top_gene.gene
+        else:
+            gene = '-'
+        assigned.append([read_id, tr, gene])
+
+    # Merge the resolved multimapped alignments back with the unique mapper
+    df_demultimapped = pd.DataFrame.from_records(
+        assigned, columns=['read_id', 'transcript', 'gene'])
+    df_assigned = pd.concat([df_uniqmap, df_demultimapped])
+
+    df_assigned = df_assigned.loc[
+        (df_assigned.gene != '-') | (df_assigned.transcript != '-')]
+
+    df_assigned.set_index('read_id', drop=True, inplace=True)
+
+    df_assigned = df_assigned.fillna('-')[['gene', 'transcript']]
+
+    df_assigned.to_csv(args.output, sep='\t')

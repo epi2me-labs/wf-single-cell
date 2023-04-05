@@ -145,7 +145,7 @@
                 "gene_assigns_minqv": {
                     "type": "integer",
                     "description": "Minimum alignment qscore allowed for a read to be assigned to a gene or transcript.",
-                    "default": 40
+                    "default": 30
                 },
                 "umi_cell_gene_max_reads": {
                     "type": "integer",
@@ -200,6 +200,12 @@
                     "default": 6,
                     "description": "Number of UMAP projection to to repeat for each dataset.",
                     "help_text": "The UMAP algorithm contains elements of randomness that can misleaad users into seeing assocations between cells that are not meaningful. It is recommended to view multiple plots generated with the same parameters and check that any observed structure is consistent across runs."
+                },
+                "stringtie_opts": {
+                    "type": "string",
+                    "default": "-c 2",
+                    "description": "Optional stringtie2 options for transcriptome assembly.",
+                    "help_text": "The default option (-c 2) sets the minimum read coverage needed to call a predicted transcript. Stringtie options can be found here: http://ccb.jhu.edu/software/stringtie/index.shtml?t=manual"
                 }
             }
         },
@@ -273,7 +279,7 @@
         }
     },
     "docs": {
-        "intro": "## Introduction\n\nThe following single-cell kits from 10x Genomics are currently supported:\n- Chromium Single Cell [3\u02b9 gene expression](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium3.html), versions 2 and 3\n- Chromium Single Cell [5\u02b9 gene expression](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium5.html), version 1\n- Chromium Single Cell [Multiome (ATAC + GEX)](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium_multiome.html), version 1\n\nOxford Nanopore has developed a protocol for sequencing single-cell libraries from 10x, which can be found on the Nanopore Community [website](https://community.nanoporetech.com/docs/prepare/library_prep_protocols/single-cell-transcriptomics-10x/v/sst_v9148_v111_revb_12jan2022).\n\nThe inputs to Sockeye are raw nanopore reads (FASTQ) generated from the sequencing\ninstrument and reference files that can be downloaded from [10x](https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest).\nThe pipeline outputs gene x cell, and transcript x cell expression matrices, as well as a BAM file of\naligned reads tagged with cell barcode and UMI information.\n\nThe [BLAZE](https://github.com/shimlab/BLAZE) preprint provided useful benchmarking of the original sockeye implementation. This assisted in the selection of appropriate parameters for cell cut-off thresholds and for defining the limits of the cell x gene matrix.",
+        "intro": "## Introduction\n\nThe following single-cell kits from 10x Genomics are currently supported:\n- Chromium Single Cell [3\u02b9 gene expression](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium3.html), versions 2 and 3\n- Chromium Single Cell [5\u02b9 gene expression](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium5.html), version 1\n- Chromium Single Cell [Multiome (ATAC + GEX)](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium_multiome.html), version 1\n\nOxford Nanopore has developed a protocol for sequencing single-cell libraries from 10x, which can be found on the Nanopore Community [website](https://community.nanoporetech.com/docs/prepare/library_prep_protocols/single-cell-transcriptomics-10x/v/sst_v9148_v111_revb_12jan2022).\n\nThe inputs to Sockeye are raw nanopore reads (FASTQ) generated from the sequencing\ninstrument and reference files that can be downloaded from [10x](https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest).\nThe pipeline outputs gene x cell, and transcript x cell expression matrices, as well as a BAM file of\naligned reads tagged with cell barcode and UMI information.\n\nThe [BLAZE](https://github.com/shimlab/BLAZE) preprint provided useful benchmarking of the original sockeye implementation. \nThis assisted in the selection of appropriate parameters for cell cut-off thresholds and for defining the limits of the cell x gene matrix.\n\nThe isoform selection procedure used in this workflow was adapted from that found in the [FLAMES](https://github.com/LuyiTian/FLAMES) \npackage.",
         "links": "## Useful links\n\n* [nextflow](https://www.nextflow.io/)\n* [docker](https://www.docker.com/products/docker-desktop)\n* [singularity](https://docs.sylabs.io/guides/3.5/user-guide/introduction.html)\n"
     }
 }
