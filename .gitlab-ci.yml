@@ -36,7 +36,7 @@ docker-run:
 
 
 integration_test:
-  extends: .branchsetup-alpine
+  extends: .setup-alpine-nextflow
   dependencies: ["docker-run: [integration-test]"]
   stage: post-test
   script:

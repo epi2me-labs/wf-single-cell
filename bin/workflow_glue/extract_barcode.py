@@ -282,12 +282,12 @@ def parse_probe_alignment(
     else:
         # No Ns in the probe successfully aligned -- we will ignore this read
         adapter1_ed = len(adapter1_probe_seq)
-        barcode = ""
-        umi = ""
+        barcode_no_ins = ""
+        umi_no_ins = ""
         bc_q_ascii = ""
         umi_q_ascii = ""
 
-    return adapter1_ed, barcode, umi, bc_q_ascii, umi_q_ascii
+    return adapter1_ed, barcode_no_ins, umi_no_ins, bc_q_ascii, umi_q_ascii
 
 
 def align_adapter(args):
@@ -335,6 +335,8 @@ def align_adapter(args):
         barcode_counts = collections.Counter()
 
         for align in bam.fetch(contig=args.contig):
+            if align.is_supplementary:
+                continue
             prefix_seq = align.get_forward_sequence()[: args.window]
             prefix_qv = align.get_forward_qualities()[: args.window]
 

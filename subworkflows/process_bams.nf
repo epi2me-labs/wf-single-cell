@@ -255,7 +255,7 @@ process stringtie {
     """
     # Build transcriptome. 
     workflow-glue process_bam_for_stringtie align.bam ${chr}  \
-        | tee >(stringtie -L  -p ${task.cpus} -G chr.gtf -l stringtie \
+        | tee >(stringtie -L ${params.stringtie_opts} -p ${task.cpus} -G chr.gtf -l stringtie \
             -o stringtie.gff - ) \
         | samtools fastq > reads.fastq
 
@@ -279,19 +279,21 @@ process align_to_transcriptome {
         tuple val(sample_id),
               val(chr),
               path("chr.gtf"),
-              path("read_query_tr_map.tsv"),
+              path("tr_align.bam"),
+              path("tr_align.bam.bai"),
               path('stringtie.gff'),
               emit: read_tr_map
     """
-    echo "read_id\tqry_id\n" > read_query_tr_map.tsv;
     minimap2 -ax map-ont \
         --end-bonus 10 \
+        -p 0.9 \
+        -N 3 \
         -t $task.cpus \
         transcriptome.fa \
         reads.fastq \
-        | samtools view -F 2304 \
-        |  gawk 'BEGIN{OFS="\t";} /^[^@]/ {print \$1,\$3}' \
-        >> read_query_tr_map.tsv;
+        | samtools view -h -b -F 2052 - \
+        | samtools sort -@ 2 --no-PG - > tr_align.bam
+    samtools index tr_align.bam
     """
 }
 
@@ -303,7 +305,8 @@ process assign_features {
         tuple val(sample_id),
               val(chr),
               path("chr.gtf"),
-              path("query_transcript_read_assign.tsv"),
+              path("tr_align.bam"),
+              path("tr_align.bam.bai"),
               path('stringtie.gff'),
               path('tags.tsv')
     output:
@@ -315,10 +318,11 @@ process assign_features {
     if [ \$(wc -l <read_feature_map.tsv) -eq 0 ]; then
         touch ${sample_id}.${chr}_empty.transcript_assigns.tsv  
     else
+        # gffcomapre maps transcript reference IDs to query transcripts.
         gffcompare -o gffcompare -r chr.gtf stringtie.gff
         
         workflow-glue assign_features \
-            --query_transcript_read_assign query_transcript_read_assign.tsv \
+            --transcriptome_bam tr_align.bam \
             --gffcompare_tmap gffcompare.stringtie.gff.tmap \
             --gtf chr.gtf \
             --tags tags.tsv \

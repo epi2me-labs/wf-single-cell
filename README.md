@@ -26,7 +26,11 @@ instrument and reference files that can be downloaded from [10x](https://support
 The pipeline outputs gene x cell, and transcript x cell expression matrices, as well as a BAM file of
 aligned reads tagged with cell barcode and UMI information.
 
-The [BLAZE](https://github.com/shimlab/BLAZE) preprint provided useful benchmarking of the original sockeye implementation. This assisted in the selection of appropriate parameters for cell cut-off thresholds and for defining the limits of the cell x gene matrix.
+The [BLAZE](https://github.com/shimlab/BLAZE) preprint provided useful benchmarking of the original sockeye implementation. 
+This assisted in the selection of appropriate parameters for cell cut-off thresholds and for defining the limits of the cell x gene matrix.
+
+The isoform selection procedure used in this workflow was adapted from that found in the [FLAMES](https://github.com/LuyiTian/FLAMES) 
+package.
 
 
 

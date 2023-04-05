@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Fixed
+- Incorrect UMAP colors
+- Barcode quality extract error
+- Saturation plotting error
+- Gene ID assigned instead of gene name
+- Empty dataframe bug when no data for a chromosome exists
+### Changed
+- Improved isoform selection criteria
+
 ## [v0.2.1]
 ### Changed
 - Add multiprocessing to calc_saturation.py for ~ 2X speedup
