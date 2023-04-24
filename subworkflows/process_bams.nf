@@ -315,20 +315,16 @@ process assign_features {
               path("${sample_id}.${chr}.feature_assigns.tsv"),
               emit: feature_assigns
     """
-    if [ \$(wc -l <read_feature_map.tsv) -eq 0 ]; then
-        touch ${sample_id}.${chr}_empty.transcript_assigns.tsv  
-    else
-        # gffcomapre maps transcript reference IDs to query transcripts.
-        gffcompare -o gffcompare -r chr.gtf stringtie.gff
-        
-        workflow-glue assign_features \
-            --transcriptome_bam tr_align.bam \
-            --gffcompare_tmap gffcompare.stringtie.gff.tmap \
-            --gtf chr.gtf \
-            --tags tags.tsv \
-            --output "${sample_id}.${chr}.feature_assigns.tsv" \
-            --min_mapq ${params.gene_assigns_minqv}
-    fi
+    # gffcomapre maps transcript reference IDs to query transcripts.
+    gffcompare -o gffcompare -r chr.gtf stringtie.gff
+
+    workflow-glue assign_features \
+        --transcriptome_bam tr_align.bam \
+        --gffcompare_tmap gffcompare.stringtie.gff.tmap \
+        --gtf chr.gtf \
+        --tags tags.tsv \
+        --output "${sample_id}.${chr}.feature_assigns.tsv" \
+        --min_mapq ${params.gene_assigns_minqv}
     """
 }
 

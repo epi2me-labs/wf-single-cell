@@ -153,7 +153,7 @@ def main(args):
 
     # Remove unwanted categories of transcripts:
     # https://ccb.jhu.edu/software/stringtie/gffcompare.shtml
-    df_tr = df_tr.loc[~df_tr['class_code'].isin(['i', 'y', 'p', 's'])]
+    df_tr.loc[df_tr['class_code'].isin(['i', 'y', 'p', 's']), 'transcript'] = '-'
 
     df_tr = df_tr.merge(
         df_genomic_mapq, how='left', left_on='read_id', right_on='read_id')
