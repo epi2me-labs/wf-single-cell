@@ -257,7 +257,9 @@ def main(args):
     else:
         df_tags_out = pd.DataFrame(
             columns=[
-                'read_id', 'CR', 'CB', 'CY', 'UR', 'UB', 'UY', 'gene', 'transcript']
+                'read_id', 'CR', 'CB', 'CY',
+                'UR', 'UB', 'UY', 'gene', 'transcript', 'chr'
+             ]
         ).set_index('read_id', drop=True)
 
         df_workflow_out = pd.DataFrame(
