@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use rapidfuzz for finding barcode matches in whielist; ~10x speedup
 - Use multithreading to speed up sequencing saturation calcualtion
 - Put UMAPs in report and make optional
+- ### Changed
+- Combine barcode and umi extraction into single step.
+- Get gene assignments from stringtie.
 
 ## [v0.2.0]
 ### Added
@@ -27,8 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - pytest testing using workflow container.
 ### Fixed
 - Incorrectly stranded reads causing stringtie2 to generate incorrect transcripts.
-### Changed
-- Combine barcode and umi extraction into single step.
 
 ## [v0.1.9]
 ### Fixed
