@@ -84,7 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - single_cell_sample_sheet is optional and kit options can be supplied as workflow parameters.
 
 ## [v0.1.3]
-## [changed]
+## Changed
 - Better handling of sample_id conflicts in single_cell_sampkle_sheet and fastgingress.
 - single_cell_sample_sheet is optional.
 - Minor IO performance enhancements.
