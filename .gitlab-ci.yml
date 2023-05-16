@@ -34,6 +34,11 @@ docker-run:
           NF_BEFORE_SCRIPT: "wget https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/ci_data.tar.gz && tar -xzvf ci_data.tar.gz"
           NF_WORKFLOW_OPTS: "--fastq ci_data/sample1.fq --ref_genome_dir ci_data/10x_ref_chr21_22 --matrix_min_genes 1 --matrix_min_cells 1 --expected_cells 10"
 
+macos-run:
+  # Let's avoid those ARM64 runners for now
+  tags:
+    - macos
+    - x86
 
 integration_test:
   extends: .setup-alpine-nextflow
