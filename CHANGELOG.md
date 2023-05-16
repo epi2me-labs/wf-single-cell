@@ -85,9 +85,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [v0.1.3]
 ## [changed]
-* Better handling of sample_id conflicts in single_cell_sampkle_sheet and fastgingress.
-* single_cell_sample_sheet is optional.
-* Minor IO performance enhancements.
+- Better handling of sample_id conflicts in single_cell_sampkle_sheet and fastgingress.
+- single_cell_sample_sheet is optional.
+- Minor IO performance enhancements.
 
 ### Added
 - kit options can be supplied from command line/config and applied to all samples.
