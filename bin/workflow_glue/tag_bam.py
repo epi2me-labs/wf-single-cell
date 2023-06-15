@@ -15,24 +15,28 @@ def argparser():
     parser.add_argument(
         "--in_bam",
         help="BAM file for tagging",
-        type=Path
+        type=Path,
+        required=True
     )
 
     parser.add_argument(
         "--out_bam",
         help="Path for tagged output BAM",
-        type=Path
+        type=Path,
+        required=True
     )
 
     parser.add_argument(
         "--tags",
         help="Read tags TSV",
-        type=Path
+        type=Path,
+        required=True
     )
 
     parser.add_argument(
         "--chrom",
-        help="Chromosome name"
+        help="Chromosome name",
+        required=True
     )
     return parser
 

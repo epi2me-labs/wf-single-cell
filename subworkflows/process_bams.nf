@@ -161,7 +161,8 @@ process tag_bams {
     workflow-glue tag_bam \
         --in_bam align.bam \
         --tags tags.tsv \
-        --out_bam ${sample_id}.${chr}.tagged.bam
+        --out_bam ${sample_id}.${chr}.tagged.bam \
+        --chrom ${chr}
 
     samtools index ${sample_id}.${chr}.tagged.bam
     """
