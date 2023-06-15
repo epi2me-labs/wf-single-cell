@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Output BAM files with alignments from incorrect chromosomes
+- Incorrect uncorrected_barcodes.tsv output 
 
 ## [v0.2.4]
 ### Added
