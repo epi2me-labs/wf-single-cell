@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Bumped minimum required Nextflow version to 22.10.8
 
+### Fixed
+- Output BAM files with alignments from incorrect chromosomes
+
 ## [v0.2.4]
 ### Added
 - Configuration for running demo data in AWS
