@@ -204,11 +204,28 @@ process combine_uncorrect_bcs {
     input:
         tuple val(sample_id),
               path("uncorrected_bcs*.tsv")
-        output:
-            tuple val(sample_id),
-                  path("${sample_id}.uncorrected_bc_counts.tsv")
+    output:
+        tuple val(sample_id),
+              path("${sample_id}.uncorrected_bc_counts.tsv")
+    shell:
     """
-    cat *.tsv > "${sample_id}.uncorrected_bc_counts.tsv"
+    #!/usr/bin/env python
+    import pandas as pd
+    from pathlib import Path
+
+    # Combine all the uncorrected barcode counts files for all chromsomes.
+    # Sum the counts per barcode to get uncorrected barcode counts for the whole sample.
+    # Write output to a TSV file.
+    cwd = Path()
+    all_files = cwd.glob("*.tsv")
+    dfs = []
+    for fn in all_files:
+        dfs.append(pd.read_csv(str(fn), sep='\t', index_col=0, header=None))
+
+    df = pd.concat(dfs).reset_index()
+    df.columns = ['barcode', 'count']
+    df_final = df.groupby('barcode').sum().sort_values('count', ascending=False)
+    df_final.to_csv("${sample_id}.uncorrected_bc_counts.tsv", sep='\t')
     """
 }
 
@@ -467,7 +484,10 @@ workflow process_bams {
                 .map{it -> it.flatten()[1, 2, 4, 6]},
             bc_longlist_dir)
 
-        un_corr_bcs = combine_uncorrect_bcs(extract_barcodes.out.barcode_counts)
+        un_corr_bcs = combine_uncorrect_bcs(
+            extract_barcodes.out.barcode_counts
+            .groupTuple())
+
 
         generate_whitelist(
             extract_barcodes.out.barcode_counts
