@@ -7,10 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [unreleased]
 ### Changed
 - Bumped minimum required Nextflow version to 22.10.8
+- GitHub issue templates
 
 ### Fixed
 - Output BAM files with alignments from incorrect chromosomes
-- Incorrect uncorrected_barcodes.tsv output 
+- Incorrect uncorrected_barcodes.tsv output
 
 ## [v0.2.4]
 ### Added
