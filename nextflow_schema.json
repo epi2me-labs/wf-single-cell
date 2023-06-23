@@ -190,6 +190,12 @@
                     "default": "-I 16G",
                     "help_text": "Minimap2 options can be supplied to modify the alignment parameters: eg '-I 4G' loads at max 4G bases into memory for indexing."
                 },
+                "adapter_scan_chunk_size": {
+                    "type": "integer",
+                    "description": "Chunk size for adapter scanning step.",
+                    "default": 0,
+                    "help_text": "Set the number of reads per chunk to process in the adapter_scan stage. If set to 0 (the default), the input reads will be split into one chunk per threads provided with `max_threads`."
+                },
                 "process_chunk_size": {
                     "type": "integer",
                     "description": "Control the size of chunks for processing of data.",

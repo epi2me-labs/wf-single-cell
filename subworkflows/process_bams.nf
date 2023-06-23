@@ -19,11 +19,9 @@ process get_contigs {
 }
 
 process extract_barcodes{
-    /*
-    Build minimap index from reference genome
-    */
     label "singlecell"
     cpus 2
+    memory "1.5 GB"
     input:
         tuple path("sort.bam"),
               path("sort.bam.bai"),
@@ -32,7 +30,6 @@ process extract_barcodes{
         path "bc_longlist_dir"
 
     output:
-        // TODO: Do not write bams. Write mapping of read_id to barcode
         tuple val(meta.sample_id), 
               path("*.bc_extract.sorted.tsv"),
               val(chrom),
@@ -121,11 +118,15 @@ process split_gtf_by_chroms {
 
 process cluster_umis {
     label "singlecell"
+    cpus 1
+    // Benchmarking showed that memory usage was ~ 15x the size of read_tags input.
+    // Set a minimum memory requirement of 1.0GB to allow for overhead.
+    memory {1.0.GB.toBytes()  + (read_tags.size() * 20) }
     input:
         tuple val(sample_id),
               val(chr),
               path("chrom_feature_assigns.tsv"),
-              path("read_tags.tsv")
+              path(read_tags, stageAs: "read_tags.tsv")
     output:
         tuple val(sample_id),
               val(chr),
@@ -176,6 +177,7 @@ process combine_tag_files {
     // a channel that returns tuples. It groups and names according to the
     // first element of the tuple. Hence this process.
     label "singlecell"
+    cpus 1
     input:
         tuple val(sample_id),
               path("tags*.tsv")
@@ -190,6 +192,7 @@ process combine_tag_files {
 process combine_final_tag_files {
     // Combine the final
     label "singlecell"
+    cpus 1
     input:
         tuple val(sample_id),
               path("tags*.tsv")
@@ -203,6 +206,7 @@ process combine_final_tag_files {
 
 process combine_uncorrect_bcs {
     label "singlecell"
+    cpus 1
     input:
         tuple val(sample_id),
               path("uncorrected_bcs*.tsv")
@@ -260,6 +264,10 @@ process combine_chrom_bams {
 process stringtie {
     label "singlecell"
     cpus Math.max(params.max_threads / 4, 4.0)
+    // Memory usage for this process is usually less than 3GB, but some cases it may go over this.
+    memory = { 3.GB * task.attempt }
+    maxRetries = 3
+    errorStrategy = { task.exitStatus in 137..140 ? 'retry' : 'terminate' }
     input:
         path 'ref_genome.fa'
         path 'ref_genome.fa.fai'
@@ -291,14 +299,20 @@ process stringtie {
 
 process align_to_transcriptome {
     label "singlecell"
-    cpus Math.max(params.max_threads / 2, 4.0)
+    cpus Math.max(params.max_threads / 10, 4.0)
+    // The average memory required for this step is usually ~ 4-5GB. However peak RSS scales with reference size but
+    // not all that predicatably. So until a better memory heuristic is found, employ a error strategy where
+    // the default 5GB is increased by 5GB upon each error, up to a maximum value of 25GB
+    memory = { 5.GB  * task.attempt }
+    maxRetries = 5
+    errorStrategy = { task.exitStatus in 137..140 ? 'retry' : 'terminate' }
     input:
         tuple val(sample_id),
               val(chr),
               path('transcriptome.fa'),
               path('chr.gtf'),
               path('stringtie.gff'),
-              path("reads.fastq")
+              path("reads.fq")
     output:
         tuple val(sample_id),
               val(chr),
@@ -318,7 +332,7 @@ process align_to_transcriptome {
         -N 3 \
         -t $mm2_threads \
         transcriptome.fa \
-        reads.fastq \
+        reads.fq \
         | samtools view -h -@ 1 -b -F 2052 - \
         | samtools sort -n -@ $st_threads --no-PG - > tr_align.bam
     """

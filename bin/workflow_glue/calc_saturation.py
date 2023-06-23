@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 """Calculate saturation."""
-import multiprocessing
 
 from matplotlib import pyplot as plt
 import pandas as pd
+import polars as pl
 
 from .util import get_named_logger, wf_parser  # noqa: ABS101
 
@@ -95,22 +95,21 @@ def plot_saturation_curves(res, args):
     fig.savefig(args.output)
 
 
-def downsample_dataframe(args):
+def downsample_dataframe(df, fraction):
     """Downsample dataframe of read tags and tabulate genes and UMIs per cell."""
     logger = get_named_logger('ClcSat')
 
-    df, fraction = args
     logger.info(f"Doing {fraction}")
     df_scaled = df.sample(frac=fraction)
     n_reads = df_scaled.shape[0]
 
     # Get the unique number of reads, genes and UMIs per cell barcode
-    gb = df_scaled.groupby("barcode").nunique().median()
-    reads_per_cell = gb['read_id']
-    genes_per_cell = gb['gene']
-    umis_per_cell = gb['umi']
+    gb = df_scaled.groupby("barcode").n_unique().median()
+    reads_per_cell = gb['read_id'][0]
+    genes_per_cell = gb['gene'][0]
+    umis_per_cell = gb['umi'][0]
 
-    n_deduped_reads = len(df_scaled.groupby(['gene', 'barcode', 'umi']))
+    n_deduped_reads = df_scaled.groupby(['gene', 'barcode', 'umi']).count().shape[0]
     if n_reads < 1:
         umi_saturation = 0
     else:
@@ -126,6 +125,7 @@ def downsample_dataframe(args):
             umi_saturation,
         )
     )
+    logger.info(f"Done saturation calcualtion for fraction {fraction}")
     return record
 
 
@@ -133,11 +133,14 @@ def run_jobs(args):
     """Create job to send off to workers, and collate results."""
     logger = get_named_logger('ClcSat')
 
-    df = pd.read_csv(
-        args.read_tags, sep="\t", usecols=['read_id', 'CB', 'UB', 'gene'])\
-        .rename(columns={'CB': 'barcode', 'UB': 'umi'})
+    df = pl.read_csv(
+        args.read_tags,
+        separator='\t',
+        columns=['read_id', 'CB', 'UB', 'gene'],
+        new_columns=['read_id', 'barcode', 'umi', 'gene']
+    )
 
-    df = df[(df.barcode != '-') & (df.umi != '-')]
+    df.filter((df['barcode'] != '-') & (df['umi'] != '-'))
 
     logger.info("Downsampling reads for saturation curves")
     fractions = [
@@ -159,18 +162,8 @@ def run_jobs(args):
     ]
 
     records = [(0.0, 0, 0, 0, 0, 0.0)]
-    p = multiprocessing.Pool(processes=args.threads)
-    func_args = [(df, x) for x in fractions]
-
-    try:
-        results = list(
-            p.imap(downsample_dataframe, func_args))
-        p.close()
-        p.join()
-    except KeyboardInterrupt:
-        p.terminate()
-
-    records.extend(results)
+    for frac in fractions:
+        records.append(downsample_dataframe(df, frac))
 
     res = pd.DataFrame.from_records(
         records,
@@ -182,7 +175,7 @@ def run_jobs(args):
             "umis_pc",
             "umi_sat",
         ],
-        index='downsamp_frac'
+        index="downsamp_frac"
     )
     return res
 

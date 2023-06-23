@@ -52,7 +52,7 @@ def make_bam(
 
 @fixture
 def make_superlist():
-    """Make a samll superlist(whitelist) of barcodes."""
+    """Make a small superlist(whitelist) of barcodes."""
     superlist = (
         "AAACCCAAGAAACACT\n"
         "AAACCCAAGAAACCAT")
@@ -134,13 +134,16 @@ def test_align_adapter(args, adapter1_seq, tags_results_shape, counts_results_sh
 
     algin_adapter() should return results with a max adapter1 edit distance,
     which defaults to 3.
-
-    How do we change adapter1 seq?
     """
+    tags_file = tempfile.NamedTemporaryFile(
+        mode='w', suffix='.tsv')
     args.bam = make_bam(read_adapter1=adapter1_seq)
-    df_tags, df_counts = align_adapter(args)
-    assert df_tags.shape == tags_results_shape
+    args.output_read_tags = tags_file.name
+    df_counts = align_adapter(args)
     assert df_counts.shape == counts_results_shape
+
+    df_tags = pd.read_csv(tags_file.name, sep='\t')
+    assert df_tags.shape == tags_results_shape
 
 
 def ascii_decode_qscores(string):

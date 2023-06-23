@@ -1,7 +1,7 @@
 """Test adapter_scan_vsearch."""
 import tempfile
 
-import pandas as pd
+import polars as pl
 from workflow_glue.calc_saturation import (
     downsample_dataframe, run_jobs
 )
@@ -57,7 +57,8 @@ def test_downsample_dataframe():
         ('read8', 'TATATATATATATATA', 'GACGACGACGAC', 'YFG5')
     )
 
-    df = pd.DataFrame(rows, columns=header)
+    df = pl.from_records(
+        data=rows, schema=header)
 
     (
         label,
@@ -66,7 +67,7 @@ def test_downsample_dataframe():
         genes_per_cell,
         umis_per_cell,
         umi_saturation
-    ) = downsample_dataframe((df, 1.0))
+    ) = downsample_dataframe(df, 1.0)
 
     assert n_reads == 8
     assert reads_per_cell == 4
