@@ -44,6 +44,13 @@ def argparser():
     )
 
     parser.add_argument(
+        "--chunksize",
+        type=int,
+        default=100000,
+        help="Process the BAM in chunks no larger than this."
+    )
+
+    parser.add_argument(
         "--max_ed",
         help="Max edit distance between putative barcode \
                         and the matching whitelist barcode [2]",
@@ -104,13 +111,16 @@ def calc_ed_with_whitelist(bc_uncorr, whitelist, score_cutoff=6):
 
 
 def process_records(
-        extract_barcode_tags, whitelist, barcode_length, max_ed, min_ed_diff):
+        extract_barcode_tags, whitelist, barcode_length, max_ed, min_ed_diff,
+        tags_output, chunksize=100000):
     """Process read tag records.
 
     Process read tags to assign each read a corrected cell barcode.
-    Iterate over the uncorrected barcodes and for each barocode serarch
+    Iterate over the uncorrected barcodes and for each barcode search
     for matches in the whitelist and assign corrected barocodes if there is an
-    unambiquous match.
+    unambiguous match.
+
+    Write results chunks of no greater than 100,000 reads.
 
     :param extract_barcode_tags: path to TSV with
         Index: read_id
@@ -125,47 +135,58 @@ def process_records(
         barcode counts DataFrame
         read tags DataFrame
     """
-    corrected_bcs = []
-
-    df_tags = pd.read_csv(
-        extract_barcode_tags, sep='\t', index_col=0)
-
     barcode_counter = collections.Counter()
-    for row in df_tags.itertuples():
-        read_id = row.Index
-        bc_uncorr = row.CR
-        if not bc_uncorr:
-            continue
 
-        # No use considering barcodes that are too small
-        if len(bc_uncorr) >= barcode_length - max_ed:
+    output_cols = [
+        'read_id', 'CR', 'CY', 'UR', 'UY', 'chr', 'start', 'end', 'mapq', 'CB']
+    # Write dataframe header to file
+    pd.DataFrame(
+        columns=output_cols
+    ).to_csv(tags_output, mode='w', sep='\t', header=True, index=False)
 
-            bc_match, bc_match_ed, next_match_diff = \
-                calc_ed_with_whitelist(bc_uncorr, whitelist)
-
-            # Check barcode match edit distance and difference to
-            # runner-up edit distance.
-            if (bc_match_ed <= max_ed) and (next_match_diff >= min_ed_diff):
-                corrected_bcs.append([read_id, bc_match])
-                barcode_counter[bc_match] += 1
-
-    if len(corrected_bcs) > 0:
+    def write_chunk(bc_records, df_tags_):
         corr_bc_df = pd.DataFrame.from_records(
-            corrected_bcs, index='read_id',
+            bc_records, index='read_id',
             columns=['read_id', 'CB'])
-    else:
-        result_tags_df = pd.DataFrame(
-            columns=['read_id', 'CR', 'CY', 'UR', 'chr', 'start', 'end', 'mapq', 'CB']
-        ).set_index('read_id', drop=True)
 
-        return barcode_counter, result_tags_df
+        result_tags_df = df_tags_.merge(
+            corr_bc_df, how='left', left_index=True, right_index=True)
+        result_tags_df.CB.fillna('-', inplace=True)
+        # Ensure columns in correct order
+        col_order = [x for x in output_cols if x != 'read_id']
+        result_tags_df = result_tags_df[col_order]
+        result_tags_df.to_csv(tags_output, mode='a', sep='\t', header=None)
 
-    # Join the corrected barcode back to the rest of the orginal tags.
-    result_tags_df = df_tags.merge(
-        corr_bc_df, how='left', left_index=True, right_index=True)
-    result_tags_df.CB.fillna('-', inplace=True)
+    # The csv from extract_barcodes was not created with pandas so no quoting will
+    # have been done on the tags file
+    for df_tags in pd.read_csv(
+            extract_barcode_tags, sep='\t', index_col=0,
+            chunksize=chunksize, quoting=3):
+        corrected_bcs = []
+        for row in df_tags.itertuples():
+            read_id = row.Index
+            bc_uncorr = row.CR
+            if not bc_uncorr:
+                continue
 
-    return barcode_counter, result_tags_df
+            # No use considering barcodes that are too small
+            if len(bc_uncorr) >= barcode_length - max_ed:
+
+                bc_match, bc_match_ed, next_match_diff = \
+                    calc_ed_with_whitelist(bc_uncorr, whitelist)
+
+                # Check barcode match edit distance and difference to
+                # runner-up edit distance.
+                if (bc_match_ed <= max_ed) and (next_match_diff >= min_ed_diff):
+                    corrected_bcs.append([read_id, bc_match])
+                    barcode_counter[bc_match] += 1
+                # Set bc as '-' as a suitable fix cannot be foundin the whitelist
+                else:
+                    corrected_bcs.append([read_id, '-'])
+
+        write_chunk(corrected_bcs, df_tags)
+
+    return barcode_counter
 
 
 def main(args):
@@ -173,12 +194,10 @@ def main(args):
     whitelist = pd.read_csv(
         args.whitelist, index_col=None, sep='\t', header=None)[0].to_list()
 
-    barcode_counter, tags = \
-        process_records(
-            args.extract_barcode_tags, whitelist,
-            args.barcode_length, args.max_ed, args.min_ed_diff)
-
-    tags.to_csv(args.output_tags, sep='\t')
+    barcode_counter = process_records(
+        args.extract_barcode_tags, whitelist,
+        args.barcode_length, args.max_ed, args.min_ed_diff,
+        args.output_tags)
 
     with open(args.output_counts, "w") as f:
         for bc, n in barcode_counter.most_common():

@@ -194,7 +194,7 @@
                     "type": "integer",
                     "description": "Control the size of chunks for processing of data.",
                     "default": 100000,
-                    "help_text": "Several steps proccess the data into chunks of n reads/alignments. Use a smaller number to reduce peak memory use"
+                    "help_text": "Several steps process the data into chunks of n reads/alignments. Use a smaller number to reduce peak memory use"
                 },
                 "mito_prefix": {
                     "type": "string",

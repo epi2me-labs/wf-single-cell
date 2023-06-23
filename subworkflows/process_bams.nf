@@ -80,6 +80,7 @@ process generate_whitelist{
 process assign_barcodes{
     label "singlecell"
     cpus 1
+    memory 1.5.GB
     input:
          tuple val(sample_id),
                path("whitelist.tsv"),
@@ -101,6 +102,7 @@ process assign_barcodes{
         --max_ed $params.barcode_max_ed \
         --min_ed_diff $params.barcode_min_ed_diff \
         --extract_barcode_tags extract_barcodes.tsv \
+        --chunksize $params.process_chunk_size \
         --whitelist whitelist.tsv
     """
 }
