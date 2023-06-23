@@ -49,27 +49,32 @@ def test_process_records(whitelist):
     Check if barcodes are corrected and enumerted appropriately.
     """
     # Build some uncorrectred barcodes.
-    # The minimum required columns are read_id and CR (uncorrected barcode)
-    header = ('read_id', 'CR')
+    # The columns used in this test are read_id and CR (uncorrected barcode). The other
+    # Columns can be any value for now
+    header = ('read_id', 'CR', 'CY', 'UR', 'UY', 'chr', 'start', 'end', 'mapq')
     rows = [
         # These should be corrected to AAAAAAAAAAAAAAAA
-        ('read1', 'AAAAAAAAAAAAAAAA'),
-        ('read2', 'AAAAcAAAcAAAAAAA'),
+        ('read1', 'AAAAAAAAAAAAAAAA', 'qual', 'umi', 'qual' 'chr', 0, 100, 20),
+        ('read2', 'AAAAcAAAcAAAAAAA', 'qual', 'umi', 'qual', 'chr', 0, 100, 20),
         # These will not be corrected as the edit distance difference between
         # the top match and the second-top match is < 2
-        ('read3', 'tAAAAAAAAAAAAAAA'),
-        ('read4', 'AtAAAAAAAAAAAAAA'),
+        ('read3', 'tAAAAAAAAAAAAAAA', 'qual', 'umi', 'qual', 'chr', 0, 100, 20),
+        ('read4', 'AtAAAAAAAAAAAAAA', 'qual', 'umi', 'qual', 'chr', 0, 100, 20),
     ]
 
     tags = pd.DataFrame(rows, columns=header).set_index('read_id', drop=True)
     tags_file = tempfile.NamedTemporaryFile(mode='w', suffix='.tsv')
     tags.to_csv(tags_file.name, sep='\t')
+    tags_output = tempfile.NamedTemporaryFile(mode='w', suffix='.tsv')
 
     barcode_length = 16
     max_ed = 16
     min_ed_diff = 2
-    barcode_counter, result_tags_df = \
-        process_records(tags_file.name, whitelist, barcode_length, max_ed, min_ed_diff)
+    barcode_counter = process_records(
+            tags_file.name, whitelist, barcode_length,
+            max_ed, min_ed_diff, tags_output.name)
+
+    result_tags_df = pd.read_csv(tags_output.name, sep='\t', index_col=0)
 
     # Just the single corrected barcode should be present: AAAAAAAAAAAAAAAA
     assert len(barcode_counter) == 1
