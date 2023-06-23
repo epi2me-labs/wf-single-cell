@@ -328,13 +328,16 @@ def align_adapter(args):
     else:
         raise Exception("Invalid kit name! Specify either 3prime or 5prime.")
 
-    records = []
+    with AlignmentFile(
+            str(args.bam), "rb") as bam_fh, \
+            open(args.output_read_tags, 'w') as tags_fh:
 
-    with AlignmentFile(str(args.bam), "rb") as bam:
+        # Write the header
+        tags_fh.write("read_id\tCR\tCY\tUR\tUY\tchr\tstart\tend\tmapq\n")
 
         barcode_counts = collections.Counter()
 
-        for align in bam.fetch(contig=args.contig):
+        for align in bam_fh.fetch(contig=args.contig):
             if align.is_supplementary:
                 continue
             prefix_seq = align.get_forward_sequence()[: args.window]
@@ -363,22 +366,19 @@ def align_adapter(args):
                     barcode_counts[barcode] += 1
                     # nh: I think if we are not including a barcode in the
                     # count due to low min qual, then we should also be
-                    # ommiting from the records -or is it filtered out later?
-                records.append(
-                    (align.query_name, barcode, bc_qscores,
-                     umi, umi_qscores, args.contig,
-                     align.get_reference_positions()[0],
-                     align.get_reference_positions()[-1],
-                     align.mapping_quality))
+                    # ommiting from the records
+                tags_fh.write('\t'.join([
+                    align.query_name, barcode, bc_qscores,
+                    umi, umi_qscores, args.contig,
+                    str(align.get_reference_positions()[0]),
+                    str(align.get_reference_positions()[-1]),
+                    str(align.mapping_quality)]) + '\n')
 
-    bc_tags = pd.DataFrame.from_records(
-        records, columns=[
-            'read_id', 'CR', 'CY', 'UR', 'UY', 'chr', 'start', 'end', 'mapq'])
     bc_counts = pd.DataFrame.from_dict(
         barcode_counts,
         columns=['count'],
         orient='index').sort_values('count', ascending=False)
-    return bc_tags, bc_counts
+    return bc_counts
 
 
 def main(args):
@@ -389,7 +389,7 @@ def main(args):
 
     logger.info(f"Extracting uncorrected barcodes from {args.bam}")
 
-    read_tags, barcode_counts = align_adapter(args)
+    barcode_counts = align_adapter(args)
 
     # Filter barcode counts against barcode superlist
     logger.info(
@@ -399,9 +399,3 @@ def main(args):
     bc_counts = barcode_counts[barcode_counts.index.isin(wl)]
     bc_counts.to_csv(
         args.output_barcode_counts, index=True, sep='\t', header=False)
-
-    logger.info(
-        f"Writing BAM with uncorrected barcode tags to "
-        f"{args.output_read_tags}")
-    read_tags.to_csv(
-        args.output_read_tags, index=False, sep='\t')

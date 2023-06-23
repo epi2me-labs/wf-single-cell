@@ -1,10 +1,13 @@
 process call_adapter_scan {
     label "singlecell"
-    cpus 1
+    cpus 2
+    // Benchmarking has shown that memory usage is ~ 1.5x times fastq size.
+    // Smaller chunks sizes have a larger ratios, so 1G is added to account for this.
+    memory { 1.0.GB.toBytes() + (chunk.size() * 2) }
     input:
         tuple val(sample_id), 
               val(meta),
-              path("chunk.fq.gz")
+              path(chunk, stageAs: 'chunk.fq.gz')
     output:
         tuple val(sample_id), path("${sample_id}_adapt_scan.fastq.gz"), emit: stranded_fq_chunked
         tuple val(sample_id), path("${sample_id}_adapt_scan.tsv"), emit: read_config_chunked
@@ -14,7 +17,8 @@ process call_adapter_scan {
     chunk.fq.gz \
     --kit ${meta['kit_name']} \
     --output_fastq "${sample_id}_adapt_scan.fastq.gz" \
-    --output_tsv  "${sample_id}_adapt_scan.tsv"
+    --output_tsv  "${sample_id}_adapt_scan.tsv" \
+    --threads $task.cpus
     """
 }
 

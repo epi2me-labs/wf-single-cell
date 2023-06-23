@@ -25,7 +25,7 @@ process summariseCatChunkReads {
     // Split into p parts where p is num threads
 
     label "singlecell"
-    cpus 2
+    cpus 4
     input:
         tuple val(meta),
               path(reads)
@@ -36,10 +36,15 @@ process summariseCatChunkReads {
         tuple val("${meta.alias}"),
               path("chunks/*"),
               emit: fastq_chunks
-    
+    script:
+    // Split the input fastq into chunks for processing by downstream proceses.
+    // If params.adapter_scan_chunk_size is set to 0, partition data into $params.max_threads chunks (with seqkit -p)
+    // Else partition into chunks with params.adapter_scan_chunk_size reads (with seqkit -s)
+    def seqkit_split_opts = (params.adapter_scan_chunk_size == 0) ? "-p $params.max_threads" : "-s $params.adapter_scan_chunk_size"
+
     """
     fastcat -s ${meta.alias} -r ${meta.alias}.stats -x ${reads} | \
-        seqkit split2 -p ${params.max_threads} -O chunks -o ${meta.alias} -e .gz
+        seqkit split2 --threads ${task.cpus} ${seqkit_split_opts} -O chunks -o ${meta.alias} -e .gz
     """
 }
 

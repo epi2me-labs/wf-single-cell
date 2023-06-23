@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 """Adapter scan vsearch."""
-import argparse
 import gzip
-import logging
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -11,11 +10,12 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 import pandas as pd
+import polars as pl
 import pysam
 from workflow_glue.sc_util import kit_adapters
 
+from .util import get_named_logger, wf_parser  # noqa: ABS101
 
-logger = logging.getLogger(__name__)
 
 compat_adapters = {"adapter1_f": "adapter2_f", "adapter2_r": "adapter1_r"}
 
@@ -35,27 +35,21 @@ configs = {
 
 def argparser():
     """Create argument parser."""
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        add_help=False
-    )
-
+    parser = wf_parser("adapt_scan")
     # Positional mandatory arguments
     parser.add_argument("fastq", help="FASTQ of ONT reads", type=Path)
 
     # Optional arguments
     parser.add_argument(
         "--output_fastq",
-        help="Output file name for (gzipped) stranded FASTQ entries \
-                        [stranded.fastq.gz]",
+        help="Output file name for (gzipped) stranded FASTQ entries",
         type=Path,
         default="stranded.fastq.gz",
     )
 
     parser.add_argument(
         "--output_tsv",
-        help="Output file name for adapter configurations \
-                        [adapters.tsv]",
+        help="Output file name for adapter configurations",
         type=Path,
         default="adapters.tsv",
     )
@@ -65,8 +59,7 @@ def argparser():
         "--kit",
         help="Specify either the 10X 3' gene expression kit (3prime), the 5' \
         gene expression kit (5prime), or the multiome kit (multiome) This \
-        determines which adapter sequences to search for in the reads \
-        [3prime]",
+        determines which adapter sequences to search for in the reads",
         default="3prime",
         choices=['3prime', '5prime', 'multiome']
     )
@@ -74,8 +67,7 @@ def argparser():
     parser.add_argument(
         "-i",
         "--min_adapter_id",
-        help="Minimum adapter alignment identity for VSEARCH \
-                        [0.7]",
+        help="Minimum adapter alignment identity for VSEARCH",
         type=float,
         default=0.7,
     )
@@ -83,7 +75,7 @@ def argparser():
     parser.add_argument(
         "--only_strand_full_length",
         help="Do not try to strand-orient reads where either \
-                        just a single adapter was found [False]",
+                        just a single adapter was found",
         action="store_true",
         default=False,
     )
@@ -91,15 +83,14 @@ def argparser():
     parser.add_argument(
         "-a",
         "--adapters_fasta",
-        help="Filename for adapter query sequences \
-                        [adapter_seqs.fasta]",
+        help="Filename for adapter query sequences",
         type=Path,
         default="adapter_seqs.fasta",
     )
 
     parser.add_argument(
-        "--verbosity",
-        help="logging level: <=2 logs info, <=3 logs warnings",
+        "--threads",
+        help="Number of max threads for polars",
         type=int,
         default=2,
     )
@@ -168,40 +159,42 @@ def call_vsearch(fastq, min_adapter_id, adapters_fasta):
 
 
 def get_valid_adapter_pair_positions_in_read(vs_result):
-    """Get valid adapter positions."""
+    """Get valid adapter positions.
+
+    :param vs_result: vsearch results
+    :type vs_result: polars.DataFrame
+    """
     valid_pairs_n = 0
     fl_pairs = []
 
     # Find the first adapter of each segment.
     # If + strand, first adapter is adapter1_f
     # If - strand, first adapter is adapter2_r
-    for adapter1 in compat_adapters.keys():
-        adapter_1_idxs = vs_result.index[vs_result["target"] == adapter1]
+    for first_adapter in compat_adapters.keys():
+        adapter_1_idxs = vs_result.with_row_count().filter(
+            vs_result["target"] == first_adapter)['row_nr']
         for adapter_1_idx in adapter_1_idxs:
             # For each found first adapter, examine next found adapter
             adapter_2_idx = adapter_1_idx + 1
             # Make sure there are enough alignments to allow this indexing
-            if adapter_2_idx in vs_result.index:
+            if adapter_2_idx < vs_result.height:
                 # Is the next found adapter an adapter2_f?
-                if vs_result.at[adapter_2_idx, 'target'] \
-                        == compat_adapters[adapter1]:
+                if vs_result.item(adapter_2_idx, 'target') \
+                        == compat_adapters[first_adapter]:
                     # This is a valid adapter pairing (adapter1_f-adapter2_f)
-                    read_id = vs_result.iloc[0]['query']
+                    read_id = vs_result.item(0, 'query')
                     pair_str = (
-                        f"{vs_result.at[adapter_1_idx, 'target']}-"
-                        f"{vs_result.at[adapter_2_idx, 'target']}"
+                        f"{vs_result.item(adapter_1_idx, 'target')}-"
+                        f"{vs_result.item(adapter_2_idx, 'target')}"
                     )
                     fl_pair = {
                         "read_id": f"{read_id}_{valid_pairs_n}",
                         "config": pair_str,
-                        "start": vs_result.at[adapter_1_idx, 'qilo'],
-                        "end": vs_result.at[adapter_2_idx, 'qihi'],
+                        "start": vs_result.item(adapter_1_idx, 'qilo'),
+                        "end": vs_result.item(adapter_2_idx, 'qihi'),
                     }
 
-                    if adapter1 == "adapter1_f":
-                        fl_pair["strand"] = "+"
-                    else:
-                        fl_pair["strand"] = "-"
+                    fl_pair["strand"] = "+" if first_adapter == "adapter1_f" else "-"
                     valid_pairs_n += 1
                     fl_pairs.append(fl_pair)
     return fl_pairs
@@ -219,21 +212,26 @@ def parse_vsearch(tmp_vsearch, only_strand_full_length):
         full length read segment locations.
     :rtype: dict
     """
-    cols_to_use = {
-        'query': str,
-        'target': 'category',
-        'qilo': 'uint32',
-        'qihi': 'uint32',
-        'ql': 'uint32'}
+    schema = {
+        'query': pl.Utf8,
+        'target': pl.Categorical,
+        'qilo': pl.UInt32,
+        'qihi': pl.UInt32,
+        'ql': pl.UInt32}
 
-    df = pd.read_csv(
-        tmp_vsearch, sep="\t", header=None, names=vsearch_colnames,
-        usecols=cols_to_use.keys(),
-        dtype=cols_to_use)
+    columns_idxs = [vsearch_colnames.index(x) for x in schema.keys()]
+    df = pl.read_csv(
+        source=tmp_vsearch,
+        has_header=False,
+        separator='\t',
+        dtypes=schema,
+        columns=columns_idxs,
+        new_columns=list(schema.keys())
+    )
 
     read_info = {}
 
-    df = df.sort_values(["query", "qilo"]).reset_index(drop=True)
+    df = df.sort(["query", "qilo"])
 
     # Group the vsearch results by read_id. The resulting dataframe may
     # contain zero or more pairs of adapter hits representing full length
@@ -272,7 +270,7 @@ def parse_vsearch(tmp_vsearch, only_strand_full_length):
             # or weird artifact read.
 
             # The first vsearch result contains the info we need.
-            read_row = read_result.iloc[0]
+            read_row = read_result.row(0, named=True)
             # Make a single subread id.
             read_id = f"{orig_read_id}_0"
             fl = False
@@ -281,7 +279,7 @@ def parse_vsearch(tmp_vsearch, only_strand_full_length):
             readlen = read_row['ql']
             start = 0
             end = readlen - 1
-            adapter_config = "-".join(read_result["target"].values)
+            adapter_config = "-".join(read_result["target"])
 
             config_type = configs.get(adapter_config, 'other')
 
@@ -408,29 +406,19 @@ def write_stranded_fastq(fastq, read_info, output_fastq):
                              f"{subread_quals}\n").encode())
 
 
-def init_logger(args):
-    """Init logger."""
-    logging.basicConfig(
-        format="%(asctime)s -- %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    logging_level = args.verbosity * 10
-    logging.root.setLevel(logging_level)
-    logging.root.handlers[0].addFilter(lambda x: "NumExpr" not in x.msg)
-
-
 def main(args):
     """Entry point."""
-    init_logger(args)
-
+    logging = get_named_logger("adapt_scan")
     adapters = kit_adapters[args.kit]
     args.adapter1_seq = adapters['adapter1']
     args.adapter2_seq = adapters['adapter2']
+
+    os.environ["POLARS_MAX_THREADS"] = str(args.threads)
 
     # Create temp dir and add that to the args object
     p = Path(args.output_tsv)
     tempdir = tempfile.TemporaryDirectory(prefix="tmp.", dir=p.parents[0])
     args.tempdir = tempdir.name
-
     adapter_file = 'adapters.fasta'
     write_adapters_fasta(
         adapters['adapter1'], adapters['adapter2'], adapter_file)
@@ -439,7 +427,6 @@ def main(args):
     read_info = parse_vsearch(vsearch_results, args.only_strand_full_length)
     write_stranded_fastq(args.fastq, read_info, args.output_fastq)
     write_tables(read_info, args.output_tsv)
-
     logging.debug(f"Writing output table to {args.output_tsv}")
 
 
