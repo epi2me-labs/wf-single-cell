@@ -48,10 +48,8 @@ def getbam():
         fh_sam.write(sam)
         sam_file = fh_sam.name
 
-    bam = 'sorted.bam'
+    bam = 'align.bam'
     subprocess.check_output(['samtools', 'view', sam_file, '-o', 'align.bam'])
-    subprocess.check_output(['samtools', 'sort', 'align.bam', '-o', bam])
-    subprocess.check_output(['samtools', 'index', bam])
 
     return bam
 
@@ -107,6 +105,9 @@ def test_main():
         gtf = gtf_file
         output = tempfile.NamedTemporaryFile('w', suffix='.tsv', delete=False).name
         min_mapq = 30
+        min_tr_coverage = 0.4
+        min_read_coverage = 0.4
+        chunksize = 1
 
     args = Args()
     main(args)
