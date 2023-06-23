@@ -220,8 +220,12 @@ process combine_uncorrect_bcs {
     all_files = cwd.glob("*.tsv")
     dfs = []
     for fn in all_files:
-        dfs.append(pd.read_csv(str(fn), sep='\t', index_col=0, header=None))
-
+        try:
+            dfs.append(pd.read_csv(str(fn), sep='\t', index_col=0, header=None))
+        except pd.errors.EmptyDataError:
+            continue
+    if len(dfs) < 1:
+        raise ValueError('No uncorrected barcode counts')
     df = pd.concat(dfs).reset_index()
     df.columns = ['barcode', 'count']
     df_final = df.groupby('barcode').sum().sort_values('count', ascending=False)
@@ -298,35 +302,39 @@ process align_to_transcriptome {
               val(chr),
               path("chr.gtf"),
               path("tr_align.bam"),
-              path("tr_align.bam.bai"),
               path('stringtie.gff'),
               emit: read_tr_map
+    script:
+    // Provide at least 2 cores to mm2
+    def mm2_threads = Math.max(task.cpus - 3, 2)
+    // Remove the mm2 + samtools view cores and give the rest to sorting
+    def st_threads = Math.max(task.cpus - 1 - mm2_threads, 1)
     """
     minimap2 -ax map-ont \
         --end-bonus 10 \
         -p 0.9 \
         -N 3 \
-        -t $task.cpus \
+        -t $mm2_threads \
         transcriptome.fa \
         reads.fastq \
-        | samtools view -h -b -F 2052 - \
-        | samtools sort -@ 2 --no-PG - > tr_align.bam
-    samtools index tr_align.bam
+        | samtools view -h -@ 1 -b -F 2052 - \
+        | samtools sort -n -@ $st_threads --no-PG - > tr_align.bam
     """
 }
 
 
 process assign_features {
     label "singlecell"
+    // Benchmarking showed that memory usage scales with tags file size.
+    memory { 1.0.GB.toBytes() + (tags.size() * 2 ) }
     cpus 1
     input:
         tuple val(sample_id),
               val(chr),
               path("chr.gtf"),
               path("tr_align.bam"),
-              path("tr_align.bam.bai"),
               path('stringtie.gff'),
-              path('tags.tsv')
+              path(tags, stageAs: 'tags.tsv')
     output:
         tuple val(sample_id),
               val(chr),
@@ -341,6 +349,7 @@ process assign_features {
         --gffcompare_tmap gffcompare.stringtie.gff.tmap \
         --gtf chr.gtf \
         --tags tags.tsv \
+        --chunksize $params.process_chunk_size \
         --output "${sample_id}.${chr}.feature_assigns.tsv" \
         --min_mapq ${params.gene_assigns_minqv}
     """

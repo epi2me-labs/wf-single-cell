@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Bumped minimum required Nextflow version to 22.10.8
 - GitHub issue templates
+- assign_features - process BAM in chunks
 
 ### Fixed
 - Output BAM files with alignments from incorrect chromosomes

@@ -190,6 +190,12 @@
                     "default": "-I 16G",
                     "help_text": "Minimap2 options can be supplied to modify the alignment parameters: eg '-I 4G' loads at max 4G bases into memory for indexing."
                 },
+                "process_chunk_size": {
+                    "type": "integer",
+                    "description": "Control the size of chunks for processing of data.",
+                    "default": 100000,
+                    "help_text": "Several steps proccess the data into chunks of n reads/alignments. Use a smaller number to reduce peak memory use"
+                },
                 "mito_prefix": {
                     "type": "string",
                     "description": "Gene name prefix to identify for mitochondrial genes.",
