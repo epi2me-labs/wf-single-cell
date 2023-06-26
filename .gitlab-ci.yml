@@ -24,6 +24,11 @@ docker-run:
           "integration-test"
         ]
     rules:
+      # NOTE As we're overriding the rules block for the included docker-run
+      #   we must redefine this CI_COMMIT_BRANCH rule to prevent docker-run
+      #   being incorrectly scheduled for "detached merge request pipelines" etc.
+      - if: ($CI_COMMIT_BRANCH == null || $CI_COMMIT_BRANCH == "dev-template")
+        when: never
       - if: $MATRIX_NAME == 'standard'
         variables:
           NF_BEFORE_SCRIPT: "wget -O test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v0.1.5_test_data.tar.gz && tar -xzvf test_data.tar.gz"
