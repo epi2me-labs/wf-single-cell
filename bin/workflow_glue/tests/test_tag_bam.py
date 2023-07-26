@@ -78,6 +78,7 @@ def test_add_tags(tags_file, input_bam):
         tags = tags_file
         out_bam = tempfile.NamedTemporaryFile('w', suffix='.bam').name
         chrom = 'chr17'
+        flip = True
 
     args = Args()
     main(args)

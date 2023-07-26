@@ -152,6 +152,7 @@ process tag_bams {
     input:
         tuple val(sample_id),
               val(chr),
+              val(kit_name),
               path("align.bam"),
               path("align.bam.bai"),
               path('tags.tsv')
@@ -160,12 +161,15 @@ process tag_bams {
               path("${sample_id}.${chr}.tagged.bam"),
               path("${sample_id}.${chr}.tagged.bam.bai"),
               emit: tagged_bam
+    script:
+    def opt_flip = (kit_name != '5prime') ? "--flip": ""
     """
     workflow-glue tag_bam \
         --in_bam align.bam \
         --tags tags.tsv \
         --out_bam ${sample_id}.${chr}.tagged.bam \
-        --chrom ${chr}
+        --chrom ${chr} \
+        ${opt_flip}
 
     samtools index ${sample_id}.${chr}.tagged.bam
     """
@@ -274,8 +278,10 @@ process stringtie {
         tuple val(sample_id),
               path("align.bam"),
               path("align.bam.bai"),
+              val(kit_name),
               val(chr),
               path("chr.gtf")
+
     output:
         tuple val(sample_id),
               val(chr),
@@ -284,13 +290,23 @@ process stringtie {
               path("stringtie.gff"),
               path("reads.fastq"),
               emit: read_tr_map
+    script:
+    if (kit_name=="5prime")
     """
-    # Build transcriptome. 
+    samtools view -h align.bam ${chr}  \
+         | tee >(stringtie -L ${params.stringtie_opts} -p ${task.cpus} -G chr.gtf -l stringtie \
+             -o stringtie.gff - ) \
+         | samtools fastq > reads.fastq    
+    # Get transcriptome sequence
+    gffread -g ref_genome.fa -w transcriptome.fa stringtie.gff
+    """
+    else
+    """
+    # Data from 3prime and multiome kits must be flipped to the transcript strand before building transcriptome.
     workflow-glue process_bam_for_stringtie align.bam ${chr}  \
         | tee >(stringtie -L ${params.stringtie_opts} -p ${task.cpus} -G chr.gtf -l stringtie \
             -o stringtie.gff - ) \
         | samtools fastq > reads.fastq
-
     # Get transcriptome sequence
     gffread -g ref_genome.fa -w transcriptome.fa stringtie.gff
     """
@@ -529,7 +545,9 @@ workflow process_bams {
         stringtie(
             ref_genome_fasta,
             ref_genome_idx,
-            bam.combine(chr_gtf))
+            bam.join(meta).map { sample_id, bam, bai, meta -> [sample_id, bam, bai, meta['kit_name']]}
+            .combine(chr_gtf))
+
         
         align_to_transcriptome(stringtie.out.read_tr_map)
 
@@ -543,9 +561,10 @@ workflow process_bams {
             .join(assign_barcodes.out.tags, by: [0, 1]))
 
         tag_bams(
-            bam.cross(
-                cluster_umis.out.read_tags
-            ).map {it ->it.flatten()[0, 4, 1, 2, 5]})
+             bam.join(meta).map { sample_id, bam, bai, meta -> [sample_id, bam, bai, meta['kit_name']]}
+             // cross by sample_id on the output of cluster_umis to return
+             // [sample_id, chr, kit_name, bam, bai, tags.tsv]
+            .cross(cluster_umis.out.read_tags).map {it -> it.flatten()[0, 5, 3, 1, 2, 6]})
 
         read_tags = combine_tag_files(
             cluster_umis.out.read_tags
