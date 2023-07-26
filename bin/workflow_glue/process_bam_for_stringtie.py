@@ -27,7 +27,12 @@ def argparser():
 
 
 def main(args):
-    """Entry point."""
+    """Entry point.
+
+    Up to this point in the workflow the alignments are in reverse
+    orientation in relation to the mRNA forsome of the 10x kits.
+    This simply reverses the orientation of the alignment.
+    """
     bam_file = args.bam
 
     with AlnFile(bam_file, "rb") as bam, AlnFile("-", "w", template=bam) as bam_out:
