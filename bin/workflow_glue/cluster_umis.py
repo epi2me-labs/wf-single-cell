@@ -49,18 +49,6 @@ def argparser():
     )
 
     parser.add_argument(
-        "--cell_gene_max_reads",
-        help="Maximum number of reads to consider for a particular \
-        gene + cell barcode combination. \
-        This is required to prevent too many PCR \
-        duplicates from crashing the UMI clustering algorithm. \
-        Can be increased \
-        if sufficient UMI complexity is observed. [20000]",
-        type=int,
-        default=20000
-    )
-
-    parser.add_argument(
         "--feature_assigns",
         help="TSV read gene/transcript assignments file.",
         type=Path

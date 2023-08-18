@@ -240,7 +240,7 @@ workflow pipeline {
             bc_longlist_dir,
             ref_genome_fasta,
             ref_genome_idx)
-        
+
         prepare_report_data(
             process_bams.out.final_read_tags
             .join(stranding.out.config_stats)
@@ -325,10 +325,22 @@ workflow {
     sample_kits.map {it -> it[2]['sample_id']}
     .join(fastqingress_ids, failOnMismatch:true)
 
+    supported_kits = kit_configs.map {it[0]}.collect()
+
     // Merge the kit info and user-supplied meta data on kit name and version
-    sample_info = kit_configs.join(sample_kits, by: [0, 1])
-        .map {it ->
-            meta = it[2] + it[3] // Join the 2 meta maps  
+    sample_info = kit_configs.join(sample_kits, by: [0, 1], remainder: true)
+        // Remove kits that are not selected (sample_meta is null)
+        .filter( {kit_name, kit_version, kit_meta, sample_meta -> sample_meta })
+        // Rsise an error for unsupported kits
+        .map { kit, version, wf_kit_meta, user_sample_meta ->
+                if (!wf_kit_meta) {
+                    error "${kit} is not a supported kit"
+                }else{
+                    return [kit, version, wf_kit_meta, user_sample_meta]
+                }
+        }
+        .map {it->
+            meta = it[2] + it[3] // Join the 2 meta maps
             kit_name = meta['kit_name']
             kit_version = meta['kit_version']
             // Get the appropriate cell barcode longlist based on the kit_name specified for this sample_id.
@@ -360,8 +372,6 @@ workflow {
             [it[3]['sample_id'], meta]}
 
     pipeline(reads, ref_genome_dir, umap_genes, sample_info)
-
-
 
     output(pipeline.out.results.flatMap({it ->
         // Convert [sample_id, file, file, ..] 
