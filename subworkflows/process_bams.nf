@@ -138,7 +138,6 @@ process cluster_umis {
     """
     workflow-glue cluster_umis \
         --chrom ${chr} \
-        --cell_gene_max_reads $params.umi_cell_gene_max_reads \
         --feature_assigns chrom_feature_assigns.tsv \
         --read_tags read_tags.tsv \
         --output_read_tags "${sample_id}_${chr}.read_tags.tsv" \
@@ -619,7 +618,7 @@ workflow process_bams {
 
     emit:
         results = umaps
-            .mix(umi_gene_saturation.out.saturation_curve)
+            .join(umi_gene_saturation.out.saturation_curve)
             .join(final_read_tags)
             .join(construct_expression_matrix.out)
             .join(proc_expresion_out)

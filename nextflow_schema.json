@@ -17,42 +17,49 @@
                 "fastq": {
                     "type": "string",
                     "format": "path",
+                    "title": "FASTQ",
                     "description": "FASTQ files to use in the analysis.",
                     "help_text": "This accepts one of three cases: (i) the path to a single FASTQ file; (ii) the path to a top-level directory containing FASTQ files; (iii) the path to a directory containing one level of sub-directories which in turn contain FASTQ files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`."
                 },
                 "ref_genome_dir": {
                     "type": "string",
                     "format": "directory-path",
+                    "title": "Reference genome directory",
                     "description": "The path to the 10x reference directory",
                     "help_text": "Reference genome directories can be downloaded from the 10x website: https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2020-A.tar.gz"
                 },
                 "kit_config": {
                     "type": "string",
                     "format": "file-path",
+                    "title": "10x kit config file",
                     "description": "A file defining the configurations associated with the various supported 10x kits.",
                     "help_text": "A CSV file is expected with the following headers [kit_name, kit_version, barcode_length, umi_length]"
                 },
                 "merge_bam": {
                     "type": "boolean",
+                    "title": "Merge output BAM files",
                     "description": "Merge BAM alignment files into a single BAM file per sample",
                     "help_text": "Merging of BAM files can take a significant amount of time and uses additional disk space.  By default BAM files are output per chromosome. Set to true if a BAM file per sample is needed for downstream analyses",
                     "default": false
                 },
                 "kit_name": {
                     "type": "string",
+                    "title": "Kit",
                     "description": "10x kit name",
                     "help_text": "If `single_cell_sample_sheet` is not defined, kit_name is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied.",
                     "default": "3prime"
                 },
                 "kit_version": {
                     "type": "string",
+                    "title": "Kit version",
                     "description": "10x kit version",
                     "help_text": "If `single_cell_sample_sheet` is not defined, kit_version is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied. 3prime kit options: [v2, v3]. For 5prime and multiome kits only `v1` is available.",
                     "default": "v3"
                 },
                 "expected_cells": {
                     "type": "integer",
-                    "description": "Number of expected cells.",
+                    "title": "Expected cell number",
+                    "description": "Number of expected cells in the sample.",
                     "help_text": "The number of expected cells is used If `single_cell_sample_sheet` is not defined, `expected_cells` is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied. If unknown 500 is a reasonable choice.",
                     "default": 500
                 }
@@ -70,6 +77,7 @@
             "properties": {
                 "single_cell_sample_sheet": {
                     "type": "string",
+                    "title": "Single cell sample sheet",
                     "description": "An optional CSV file used to assign library metadata to samples. If all samples have the same library metadata, this can be supplied instead by using the parameters (kit_name, kit_version, expected cells)",
                     "help_text": "Columns should be: [sample_id, kit_name, kit_version, exp_cells], This is not to be confused with the MinKNOW sample_sheet. `sample_id` should correspond to `sample_name` which is defined either in the `sample_sheet`, given by the `sample` parameter (for single sample runs) or if no `sample_sheet` or `sample` is given, is derived from the folder name containing the fastq files.",
                     "format": "file-path"
@@ -101,6 +109,7 @@
                 "plot_umaps": {
                     "type": "boolean",
                     "default": false,
+                    "title": "Plot UMAPs",
                     "description": "Optionally generate UMAP plots.",
                     "help_text": "If set to false (the default), UMAP projection and plotting will be skipped, which will speed up the workflow."
                 }
@@ -115,107 +124,120 @@
             "properties": {
                 "max_threads": {
                     "type": "integer",
+                    "title": "Maximum number of threads",
                     "description": "This is used to control how many threads the following multithread-capable processes can use: combine_chrom_bams(max 8 threads), stringtie(max_threads/4),  align_to_transcriptome(max_threads/2) .It is also used as the number of parts to chunk the fastq data into before processing.",
                     "help_text": "The total CPU resource used by the workflow is constrained by the executor configuration.",
                     "default": 4
                 },
                 "barcode_adapter1_suff_length": {
                     "type": "integer",
+                    "title": "Adapter 1 suffix length",
                     "description": "Suffix length of the read1 adapter to use in creating the probe sequence for identifying barcode/UMI bases.",
                     "help_text": "For example, specifying 12 would mean that the last 12 bases of the specified read1 sequence will be included in the probe sequence.",
                     "default": 10
                 },
                 "barcode_min_quality": {
                     "type": "integer",
+                    "title": "Barcode minimum quality",
                     "description": "Minimum allowed nucleotide-level quality score in the extracted/uncorrected barcode sequence",
                     "help_text": "Values equal or higher to this this will be considered 'high-quality' and used for generating the barcode whitelist.",
                     "default": 15
                 },
                 "barcode_max_ed": {
                     "type": "integer",
+                    "title": "Barcode maximum edit distance",
                     "description": "Maximum allowable edit distance between uncorrected barcode and the best matching corrected barcode from the sample whitelist.",
                     "help_text": "Barcodes are corrected by searching from a list of barcodes known to exist in the dataset. A maximum edit distance of 2 between query and whitelist barcode is recommended.",
                     "default": 2
                 },
                 "barcode_min_ed_diff": {
                     "type": "integer",
+                    "title": "Barcode minimum edit distance difference",
                     "description": "Minimum allowable edit distance difference between whitelist barcode candidates.",
                     "help_text": "If there is more than one candidate barcode found in the whitelist, the top hit and second best hit must have at least this edit distance to be able to assign a barcode. If the edit distance is less than this it is assumed that barcode identity is amiguous, and the read is not tagged with a corrected barcode.",
                     "default": 2
                 },
                 "gene_assigns_minqv": {
                     "type": "integer",
-                    "description": "Minimum alignment qscore allowed for a read to be assigned to a gene or transcript.",
+                    "title": "Gene assignment minimum MAPQ",
+                    "description": "Minimum MAPQ score allowed for a read to be assigned to a gene.",
                     "default": 30
-                },
-                "umi_cell_gene_max_reads": {
-                    "type": "integer",
-                    "description": "Maximum number of reads to cluster for a particular barcode/gene combination.",
-                    "default": 20000
                 },
                 "matrix_min_genes": {
                     "type": "integer",
+                    "title": "Minimum genes per cell",
                     "description": "Filter cells from the gene expression matrix if they contain fewer than <matrix_min_genes> genes.",
                     "default": 25
                 },
                 "matrix_min_cells": {
                     "type": "integer",
+                    "title": "Minimum cells per gene",
                     "description": "Filter genes from the gene expression matrix that are observed in fewer than <matrix_min_cells> cells.",
                     "default": 3
                 },
                 "matrix_max_mito": {
                     "type": "integer",
+                    "title": "Mitochondrial expression cell filter",
                     "description": "Filter cells from the gene expression matrix if more than <matrix_max_mito> percent of UMI counts come from mitochondrial genes.",
                     "default": 20
                 },
                 "matrix_norm_count": {
                     "type": "integer",
+                    "title": "Normalize counts",
                     "description": "Normalize expression matrix to <matrix_norm_count> counts per cell.",
                     "default": 10000
                 },
                 "umap_plot_genes": {
                     "type": "string",
                     "format": "path",
+                    "title": "UMAP gene list",
                     "description": "File containing a list of gene symbols (one symbol per line) to annotate with expression values in the UMAP projections."
                 },
                 "resources_mm2_max_threads": {
                     "type": "integer",
+                    "title": "Minimap2 threads",
                     "description": "Maximum allowed threads for the minimap2 stage.",
                     "help_text": "The total CPU resource used by the workflow is constrained by the executor configuration.",
                     "default": 4
                 },
                 "resources_mm2_flags": {
                     "type": "string",
+                    "title": "Minimap2 flags",
                     "description": "Optional flags for the minimap2 stage.",
                     "default": "-I 16G",
                     "help_text": "Minimap2 options can be supplied to modify the alignment parameters: eg '-I 4G' loads at max 4G bases into memory for indexing."
                 },
                 "adapter_scan_chunk_size": {
                     "type": "integer",
+                    "title": "Adapter scanning chunk size",
                     "description": "Chunk size for adapter scanning step.",
                     "default": 0,
                     "help_text": "Set the number of reads per chunk to process in the adapter_scan stage. If set to 0 (the default), the input reads will be split into one chunk per threads provided with `max_threads`."
                 },
                 "process_chunk_size": {
                     "type": "integer",
+                    "title": "Process chunk size",
                     "description": "Control the size of chunks for processing of data.",
                     "default": 100000,
                     "help_text": "Several steps process the data into chunks of n reads/alignments. Use a smaller number to reduce peak memory use"
                 },
                 "mito_prefix": {
                     "type": "string",
+                    "title": "Mitochondrial gene name prefix",
                     "description": "Gene name prefix to identify for mitochondrial genes.",
                     "help_text": "Parts of the workflow analyse mitochondrial genes seperately. These genes are identified by searching for a gene name prefix. Human mitochondrial genes can be identified with prefix 'MT-' and mouse genes with prefix 'mt-'. If the reference genome contains data from multiple organisms with different nomencalture,e multiple prefixes can be supplied like so: 'MT-,mt-'",
                     "default": "MT-"
                 },
                 "umap_n_repeats": {
                     "type": "integer",
+                    "title": "Number of UMAP repetitions",
                     "default": 6,
                     "description": "Number of UMAP projection to to repeat for each dataset.",
                     "help_text": "The UMAP algorithm contains elements of randomness that can misleaad users into seeing assocations between cells that are not meaningful. It is recommended to view multiple plots generated with the same parameters and check that any observed structure is consistent across runs."
                 },
                 "stringtie_opts": {
                     "type": "string",
+                    "title": "Stringtie2 options",
                     "default": "-c 2",
                     "description": "Optional stringtie2 options for transcriptome assembly.",
                     "help_text": "The default option (-c 2) sets the minimum read coverage needed to call a predicted transcript. Stringtie options can be found here: http://ccb.jhu.edu/software/stringtie/index.shtml?t=manual"
