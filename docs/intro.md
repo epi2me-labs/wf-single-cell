@@ -17,3 +17,5 @@ This assisted in the selection of appropriate parameters for cell cut-off thresh
 
 The isoform selection procedure used in this workflow was adapted from that found in the [FLAMES](https://github.com/LuyiTian/FLAMES) 
 package.
+
+To see a detailed overview of the workflow see [Workflow Overview](./docs/workflow_overview.md)

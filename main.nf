@@ -56,7 +56,9 @@ process getVersions {
     script:
     """
     python -c "import pysam; print(f'pysam,{pysam.__version__}')" >> versions.txt
+    python -c "import parasail; print(f'parasail,{parasail.__version__}')" >> versions.txt
     python -c "import pandas; print(f'pandas,{pandas.__version__}')" >> versions.txt
+    python -c "import rapidfuzz; print(f'rapidfuzz,{rapidfuzz.__version__}')" >> versions.txt
     python -c "import sklearn; print(f'scikit-learn,{sklearn.__version__}')" >> versions.txt
     fastcat --version | sed 's/^/fastcat,/' >> versions.txt
     minimap2 --version | sed 's/^/minimap2,/' >> versions.txt

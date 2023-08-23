@@ -87,7 +87,7 @@ def calc_ed_with_whitelist(bc_uncorr, whitelist, score_cutoff=6):
     :return:
         best matching barcode
         edit distance between best match and uncorrected barcode
-        edit distance between best match and second-best natch
+        edit distance difference between top match and second top match
     """
     # result is a list of tuples (bc, ed, idx) sorted by ed.
     result = extract(
