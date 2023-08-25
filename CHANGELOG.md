@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [Unreleased]
+### Fixed
+- Mitochondrial expression file not being copied to output directory
+
 ## [v0.2.6]
 ### Fixed
 - Alignments generated from 5' 10x kit are now in the correct orientation.
