@@ -128,7 +128,7 @@ process output {
     publishDir "${params.out_dir}", mode: 'copy', pattern: "*umap*.{tsv,png}",
         saveAs: { filename -> "${sample_id}/umap/$filename" }
     publishDir "${params.out_dir}", mode: 'copy', 
-        pattern: "*{images,counts,processed,kneeplot,saturation,config,tags,whitelist}*",
+        pattern: "*{images,counts,gene_expression,transcript_expression,kneeplot,saturation,config,tags,whitelist}*",
         saveAs: { filename -> "${sample_id}/$filename" }
 
     input:
