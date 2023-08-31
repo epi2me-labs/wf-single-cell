@@ -327,8 +327,6 @@ workflow {
     sample_kits.map {it -> it[2]['sample_id']}
     .join(fastqingress_ids, failOnMismatch:true)
 
-    supported_kits = kit_configs.map {it[0]}.collect()
-
     // Merge the kit info and user-supplied meta data on kit name and version
     sample_info = kit_configs.join(sample_kits, by: [0, 1], remainder: true)
         // Remove kits that are not selected (sample_meta is null)
