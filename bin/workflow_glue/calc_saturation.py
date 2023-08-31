@@ -23,13 +23,6 @@ def argparser():
         default="output.png",
     )
 
-    parser.add_argument(
-        "--threads",
-        help="Number of threads to use [4]",
-        type=int,
-        default=4,
-    )
-
     return parser
 
 

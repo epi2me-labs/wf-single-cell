@@ -12,13 +12,14 @@ process call_adapter_scan {
         tuple val(sample_id), path("${sample_id}_adapt_scan.fastq.gz"), emit: stranded_fq_chunked
         tuple val(sample_id), path("${sample_id}_adapt_scan.tsv"), emit: read_config_chunked
     
-    """    
+    """
+    export POLARS_MAX_THREADS=$task.cpus
+
     workflow-glue adapter_scan_vsearch \
     chunk.fq.gz \
     --kit ${meta['kit_name']} \
     --output_fastq "${sample_id}_adapt_scan.fastq.gz" \
-    --output_tsv  "${sample_id}_adapt_scan.tsv" \
-    --threads $task.cpus
+    --output_tsv  "${sample_id}_adapt_scan.tsv"
     """
 }
 

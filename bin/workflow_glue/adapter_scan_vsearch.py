@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Adapter scan vsearch."""
 import gzip
-import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -86,13 +85,6 @@ def argparser():
         help="Filename for adapter query sequences",
         type=Path,
         default="adapter_seqs.fasta",
-    )
-
-    parser.add_argument(
-        "--threads",
-        help="Number of max threads for polars",
-        type=int,
-        default=2,
     )
 
     return parser
@@ -412,8 +404,6 @@ def main(args):
     adapters = kit_adapters[args.kit]
     args.adapter1_seq = adapters['adapter1']
     args.adapter2_seq = adapters['adapter2']
-
-    os.environ["POLARS_MAX_THREADS"] = str(args.threads)
 
     # Create temp dir and add that to the args object
     p = Path(args.output_tsv)

@@ -397,9 +397,10 @@ process umi_gene_saturation {
               path("*saturation_curves.png"),
               emit: saturation_curve
     """
+    export POLARS_MAX_THREADS=$task.cpus
+
     workflow-glue calc_saturation \
         --output "${sample_id}.saturation_curves.png" \
-        --threads ${task.cpus} \
         --read_tags read_tags.tsv
     """
 }
