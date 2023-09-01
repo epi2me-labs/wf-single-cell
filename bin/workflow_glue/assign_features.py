@@ -71,16 +71,20 @@ def parse_gtf(annotation_file):
     """Get a mapping of query transcript id to reference gene name."""
     with open(annotation_file, 'r') as fh:
 
+        gene_regex = re.compile(r'(gene_name|genename) "(.+?)"')
+        tr_regex = re.compile(r'transcript_id "(.+?)"')
         records = []
         for line in fh:
-            if line.split('\t')[2] != 'transcript':
+            if line.startswith('#'):
                 continue
-            g = re.search(r'gene_name "(.+?)"', line)
+            if line.split('\t')[2].lower() not in ['transcript', 'mrna']:
+                continue
+            g = gene_regex.search(line, re.IGNORECASE)
             if g:
-                gene_name = g.group(1)
+                gene_name = g.group(2)
             else:
                 gene_name = None
-            t = re.search(r'transcript_id "(.+?)"', line)
+            t = tr_regex.search(line, re.IGNORECASE)
             if t:
                 transcript_id = t.group(1)
             else:

@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Fixed
 - Mitochondrial expression file not being copied to output directory
+- Incorrect settign of polars maximum threads
+
+### Added
+- Allow `geneName` attribute in GTF annotation file
 
 ## [v0.2.6]
 ### Fixed
