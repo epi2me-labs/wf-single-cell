@@ -102,10 +102,27 @@ nextflow run epi2me-labs/wf-single-cell \
 The output of the pipeline will be found in `./output` for the above
 example. 
 
+**Supplying your own reference data**
+
+To use your own reference data, a folder should be created following the structure
+of `reference_data` shown below.
+
+```
+reference_data
+├── fasta
+│   ├── genome.fa
+│   └── genome.fa.fai
+└── genes
+    └── genes.gtf
+```
+Note that the annotation file should be in GTF format and the transcript feature lines should contain the attributes `gene_name` or `geneName` as well as the attribute `transcript_id`.
+
+The reference data folder can then be referred to by the `--ref_genome_dir` parameter.
+
 **Workflow outputs**
 
 The pipeline output will be written to a directory defined by ``--out_dir``. 
-For each sample specifed in the `single_cell-sample_sheet`  an output folder is created containing the results.
+For each sample specified in the `single_cell-sample_sheet`  an output folder is created containing the results.
 
 
 The most useful outputs of the pipeline are likely:
