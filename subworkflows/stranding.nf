@@ -3,7 +3,10 @@ process call_adapter_scan {
     cpus 2
     // Benchmarking has shown that memory usage is ~ 1.5x times fastq size.
     // Smaller chunks sizes have a larger ratios, so 1G is added to account for this.
-    memory { 1.0.GB.toBytes() + (chunk.size() * 2) }
+    // Occasionally memory requirements are higher so attempt retries with increasing memory too.
+    memory { 1.0.GB.toBytes() + (chunk.size() * 2) * task.attempt}
+    maxRetries = 3
+    errorStrategy = { task.exitStatus in 137..140 ? 'retry' : 'terminate' }
     input:
         tuple val(sample_id), 
               val(meta),
