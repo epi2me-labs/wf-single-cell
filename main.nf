@@ -281,7 +281,12 @@ workflow {
     }
     
     ref_genome_dir = file(params.ref_genome_dir, checkIfExists: true)
-    umap_genes = file(params.umap_plot_genes, checkIfExists: true)
+
+    if (params.umap_plot_genes){
+        umap_genes = file(params.umap_plot_genes, checkIfExists: true)
+    }else{
+        umap_genes = file("${projectDir}/umap_plot_genes.csv", checkIfExists: true)
+    }
 
     if (params.kit_config){
         kit_configs_file = file(params.kit_config, checkIfExists: true)
