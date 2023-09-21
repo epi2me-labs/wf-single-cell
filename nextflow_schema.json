@@ -28,13 +28,6 @@
                     "description": "The path to the 10x reference directory",
                     "help_text": "Reference genome directories can be downloaded from the 10x website: https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2020-A.tar.gz"
                 },
-                "kit_config": {
-                    "type": "string",
-                    "format": "file-path",
-                    "title": "10x kit config file",
-                    "description": "A file defining the configurations associated with the various supported 10x kits.",
-                    "help_text": "A CSV file is expected with the following headers [kit_name, kit_version, barcode_length, umi_length]"
-                },
                 "merge_bam": {
                     "type": "boolean",
                     "title": "Merge output BAM files",
@@ -122,6 +115,13 @@
             "description": "Advanced options for configuring processes inside the workflow.",
             "help_text": "These advanced options do not need to be changed for typical use, but allow fine tuning of workflows for users who want more control over the workflow.",
             "properties": {
+                "kit_config": {
+                    "type": "string",
+                    "format": "file-path",
+                    "title": "10x kit config file",
+                    "description": "A file defining the configurations associated with the various supported 10x kits.",
+                    "help_text": "A CSV file is expected with the following headers [kit_name, kit_version, barcode_length, umi_length]. If not specified, `kit_configs.csv` from the project directory root will be used. This parameter does not normally need changing."
+                },
                 "max_threads": {
                     "type": "integer",
                     "title": "Maximum number of threads",
@@ -167,7 +167,7 @@
                     "type": "integer",
                     "title": "Minimum genes per cell",
                     "description": "Filter cells from the gene expression matrix if they contain fewer than <matrix_min_genes> genes.",
-                    "default": 25
+                    "default": 200
                 },
                 "matrix_min_cells": {
                     "type": "integer",
@@ -257,12 +257,14 @@
                 },
                 "help": {
                     "type": "boolean",
+                    "default": false,
                     "description": "Display help text.",
                     "fa_icon": "fas fa-question-circle",
                     "hidden": true
                 },
                 "version": {
                     "type": "boolean",
+                    "default": false,
                     "description": "Display version and exit.",
                     "fa_icon": "fas fa-question-circle",
                     "hidden": true
