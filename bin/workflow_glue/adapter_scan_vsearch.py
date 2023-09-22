@@ -182,7 +182,7 @@ def get_valid_adapter_pair_positions_in_read(vs_result):
                     fl_pair = {
                         "read_id": f"{read_id}_{valid_pairs_n}",
                         "config": pair_str,
-                        "start": vs_result.item(adapter_1_idx, 'qilo'),
+                        "start": vs_result.item(adapter_1_idx, 'qilo') - 1,
                         "end": vs_result.item(adapter_2_idx, 'qihi'),
                     }
 
@@ -270,7 +270,7 @@ def parse_vsearch(tmp_vsearch, only_strand_full_length):
             strand = "*"
             readlen = read_row['ql']
             start = 0
-            end = readlen - 1
+            end = readlen
             adapter_config = "-".join(read_result["target"])
 
             config_type = configs.get(adapter_config, 'other')
@@ -297,8 +297,8 @@ def parse_vsearch(tmp_vsearch, only_strand_full_length):
                         readlen = end - start
                     elif adapter_config == "adapter2_r":
                         strand = "-"
-                        start = read_row['qilo']
-                        end = read_row['ql'] - 1
+                        start = read_row['qilo'] - 1
+                        end = read_row['ql']
                         readlen = end - start
                     else:
                         raise Exception("Shouldn't be here!")
@@ -313,8 +313,8 @@ def parse_vsearch(tmp_vsearch, only_strand_full_length):
                     stranded = True
                     if adapter_config == "adapter1_f":
                         strand = "+"
-                        start = read_row['qilo']
-                        end = read_row['ql'] - 1
+                        start = read_row['qilo'] - 1
+                        end = read_row['ql']
                         readlen = end - start
                     elif adapter_config == "adapter1_r":
                         strand = "-"
@@ -374,7 +374,6 @@ def write_stranded_fastq(fastq, read_info, output_fastq):
                     for subread_id, d in read_info[entry.name].items():
                         # The read may contain more than one subread -
                         # segments flaked by compatible adapters.
-
                         subread_seq = entry.sequence[d["start"]: d["end"]]
                         subread_quals = entry.quality[d["start"]: d["end"]]
 
