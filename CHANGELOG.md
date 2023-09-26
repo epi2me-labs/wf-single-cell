@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Increase the maximum memory available to the adapter_scan process
 - Fix sequence truncation by 1 bp in adapter_scan step
+- Make `summarize_adapter_table` process more memory-efficient
 
 ## [v0.2.7]
 ### Fixed
