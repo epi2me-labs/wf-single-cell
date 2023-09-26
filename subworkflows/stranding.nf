@@ -44,45 +44,17 @@ process combine_adapter_tables {
 process summarize_adapter_table {
     label "singlecell"
     cpus 1
+    memory 1.5.GB
     input:
         tuple val(sample_id), path(read_config)
     output:
         tuple val(sample_id), path("${sample_id}.config_stats.json"), emit: config_stats
     """
-    #!/usr/bin/env python
-    import pandas as pd
-    import json
-
-    df = pd.read_csv("${read_config}", sep="\t")
-    stats = {}
-    stats["$sample_id"] = {}
-    stats["$sample_id"]["general"] = {}
-    stats["$sample_id"]["general"]["n_reads"] = df.shape[0]
-    stats["$sample_id"]["general"]["rl_mean"] = df["readlen"].mean()
-    stats["$sample_id"]["general"]["rl_std_dev"] = df["readlen"].std()
-    stats["$sample_id"]["general"]["n_fl"] = df[df["fl"] == True].shape[0]
-    stats["$sample_id"]["general"]["n_stranded"] = df[
-        df["stranded"] == True
-    ].shape[0]
-
-    stats["$sample_id"]["strand_counts"] = {}
-    stats["$sample_id"]["strand_counts"]["n_plus"] = df[
-        df["orig_strand"] == "+"
-    ].shape[0]
-    stats["$sample_id"]["strand_counts"]["n_minus"] = df[
-        df["orig_strand"] == "-"
-    ].shape[0]
-
-    stats["$sample_id"]["detailed_config"] = {}
-    for category, n in df["orig_adapter_config"].value_counts().items():
-        stats["$sample_id"]["detailed_config"][category] = n
-
-    stats["$sample_id"]["summary_config"] = {}
-    for label, n in df["lab"].value_counts().items():
-        stats["$sample_id"]["summary_config"][label] = n
-
-    with open("${sample_id}.config_stats.json", "w") as f:
-        json.dump(stats, f, indent=4)
+    workflow-glue summarise_adapters \
+        --read_config_tsv "${read_config}" \
+        --sample_id "${sample_id}" \
+        --out "${sample_id}.config_stats.json" \
+        --threads $task.cpus
     """
 }
 
