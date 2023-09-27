@@ -249,6 +249,22 @@ def main(args):
             library preparation issues.
             The majority of reads should be full_length.""")
 
+        p(
+            """The primers used to identify read segments vary slightly
+            between the supported kits. They are:
+            """
+        )
+        p("3prime and multiome kits:")
+        ul(
+            li("Adapter1: Read1"),
+            li("Adapter2: TSO")
+        )
+        p("5prime kit:")
+        ul(
+            li("Adapter1: Read1"),
+            li("Adapter2: Non-Poly(dT) RT primer")
+        )
+
         order = [
             'full_length',
             'double_adapter2',
