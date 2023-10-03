@@ -158,6 +158,8 @@ process output_report {
 
 process prepare_report_data {
     label "singlecell"
+    cpus 1
+    memory 1.GB
     input:
         tuple val(sample_id),
               path('read_tags'),
@@ -182,14 +184,16 @@ process prepare_report_data {
         --read_tags read_tags \
         --config_stats config_stats \
         --white_list white_list \
-        --sample_id ${sample_id}
+        --sample_id ${sample_id} \
+        --summary_out sample_summary.tsv \
+        --survival_out survival_data.tsv
 
     umd=${sample_id}_umap
     mkdir \$umd
 
     if [ "$opt_umap" = true ]; then
         echo "Adding umap data to sample directory"
-        # Add data required for umap plottiong into sample directory
+        # Add data required for umap plotting into sample directory
         mv *umap*.tsv \$umd
         mv ${gene_expression} \$umd
         mv ${transcript_expression} \$umd

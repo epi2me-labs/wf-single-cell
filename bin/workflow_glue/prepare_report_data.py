@@ -20,27 +20,41 @@ def argparser():
         help="TSV with read id gene, transcript, barcode, umi assignments")
     parser.add_argument(
         "--config_stats",
-        help="Workflow sumamry statistics")
+        help="Workflow summary statistics")
     parser.add_argument(
         "--white_list",
-        help="Workflow sumamry statistics")
+        help="Workflow summary statistics")
     parser.add_argument(
-        "--output", help="Output csv with workflow data.")
+        "--survival_out", help="Output TSV with survival data for each stage.")
+    parser.add_argument(
+        "--summary_out", help="Output TSV with sample summaries.")
     return parser
 
 
 def _get_sample_summaries(read_tags, white_list):
 
-    df = pd.read_csv(read_tags, sep='\t')
     total_cells = len(pd.read_csv(white_list, sep='\t'))
     # The df contains only reads with a barcode and umi tag
-    total_tagged = len(df)
-    gene_tagged_df = df[df.gene != '-']
-    gene_tagged = len(gene_tagged_df)
-    total_genes = len(gene_tagged_df['gene'].unique())
-    transcript_tagged_df = df[df.transcript != '-']
-    transcript_tagged = len(transcript_tagged_df)
-    total_transcripts = len(transcript_tagged_df['transcript'].unique())
+
+    total_tagged = 0
+    gene_tagged = 0
+    total_genes = 0
+    transcript_tagged = 0
+    total_transcripts = 0
+
+    # Read in read tags chunkwise so as not to use too much memory.
+    # For each chunk, increment the summary variables.
+    with pd.read_csv(
+            read_tags, sep='\t', chunksize=100000,
+            usecols=['gene', 'transcript']) as reader:
+        for df in reader:
+            total_tagged += len(df)
+            gene_tagged_df = df[df.gene != '-']
+            gene_tagged += len(gene_tagged_df)
+            total_genes += len(gene_tagged_df['gene'].unique())
+            transcript_tagged_df = df[df.transcript != '-']
+            transcript_tagged += len(transcript_tagged_df)
+            total_transcripts += len(transcript_tagged_df['transcript'].unique())
     cols = [
         'total_tagged', 'gene_tagged', 'transcript_tagged',
         'total_genes', 'total_transcripts', 'total_cells']
@@ -123,8 +137,8 @@ def main(args):
     n_reads = df_survival.loc[
         df_survival['class'] == 'n_reads', 'count'].values[0]
     df_summ['n_reads'] = n_reads
-    df_summ.to_csv('sample_summary.tsv', sep='\t')
-    df_survival.to_csv('survival_data.tsv', sep='\t')
+    df_summ.to_csv(args.summary_out, sep='\t')
+    df_survival.to_csv(args.survival_out, sep='\t')
 
 
 if __name__ == "__main__":

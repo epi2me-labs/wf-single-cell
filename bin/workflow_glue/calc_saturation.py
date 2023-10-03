@@ -118,7 +118,7 @@ def downsample_dataframe(df, fraction):
             umi_saturation,
         )
     )
-    logger.info(f"Done saturation calcualtion for fraction {fraction}")
+    logger.info(f"Done saturation calculation for fraction {fraction}")
     return record
 
 
