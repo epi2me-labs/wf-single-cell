@@ -14,7 +14,7 @@ import groovy.json.JsonBuilder
 import nextflow.util.BlankSeparatedList;
 nextflow.enable.dsl = 2
 
-include { fastq_ingress } from './lib/fastqingress'
+include { fastq_ingress } from './lib/ingress'
 include { stranding } from './subworkflows/stranding'
 include { align } from './subworkflows/align'
 include { process_bams } from './subworkflows/process_bams'
@@ -280,9 +280,7 @@ workflow pipeline {
 WorkflowMain.initialise(workflow, params, log)
 workflow {
 
-    if (params.disable_ping == false) {
-        Pinguscript.ping_post(workflow, "start", "none", params.out_dir, params)
-    }
+    Pinguscript.ping_start(nextflow, workflow, params)
     
     ref_genome_dir = file(params.ref_genome_dir, checkIfExists: true)
 
@@ -396,13 +394,10 @@ workflow {
     output_report(pipeline.out.report)
 }
 
-if (params.disable_ping == false) {
-    workflow.onComplete {
-        Pinguscript.ping_post(workflow, "end", "none", params.out_dir, params)
-    }
-
-    workflow.onError {
-        Pinguscript.ping_post(workflow, "error", "$workflow.errorMessage", params.out_dir, params)
-    }
+workflow.onComplete {
+    Pinguscript.ping_complete(nextflow, workflow, params)
+}
+workflow.onError {
+    Pinguscript.ping_error(nextflow, workflow, params)
 
 }
