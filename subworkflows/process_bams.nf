@@ -4,17 +4,18 @@ process get_contigs {
     label "singlecell"
     cpus 1
     input:
-        tuple val(sample_id), 
+        tuple val(meta),
               path('sample.bam'),
               path('sample.bam.bai')
 
     output:
-        path("${sample_id}_contigs"),
-        emit: contigs
+        tuple path("${meta.alias}_contigs"),
+            val(meta),
+            emit: contigs
     """
     samtools idxstats sample.bam \
-        | gawk -v var=${sample_id} '/^[^*]/{print var,\$1}' \
-        | gawk NF > "${sample_id}_contigs"
+        | gawk '/^[^*]/{print\$1}' \
+        | gawk NF > "${meta.alias}_contigs"
     """
 }
 
@@ -23,18 +24,19 @@ process extract_barcodes{
     cpus 2
     memory "1.5 GB"
     input:
-        tuple path("sort.bam"),
+        tuple val(meta),
+              path("sort.bam"),
               path("sort.bam.bai"),
-              val(meta),
               val(chrom)
         path "bc_longlist_dir"
 
     output:
-        tuple val(meta.sample_id), 
+        tuple val(meta),
               path("*.bc_extract.sorted.tsv"),
               val(chrom),
               emit: bc_uncorr_tsv
-        tuple val(meta.sample_id),
+        tuple val(meta),
+              // Group on alias not not meta to enable collectFile to work on this channel
               path("*.uncorrected_bc_counts.tsv"), emit: barcode_counts
 
     """
@@ -46,8 +48,8 @@ process extract_barcodes{
     --min_barcode_qv $params.barcode_min_quality \
     --barcode_length ${meta['barcode_length']} \
     --umi_length ${meta['umi_length']} \
-    --output_read_tags "${meta.sample_id}.bc_extract.sorted.tsv" \
-    --output_barcode_counts "${meta.sample_id}.${chrom}.uncorrected_bc_counts.tsv" \
+    --output_read_tags "${meta.alias}.bc_extract.sorted.tsv" \
+    --output_barcode_counts "${meta.alias}.${chrom}.uncorrected_bc_counts.tsv" \
     --contig ${chrom}
     """
 }
@@ -56,21 +58,21 @@ process generate_whitelist{
     label "singlecell"
     cpus 1
     input:
-        tuple path("counts"),
-              val(meta)
+        tuple val(meta),
+              path("counts")
     output:
-        tuple val(meta.sample_id), 
+        tuple val(meta), 
               path("*whitelist.tsv"), 
               emit: whitelist
-        tuple val(meta.sample_id), 
+        tuple val(meta), 
               path("*kneeplot.png"), 
               emit: kneeplot
     """
     workflow-glue knee_plot \
         counts \
-        --exp_cells ${meta['exp_cells']} \
-        --output_whitelist "${meta.sample_id}.whitelist.tsv" \
-        --output_plot "${meta.sample_id}.kneeplot.png"
+        --exp_cells ${meta['expected_cells']} \
+        --output_whitelist "${meta.alias}.whitelist.tsv" \
+        --output_plot "${meta.alias}.kneeplot.png"
     """
 }
 
@@ -79,16 +81,16 @@ process assign_barcodes{
     cpus 1
     memory 1.5.GB
     input:
-         tuple val(sample_id),
+         tuple val(meta),
                path("whitelist.tsv"),
                path("extract_barcodes.tsv"),
                val(chr)
     output:
-        tuple val(sample_id),
+        tuple val(meta),
               val(chr),
               path("bc_assign_counts.tsv"),
               emit: chrom_assigned_barcode_counts
-        tuple val(sample_id),
+        tuple val(meta),
               val(chr),
               path("extract_barcodes_with_bc.tsv"),
               emit: tags
@@ -123,25 +125,25 @@ process cluster_umis {
     // Set a minimum memory requirement of 1.0GB to allow for overhead.
     memory {1.0.GB.toBytes()  + (read_tags.size() * 20) }
     input:
-        tuple val(sample_id),
+        tuple val(meta),
               val(chr),
               path("chrom_feature_assigns.tsv"),
               path(read_tags, stageAs: "read_tags.tsv")
     output:
-        tuple val(sample_id),
+        tuple val(meta),
               val(chr),
-              path("${sample_id}_${chr}.read_tags.tsv"),
+              path("${meta.alias}_${chr}.read_tags.tsv"),
               emit: read_tags  // For BAM tagging
-        tuple val(sample_id),
-              path("${sample_id}_${chr}.final_tags.tsv"),
+        tuple val(meta),
+              path("${meta.alias}_${chr}.final_tags.tsv"),
               emit: final_read_tags  // For user output
     """
     workflow-glue cluster_umis \
         --chrom ${chr} \
         --feature_assigns chrom_feature_assigns.tsv \
         --read_tags read_tags.tsv \
-        --output_read_tags "${sample_id}_${chr}.read_tags.tsv" \
-        --workflow_output "${sample_id}_${chr}.final_tags.tsv"
+        --output_read_tags "${meta.alias}_${chr}.read_tags.tsv" \
+        --workflow_output "${meta.alias}_${chr}.final_tags.tsv"
     """
 }
 
@@ -149,28 +151,27 @@ process tag_bams {
     label "singlecell"
     cpus 1
     input:
-        tuple val(sample_id),
-              val(chr),
-              val(kit_name),
+        tuple val(meta),
               path("align.bam"),
               path("align.bam.bai"),
+              val(chr),
               path('tags.tsv')
     output:
-         tuple val(sample_id),
-              path("${sample_id}.${chr}.tagged.bam"),
-              path("${sample_id}.${chr}.tagged.bam.bai"),
+         tuple val(meta),
+              path("${meta.alias}.${chr}.tagged.bam"),
+              path("${meta.alias}.${chr}.tagged.bam.bai"),
               emit: tagged_bam
     script:
-    def opt_flip = (kit_name != '5prime') ? "--flip": ""
+    def opt_flip = (meta.kit_name != '5prime') ? "--flip": ""
     """
     workflow-glue tag_bam \
         --in_bam align.bam \
         --tags tags.tsv \
-        --out_bam ${sample_id}.${chr}.tagged.bam \
+        --out_bam ${meta.alias}.${chr}.tagged.bam \
         --chrom ${chr} \
         ${opt_flip}
 
-    samtools index ${sample_id}.${chr}.tagged.bam
+    samtools index ${meta.alias}.${chr}.tagged.bam
     """
 }
 
@@ -182,13 +183,13 @@ process combine_tag_files {
     label "singlecell"
     cpus 1
     input:
-        tuple val(sample_id),
+        tuple val(meta),
               path("tags*.tsv")
     output:
-        tuple val(sample_id),
-              path("${sample_id}_read_tags.tsv")
+        tuple val(meta),
+              path("${meta.alias}_read_tags.tsv")
     """
-    awk 'FNR>1 || NR==1' *.tsv > "${sample_id}_read_tags.tsv"
+    awk 'FNR>1 || NR==1' *.tsv > "${meta.alias}_read_tags.tsv"
     """
 }
 
@@ -197,13 +198,13 @@ process combine_final_tag_files {
     label "singlecell"
     cpus 1
     input:
-        tuple val(sample_id),
+        tuple val(meta),
               path("tags*.tsv")
     output:
-        tuple val(sample_id),
-              path("${sample_id}.read_tags.tsv")
+        tuple val(meta),
+              path("${meta.alias}.read_tags.tsv")
     """
-    awk 'FNR>1 || NR==1' *.tsv > "${sample_id}.read_tags.tsv"
+    awk 'FNR>1 || NR==1' *.tsv > "${meta.alias}.read_tags.tsv"
     """
 }
 
@@ -211,11 +212,11 @@ process combine_uncorrect_bcs {
     label "singlecell"
     cpus 1
     input:
-        tuple val(sample_id),
+        tuple val(meta),
               path("uncorrected_bcs*.tsv")
     output:
-        tuple val(sample_id),
-              path("${sample_id}.uncorrected_bc_counts.tsv")
+        tuple val(meta),
+              path("${meta.alias}.uncorrected_bc_counts.tsv")
     shell:
     """
     #!/usr/bin/env python
@@ -238,7 +239,7 @@ process combine_uncorrect_bcs {
     df = pd.concat(dfs).reset_index()
     df.columns = ['barcode', 'count']
     df_final = df.groupby('barcode').sum().sort_values('count', ascending=False)
-    df_final.to_csv("${sample_id}.uncorrected_bc_counts.tsv", sep='\t')
+    df_final.to_csv("${meta.alias}.uncorrected_bc_counts.tsv", sep='\t')
     """
 }
 
@@ -249,17 +250,17 @@ process combine_chrom_bams {
     label "singlecell"
     cpus Math.min(8, params.max_threads)
     input:
-        tuple val(sample_id), 
+        tuple val(meta), 
               path(chrom_bams),
               path('chrom.bam.bai')
     output:
-        tuple val(sample_id), 
+        tuple val(meta), 
               path("*tagged.sorted.bam"), 
               path("*tagged.sorted.bam.bai"),
               emit: bam_fully_tagged
     """
-    samtools merge -@ ${task.cpus} -o "${sample_id}.tagged.sorted.bam" ${chrom_bams}; 
-    samtools index -@ ${task.cpus} "${sample_id}.tagged.sorted.bam";
+    samtools merge -@ ${task.cpus} -o "${meta.alias}.tagged.sorted.bam" ${chrom_bams}; 
+    samtools index -@ ${task.cpus} "${meta.alias}.tagged.sorted.bam";
     """
 }
 
@@ -274,15 +275,14 @@ process stringtie {
     input:
         path 'ref_genome.fa'
         path 'ref_genome.fa.fai'
-        tuple val(sample_id),
+        tuple val(meta),
               path("align.bam"),
               path("align.bam.bai"),
-              val(kit_name),
               val(chr),
               path("chr.gtf")
 
     output:
-        tuple val(sample_id),
+        tuple val(meta),
               val(chr),
               path("transcriptome.fa"),
               path("chr.gtf"),
@@ -290,7 +290,7 @@ process stringtie {
               path("reads.fastq"),
               emit: read_tr_map
     script:
-    if (kit_name=="5prime")
+    if (meta.kit_name=="5prime")
     """
     samtools view -h align.bam ${chr}  \
          | tee >(stringtie -L ${params.stringtie_opts} -p ${task.cpus} -G chr.gtf -l stringtie \
@@ -322,14 +322,14 @@ process align_to_transcriptome {
     maxRetries = 5
     errorStrategy = { task.exitStatus in 137..140 ? 'retry' : 'terminate' }
     input:
-        tuple val(sample_id),
+        tuple val(meta),
               val(chr),
               path('transcriptome.fa'),
               path('chr.gtf'),
               path('stringtie.gff'),
               path("reads.fq")
     output:
-        tuple val(sample_id),
+        tuple val(meta),
               val(chr),
               path("chr.gtf"),
               path("tr_align.bam"),
@@ -360,16 +360,16 @@ process assign_features {
     memory { 1.0.GB.toBytes() + (tags.size() * 2 ) }
     cpus 1
     input:
-        tuple val(sample_id),
+        tuple val(meta),
               val(chr),
               path("chr.gtf"),
               path("tr_align.bam"),
               path('stringtie.gff'),
               path(tags, stageAs: 'tags.tsv')
     output:
-        tuple val(sample_id),
+        tuple val(meta),
               val(chr),
-              path("${sample_id}.${chr}.feature_assigns.tsv"),
+              path("${meta.alias}.${chr}.feature_assigns.tsv"),
               emit: feature_assigns
     """
     # gffcomapre maps transcript reference IDs to query transcripts.
@@ -381,7 +381,7 @@ process assign_features {
         --gtf chr.gtf \
         --tags tags.tsv \
         --chunksize $params.process_chunk_size \
-        --output "${sample_id}.${chr}.feature_assigns.tsv" \
+        --output "${meta.alias}.${chr}.feature_assigns.tsv" \
         --min_mapq ${params.gene_assigns_minqv}
     """
 }
@@ -390,17 +390,17 @@ process umi_gene_saturation {
     label "singlecell"
     cpus 4
     input:
-        tuple val(sample_id),
+        tuple val(meta),
               path("read_tags.tsv")
     output:
-        tuple val(sample_id),
+        tuple val(meta),
               path("*saturation_curves.png"),
               emit: saturation_curve
     """
     export POLARS_MAX_THREADS=$task.cpus
 
     workflow-glue calc_saturation \
-        --output "${sample_id}.saturation_curves.png" \
+        --output "${meta.alias}.saturation_curves.png" \
         --read_tags read_tags.tsv
     """
 }
@@ -409,16 +409,16 @@ process construct_expression_matrix {
     label "singlecell"
     cpus 1
     input:
-        tuple val(sample_id),
+        tuple val(meta),
               path("read_tags.tsv")
     output:
-        tuple val(sample_id), 
+        tuple val(meta), 
               path("*gene_expression.counts.tsv"),
               path("*transcript_expression.counts.tsv"),
               emit: matrix_counts_tsv
     """
     workflow-glue gene_expression \
-        --output_prefix "${sample_id}" \
+        --output_prefix "${meta.alias}" \
         --read_tags read_tags.tsv
     """
 }
@@ -427,20 +427,20 @@ process process_expression_matrix {
     label "singlecell"
     cpus 1
     input:
-        tuple val(sample_id),
+        tuple val(meta),
               path("gene_matrix_counts.tsv"),
               path("transcript_matrix_counts.tsv")
     output:
-        tuple val(sample_id),
+        tuple val(meta),
               val('gene'),
-              path("${sample_id}.gene_expression.processed.tsv"),
+              path("${meta.alias}.gene_expression.processed.tsv"),
               emit: gene_matrix_processed_tsv
-        tuple val(sample_id),
+        tuple val(meta),
               val('transcript'),
-              path("${sample_id}.transcript_expression.processed.tsv"),
+              path("${meta.alias}.transcript_expression.processed.tsv"),
               emit: transcript_matrix_processed_tsv
-        tuple val(sample_id),
-              path("${sample_id}.gene_expression.mito.tsv"),
+        tuple val(meta),
+              path("${meta.alias}.gene_expression.mito.tsv"),
               emit: mito_expression_tsv
     """
     workflow-glue process_matrix \
@@ -450,7 +450,7 @@ process process_expression_matrix {
         --mito_prefix ${params.mito_prefix} \
         --norm_count $params.matrix_norm_count \
         --gene_counts gene_matrix_counts.tsv \
-        --sample_id ${sample_id} \
+        --sample_id ${meta.alias} \
         --transcript_counts transcript_matrix_counts.tsv
     """
 }
@@ -461,11 +461,11 @@ process umap_reduce_expression_matrix {
     cpus 1
     input:
         tuple val(repeat_num),
-              val(sample_id),
+              val(meta),
               val(data_type),
               path(matrix)
     output:
-        tuple val(sample_id),
+        tuple val(meta),
                 path("${data_type}_umap_${repeat_num}.tsv"),
                 emit: matrix_umap_tsv
     """
@@ -480,11 +480,11 @@ process pack_images {
     label "singlecell"
     cpus 1
     input:
-        tuple val(sample_id),
-              path("images_${sample_id}/*")
+        tuple val(meta),
+              path("images_${meta.alias}/*")
     output:
-         tuple val(sample_id),
-              path("images_${sample_id}")
+         tuple val(meta),
+              path("images_${meta.alias}")
     """
     echo packing images
     """
@@ -494,7 +494,6 @@ process pack_images {
 workflow process_bams {
     take:
         bam
-        meta
         gtf
         bc_longlist_dir
         ref_genome_fasta
@@ -508,34 +507,42 @@ workflow process_bams {
                 tuple(file.baseName, file)}
 
         get_contigs(bam)
-        
+
         contigs = get_contigs.out.contigs
-            .splitCsv(sep: " ")
-        
+            .splitCsv().map{it -> [it[0][0], it[1]]}
+
         // Keep only the contigs that are referenced in the gtf
-        contigs = chr_gtf.map {[it[1], it[0]]}
-            .cross(contigs) {it -> it[1]}
-            .map {it -> it.flatten()[2, 3]}
+        contigs = chr_gtf
+            .cross(contigs) // -> [[ chr, chr.gtf], [chr, meta]] 
+            // [meta, chr, chr.gtf]
+            .map {chr_gtf, chr_meta -> [chr_meta[1], chr_meta[0], chr_gtf[1]]}
 
         extract_barcodes(
             bam
-            .cross(
-                meta
-                .cross(contigs).map{it -> it.flatten()})
-                .map{it -> it.flatten()[1, 2, 4, 6]},
+            .cross(contigs.map {meta, chr, gtf -> [meta, chr]}) // -> [[meta, bam, bai], [meta, chr, chr.gtf]]
+            .map{
+                meta_bam_bai, meta_chr -> 
+                // [meta, bam, bai, chr]
+                [meta_bam_bai[0], meta_bam_bai[1], meta_bam_bai[2], meta_chr[1]]
+            },
             bc_longlist_dir)
 
         un_corr_bcs = combine_uncorrect_bcs(
             extract_barcodes.out.barcode_counts
             .groupTuple())
 
+        alias_to_meta = extract_barcodes.out.barcode_counts
+            .map {meta, _ -> [meta.alias, meta]}.unique()
 
         generate_whitelist(
             extract_barcodes.out.barcode_counts
+            // Collect file on [meta.alias, counts_file]
+            .map {meta, counts -> [meta.alias, counts]}
             .collectFile()
+            // Get alias from result of collectFile
             .map {it -> tuple(it.getSimpleName(), it)}
-            .join(meta).map {it -> it.tail()}) // Remove sample_id
-
+            // Merge meta back
+            .join(alias_to_meta).map {alias, counts, meta -> [meta, counts]})
 
        assign_barcodes(
             generate_whitelist.out.whitelist
@@ -545,10 +552,9 @@ workflow process_bams {
         stringtie(
             ref_genome_fasta,
             ref_genome_idx,
-            bam.join(meta).map { sample_id, bam, bai, meta -> [sample_id, bam, bai, meta['kit_name']]}
+            bam
             .combine(chr_gtf))
 
-        
         align_to_transcriptome(stringtie.out.read_tr_map)
 
         assign_features(
@@ -560,11 +566,11 @@ workflow process_bams {
             // Join on sample_id,chr
             .join(assign_barcodes.out.tags, by: [0, 1]))
 
-        tag_bams(
-             bam.join(meta).map { sample_id, bam, bai, meta -> [sample_id, bam, bai, meta['kit_name']]}
+        tag_bams(bam
              // cross by sample_id on the output of cluster_umis to return
              // [sample_id, chr, kit_name, bam, bai, tags.tsv]
-            .cross(cluster_umis.out.read_tags).map {it -> it.flatten()[0, 5, 3, 1, 2, 6]})
+            .cross(cluster_umis.out.read_tags)
+            .map {it -> it.flatten()[0, 1, 2, 4, 5 ]})
 
         read_tags = combine_tag_files(
             cluster_umis.out.read_tags

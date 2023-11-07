@@ -9,7 +9,7 @@ variables:
     # Only common file inputs and option values need to be given here
     # (not things such as -profile)
     CI_FLAVOUR: "new"
-    NF_BEFORE_SCRIPT: "wget -O test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v0.2.7_test_data.tar.gz && tar -xzvf test_data.tar.gz"
+    NF_BEFORE_SCRIPT: "wget -O test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v0.2.8_test_data.tar.gz && tar -xzvf test_data.tar.gz"
     NF_WORKFLOW_OPTS: "--fastq test_data/fastq/ --single_cell_sample_sheet test_data/samples.test.csv --ref_genome_dir test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100 --params.max_threads 4"
 
 docker-run:
@@ -31,7 +31,7 @@ docker-run:
         when: never
       - if: $MATRIX_NAME == 'standard'
         variables:
-          NF_BEFORE_SCRIPT: "wget -O test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v0.2.7_test_data.tar.gz && tar -xzvf test_data.tar.gz"
+          NF_BEFORE_SCRIPT: "wget -O test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v0.2.8_test_data.tar.gz && tar -xzvf test_data.tar.gz"
           NF_WORKFLOW_OPTS: "--fastq test_data/fastq/ --single_cell_sample_sheet test_data/samples.test.csv --ref_genome_dir test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100 --params.max_threads 4"
 
       - if: $MATRIX_NAME == "integration-test"

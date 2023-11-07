@@ -90,7 +90,7 @@ The sample_id field should correspond to sample_id which is defined either in th
 
 An example sheet with one sample is:
 ```
-sample_id,kit_name,kit_version,exp_cells
+sample_id,kit_name,kit_version,expected_cells
 sample_10,3prime,v3,500
 ```
 
