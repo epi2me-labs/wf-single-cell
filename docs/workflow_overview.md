@@ -109,7 +109,7 @@ Workflow options:
 ## Barcode correction
 The aim of this stage is to correct errors present in the previously extracted barcodes.
 10x Genomics barcodes are not random; all possible barcode sequences can be found in a whitelist of known barcodes. 
-The approprate whitelist for each kit and version is chosen automatically by the workflow.
+The appropriate whitelist for each kit and version is chosen automatically by the workflow.
 The whitelist is used to generate a shortlist of high quality barcodes present in the sample, which is then used to 
 correct barcode errors.
 

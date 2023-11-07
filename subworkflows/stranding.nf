@@ -8,12 +8,11 @@ process call_adapter_scan {
     maxRetries = 3
     errorStrategy = { task.exitStatus in 137..140 ? 'retry' : 'terminate' }
     input:
-        tuple val(sample_id), 
-              val(meta),
+        tuple val(meta),
               path(chunk, stageAs: 'chunk.fq.gz')
     output:
-        tuple val(sample_id), path("${sample_id}_adapt_scan.fastq.gz"), emit: stranded_fq_chunked
-        tuple val(sample_id), path("${sample_id}_adapt_scan.tsv"), emit: read_config_chunked
+        tuple val(meta), path("${meta.alias}_adapt_scan.fastq.gz"), emit: stranded_fq_chunked
+        tuple val(meta), path("${meta.alias}_adapt_scan.tsv"), emit: read_config_chunked
     
     """
     export POLARS_MAX_THREADS=$task.cpus
@@ -21,8 +20,8 @@ process call_adapter_scan {
     workflow-glue adapter_scan_vsearch \
     chunk.fq.gz \
     --kit ${meta['kit_name']} \
-    --output_fastq "${sample_id}_adapt_scan.fastq.gz" \
-    --output_tsv  "${sample_id}_adapt_scan.tsv"
+    --output_fastq "${meta.alias}_adapt_scan.fastq.gz" \
+    --output_tsv  "${meta.alias}_adapt_scan.tsv"
     """
 }
 
@@ -31,12 +30,12 @@ process combine_adapter_tables {
     label "singlecell"
     cpus 1
     input:
-        tuple val(sample_id), path("adapters.tsv")
+        tuple val(meta), path("adapters.tsv")
     output:
-        tuple val(sample_id), path("${sample_id}_read_config.tsv"), emit: read_config
+        tuple val(meta), path("${meta.alias}_read_config.tsv"), emit: read_config
     """
     # Concatenate tsv file keeping header from first file.
-    awk 'FNR==1 && NR!=1{next;}{print}' adapters.tsv* > "${sample_id}_read_config.tsv"
+    awk 'FNR==1 && NR!=1{next;}{print}' adapters.tsv* > "${meta.alias}_read_config.tsv"
     """
 }
 
@@ -46,14 +45,14 @@ process summarize_adapter_table {
     cpus 1
     memory 1.5.GB
     input:
-        tuple val(sample_id), path(read_config)
+        tuple val(meta), path(read_config)
     output:
-        tuple val(sample_id), path("${sample_id}.config_stats.json"), emit: config_stats
+        tuple val(meta), path("${meta.alias}.config_stats.json"), emit: config_stats
     """
     workflow-glue summarise_adapters \
         --read_config_tsv "${read_config}" \
-        --sample_id "${sample_id}" \
-        --out "${sample_id}.config_stats.json" \
+        --sample_id "${meta.alias}" \
+        --out "${meta.alias}.config_stats.json" \
         --threads $task.cpus
     """
 }
@@ -63,13 +62,9 @@ process summarize_adapter_table {
 workflow stranding {
     take:
         read_chunks
-        meta
-    
-    main:      
-        chunks = meta
-            .cross(read_chunks.flatMap({it ->
-            // Rejig the outputs to be [sample_id, fatq_chunk]
-            // Then merge in kit info
+    main:
+         // Rejig checks to so each is  [meta, fastq_chunk]
+        meta_chunks = read_chunks.flatMap({it ->
             if (it[1].getClass() != java.util.ArrayList){
                 // If only one path, `it` will be [sample_id, path]
                 return [it]
@@ -79,14 +74,11 @@ workflow stranding {
                 l.add(tuple(it[0], x))
             }
             return l
-        }))
-        // sample_id, meta, fastq_chunk
-        .map {it -> tuple(it[0][0], it[0][1], it[1][1])}
-
-        call_adapter_scan(chunks)
+        })
+        call_adapter_scan(meta_chunks)
         combine_adapter_tables(call_adapter_scan.out.read_config_chunked.groupTuple())
         summarize_adapter_table(combine_adapter_tables.out.read_config)
-            
+
     emit:
         stranded_fq = call_adapter_scan.out.stranded_fq_chunked
         config_stats = summarize_adapter_table.out.config_stats

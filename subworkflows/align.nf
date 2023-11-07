@@ -26,13 +26,13 @@ process align_to_ref {
     label "singlecell"
     cpus params.resources_mm2_max_threads
     input:
-        tuple val(sample_id),
+        tuple val(meta),
               path("reads.fastq")
         path "ref_genome.fasta"
         path "ref_genes.bed"
         path "ref_chrom_sizes.tsv"
     output:
-        tuple val(sample_id), 
+        tuple val(meta),
             path("*sorted.bam"), 
             path("*sorted.bam.bai"), 
             emit: bam_sort
@@ -41,8 +41,8 @@ process align_to_ref {
       --junc-bed ref_genes.bed $params.resources_mm2_flags  \
       ref_genome.fasta reads.fastq* \
         | samtools view -b --no-PG -t ref_chrom_sizes - \
-        | samtools sort -@ 2 --no-PG  - > "${sample_id}_sorted.bam"
-    samtools index -@ ${task.cpus} "${sample_id}_sorted.bam"
+        | samtools sort -@ 2 --no-PG  - > "${meta.alias}_sorted.bam"
+    samtools index -@ ${task.cpus} "${meta.alias}_sorted.bam"
     """
 }
 

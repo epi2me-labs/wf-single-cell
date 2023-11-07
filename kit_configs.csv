@@ -1,5 +1,5 @@
-kit_name,kit_version,barcode_length,umi_length
-3prime,v2,16,10
-3prime,v3,16,12
-5prime,v1,16,10
-multiome,v1,16,12
+kit_name,kit_version,barcode_length,umi_length,bc_long_list
+3prime,v2,16,10,737K-august-2016.txt.gz
+3prime,v3,16,12,3M-february-2018.txt.gz
+5prime,v1,16,10,737K-august-2016.txt.gz
+multiome,v1,16,12,737K-arc-v1.txt.gz
