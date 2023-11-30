@@ -2,6 +2,7 @@
     "$schema": "http://json-schema.org/draft-07/schema",
     "$id": "https://raw.githubusercontent.com/./master/nextflow_schema.json",
     "title": "epi2me-labs/wf-single-cell",
+    "workflow_title": "Single cell workflow",
     "description": "Identification of cell- and UMI barcodes from single-cell sequencing.",
     "demo_url": "https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/wf-single-cell-demo.tar.gz",
     "aws_demo_url": "https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/wf-single-cell-demo/aws.nextflow.config",
@@ -26,13 +27,13 @@
                     "format": "directory-path",
                     "title": "Reference genome directory",
                     "description": "The path to the 10x reference directory",
-                    "help_text": "Reference genome directories can be downloaded from the 10x website: https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2020-A.tar.gz"
+                    "help_text": "Human reference data can be downloaded from 10x [here](https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2020-A.tar.gz). Instructions for preparing reference data can be found [here](https://www.10xgenomics.com/support/software/cell-ranger/tutorials/cr-tutorial-mr#overview)"
                 },
                 "merge_bam": {
                     "type": "boolean",
                     "title": "Merge output BAM files",
                     "description": "Merge BAM alignment files into a single BAM file per sample",
-                    "help_text": "Merging of BAM files can take a significant amount of time and uses additional disk space.  By default BAM files are output per chromosome. Set to true if a BAM file per sample is needed for downstream analyses",
+                    "help_text": "Merging of BAM files can take a significant amount of time and uses additional disk space.  By default BAM files are output per chromosome. Set to true if a BAM file per sample is needed for downstream analyses.",
                     "default": false
                 },
                 "kit_name": {
@@ -46,14 +47,14 @@
                     "type": "string",
                     "title": "Kit version",
                     "description": "10x kit version",
-                    "help_text": "If `single_cell_sample_sheet` is not defined, kit_version is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied. 3prime kit options: [v2, v3]. For 5prime and multiome kits only `v1` is available.",
+                    "help_text": "10x kits can be released with different versions, each requiring a specific whitelist that is looked-up by the workflow. If `single_cell_sample_sheet` is not defined, kit_version is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied. 3prime kit options: [v2, v3]. For 5prime and multiome kits only `v1` is available.",
                     "default": "v3"
                 },
                 "expected_cells": {
                     "type": "integer",
                     "title": "Expected cell number",
                     "description": "Number of expected cells in the sample.",
-                    "help_text": "The number of expected cells is used If `single_cell_sample_sheet` is not defined, `expected_cells` is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied. If unknown 500 is a reasonable choice.",
+                    "help_text": "The number of expected cells. If `single_cell_sample_sheet` is not defined, `expected_cells` is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied.",
                     "default": 500
                 }
             },
@@ -71,8 +72,8 @@
                 "single_cell_sample_sheet": {
                     "type": "string",
                     "title": "Single cell sample sheet",
-                    "description": "An optional CSV file used to assign library metadata to samples. If all samples have the same library metadata, this can be supplied instead by using the parameters (kit_name, kit_version, expected cells)",
-                    "help_text": "Columns should be: [sample_id, kit_name, kit_version, exp_cells], This is not to be confused with the MinKNOW sample_sheet. `sample_id` should correspond to `sample_name` which is defined either in the `sample_sheet`, given by the `sample` parameter (for single sample runs) or if no `sample_sheet` or `sample` is given, is derived from the folder name containing the fastq files.",
+                    "description": "An optional CSV file used to assign library metadata to the different samples. If all samples have the same library metadata, this can be supplied instead by using the parameters (kit_name, kit_version, expected cells).",
+                    "help_text": "Columns should be: [sample_id, kit_name, kit_version, exp_cells]. This must not be confused with the MinKNOW sample_sheet. `sample_id` should correspond to `sample_name` which is defined either in the `sample_sheet`, given by the `sample` parameter (for single sample runs) or if no `sample_sheet` or `sample` is given, is derived from the folder name containing the FASTQ files.",
                     "format": "file-path"
                 },
                 "sample_sheet": {
@@ -120,12 +121,12 @@
                     "format": "file-path",
                     "title": "10x kit config file",
                     "description": "A file defining the configurations associated with the various supported 10x kits.",
-                    "help_text": "A CSV file is expected with the following headers [kit_name, kit_version, barcode_length, umi_length]. If not specified, `kit_configs.csv` from the project directory root will be used. This parameter does not normally need changing."
+                    "help_text": "A CSV file is expected with the following headers [kit_name, kit_version, barcode_length, umi_length]. If not specified, a default `kit_configs.csv` (found in the project directory root) will be used. This parameter does not typically need be changed."
                 },
                 "max_threads": {
                     "type": "integer",
                     "title": "Maximum number of threads",
-                    "description": "This is used to control how many threads the following multithread-capable processes can use: combine_chrom_bams(max 8 threads), stringtie(max_threads/4),  align_to_transcriptome(max_threads/2) .It is also used as the number of parts to chunk the fastq data into before processing.",
+                    "description": "This is used to control how many threads the following multithread-capable processes can use: combine_chrom_bams(max 8 threads), stringtie(max_threads/4), align_to_transcriptome(max_threads/2). It is also used as the number of parts to chunk the FASTQ data into before processing.",
                     "help_text": "The total CPU resource used by the workflow is constrained by the executor configuration.",
                     "default": 4
                 },
@@ -139,7 +140,7 @@
                 "barcode_min_quality": {
                     "type": "integer",
                     "title": "Barcode minimum quality",
-                    "description": "Minimum allowed nucleotide-level quality score in the extracted/uncorrected barcode sequence",
+                    "description": "Minimum allowed nucleotide-level quality score in the extracted/uncorrected barcode sequence.",
                     "help_text": "Values equal or higher to this this will be considered 'high-quality' and used for generating the barcode whitelist.",
                     "default": 15
                 },
@@ -165,19 +166,19 @@
                 },
                 "matrix_min_genes": {
                     "type": "integer",
-                    "title": "Minimum genes per cell",
+                    "title": "Cell filter: Minimum number of genes",
                     "description": "Filter cells from the gene expression matrix if they contain fewer than <matrix_min_genes> genes.",
                     "default": 200
                 },
                 "matrix_min_cells": {
                     "type": "integer",
-                    "title": "Minimum cells per gene",
+                    "title": "Gene filter: minimum cells",
                     "description": "Filter genes from the gene expression matrix that are observed in fewer than <matrix_min_cells> cells.",
                     "default": 3
                 },
                 "matrix_max_mito": {
                     "type": "integer",
-                    "title": "Mitochondrial expression cell filter",
+                    "title": "Cell filter: Mitochondrial expression",
                     "description": "Filter cells from the gene expression matrix if more than <matrix_max_mito> percent of UMI counts come from mitochondrial genes.",
                     "default": 20
                 },
@@ -219,13 +220,13 @@
                     "title": "Process chunk size",
                     "description": "Control the size of chunks for processing of data.",
                     "default": 100000,
-                    "help_text": "Several steps process the data into chunks of n reads/alignments. Use a smaller number to reduce peak memory use"
+                    "help_text": "Several steps process the data into chunks of n reads/alignments. Use a smaller number to reduce peak memory use."
                 },
                 "mito_prefix": {
                     "type": "string",
                     "title": "Mitochondrial gene name prefix",
                     "description": "Gene name prefix to identify for mitochondrial genes.",
-                    "help_text": "Parts of the workflow analyse mitochondrial genes seperately. These genes are identified by searching for a gene name prefix. Human mitochondrial genes can be identified with prefix 'MT-' and mouse genes with prefix 'mt-'. If the reference genome contains data from multiple organisms with different nomencalture,e multiple prefixes can be supplied like so: 'MT-,mt-'",
+                    "help_text": "Parts of the workflow analyse mitochondrial genes separately. These genes are identified by searching for a gene name prefix. Human mitochondrial genes can be identified with prefix 'MT-' and mouse genes with prefix 'mt-'. If the reference genome contains data from multiple organisms with different nomenclature, multiple prefixes can be supplied like so: 'MT-,mt-'",
                     "default": "MT-"
                 },
                 "umap_n_repeats": {
@@ -233,14 +234,14 @@
                     "title": "Number of UMAP repetitions",
                     "default": 6,
                     "description": "Number of UMAP projection to repeat for each dataset.",
-                    "help_text": "The UMAP algorithm contains elements of randomness that can misleaad users into seeing assocations between cells that are not meaningful. It is recommended to view multiple plots generated with the same parameters and check that any observed structure is consistent across runs."
+                    "help_text": "The UMAP algorithm contains elements of randomness that can mislead users into seeing associations between cells that are not meaningful. It is recommended to view multiple plots generated with the same parameters and check that any observed structure is consistent across runs."
                 },
                 "stringtie_opts": {
                     "type": "string",
                     "title": "Stringtie2 options",
                     "default": "-c 2",
-                    "description": "Optional stringtie2 options for transcriptome assembly.",
-                    "help_text": "The default option (-c 2) sets the minimum read coverage needed to call a predicted transcript. Stringtie options can be found here: http://ccb.jhu.edu/software/stringtie/index.shtml?t=manual"
+                    "description": "StringTie options for transcriptome assembly.",
+                    "help_text":  "StringTie option string can be supplied at the command line as in this example: `--stringtie_opts=\"-c 5 -m 100 \"`. StringTie options can be found here: http://ccb.jhu.edu/software/stringtie/index.shtml?t=manual. The default option (-c 2) ensures that only transcripts with a coverage of 2 or higher are included in the generated transcriptome"
                 }
             }
         },
@@ -309,8 +310,16 @@
             "type": "boolean"
         }
     },
-    "docs": {
-        "intro": "## Introduction\n\nThe following single-cell kits from 10x Genomics are currently supported:\n- Chromium Single Cell [3\u02b9 gene expression](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium3.html), versions 2 and 3\n- Chromium Single Cell [5\u02b9 gene expression](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium5.html), version 1\n- Chromium Single Cell [Multiome (ATAC + GEX)](https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium_multiome.html), version 1\n\nOxford Nanopore has developed a protocol for sequencing single-cell libraries from 10x, which can be found on the Nanopore Community [website](https://community.nanoporetech.com/docs/prepare/library_prep_protocols/single-cell-transcriptomics-10x/v/sst_v9148_v111_revb_12jan2022).\n\nThe inputs to Sockeye are raw nanopore reads (FASTQ) generated from the sequencing\ninstrument and reference files that can be downloaded from [10x](https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest).\nThe pipeline outputs gene x cell, and transcript x cell expression matrices, as well as a BAM file of\naligned reads tagged with cell barcode and UMI information.\n\nThe [BLAZE](https://github.com/shimlab/BLAZE) preprint provided useful benchmarking of the original sockeye implementation. \nThis assisted in the selection of appropriate parameters for cell cut-off thresholds and for defining the limits of the cell x gene matrix.\n\nThe isoform selection procedure used in this workflow was adapted from that found in the [FLAMES](https://github.com/LuyiTian/FLAMES) \npackage.\n\nTo see a detailed overview of the workflow see [Workflow Overview](./docs/workflow_overview.md)",
-        "links": "## Useful links\n\n* [nextflow](https://www.nextflow.io/)\n* [docker](https://www.docker.com/products/docker-desktop)\n* [singularity](https://docs.sylabs.io/guides/3.5/user-guide/introduction.html)\n"
+    "resources": {
+        "recommended": {
+            "cpus": 64,
+            "memory": "256GB"
+        },
+        "minimum": {
+            "cpus": 8,
+            "memory": "16GB"
+        },
+        "run_time": "48h for 120M reads",
+        "arm_support": true
     }
 }
