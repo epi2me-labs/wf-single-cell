@@ -33,12 +33,12 @@ package.
 Recommended requirements:
 
 + CPUs = 64
-+ memory = 256GB
++ Memory = 256GB
 
-Minimum requirement:
+Minimum requirements:
 
 + CPUs = 8
-+ memory = 16GB
++ Memory = 16GB
 
 Approximate run time: 48h for 120M reads
 
@@ -169,7 +169,7 @@ Find related protocols in the [Nanopore community](https://community.nanoporetec
 
 ## Outputs
 
-Outputs files may be aggregated including information for all             samples or provided per sample. Per sample files             will be prefixed with respective aliases and represented             below as {{ alias }}.
+Outputs files may be aggregated including information for all samples or provided per sample. Per-sample files will be prefixed with respective aliases and represented below as {{ alias }}.
 
 | Title | File path | Description | Per sample or aggregated |
 |-------|-----------|-------------|--------------------------|
