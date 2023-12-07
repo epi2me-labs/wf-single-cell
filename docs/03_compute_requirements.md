@@ -1,12 +1,12 @@
 Recommended requirements:
 
 + CPUs = 64
-+ memory = 256GB
++ Memory = 256GB
 
-Minimum requirement:
+Minimum requirements:
 
 + CPUs = 8
-+ memory = 16GB
++ Memory = 16GB
 
 Approximate run time: 48h for 120M reads
 
