@@ -202,7 +202,7 @@ The following section details the main steps of the workflow.
 
 ### 1. Concatenates input files and generate per read stats.
 
-The [fastcat/bamstats](https://github.com/epi2me-labs/fastcat) tool is used to concatenate multifile samples to be processed by the workflow. It will also output per read stats including average read lengths and qualities.
+The [fastcat/bamstats](https://github.com/epi2me-labs/fastcat) tool is used to concatenate multi-file samples to be processed by the workflow. It will also output per read stats including average read lengths and qualities.
 
 ### 2. Stranding and identification of full-length reads
 
@@ -217,7 +217,7 @@ This assigned configurations allows the stranding and orientating the reads.
 The following schematic shows an example read structure from 10x Genomics 3&#8242; library .
 
 <figure>
-<img src="docs/images/3prime_read.png", alt="10x read structure">
+<img src="docs/images/3prime_read.png" alt="10x read structure"/>
 <figcaption>Fig.1 Read structure for 10x 3prime kit reads</figcaption>
 </figure>
 
@@ -262,7 +262,7 @@ The next step is to extract 10x Genomics barcodes and UMI sequences from the str
 In order to do this, the first 100bp of each read are aligned to a reference probe using [parasail](https://github.com/jeffdaily/parasail). This probe contains a suffix of the adapter1 sequence, some ambiguities ("Ns") representing the barcode and UMI, and a polyT tract.
 
 <figure>
-<img src="docs/images/probe.png" alt="probe image">
+<img src="docs/images/probe.png" alt="probe image"/>
 <figcaption>Fig.2 Schematic of a 3&#8242; v3 probe aligned to the read prefix</figcaption>
 </figure>
 
