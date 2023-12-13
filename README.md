@@ -224,7 +224,6 @@ The following schematic shows an example read structure from 10x Genomics 3&#824
 Adapter are located within the reads using [vsearch](https://github.com/torognes/vsearch) (`Read1` and `TSO` in Fig.1 in the case of the 3prime kit).
 The table below details the adapter sequences for each of the 10x Genomics kits, along with links to the relevant user guides.
 
-<br> 
 
 | Kit      | adapter1               | adapter2 | 10x user guide |
 |----------|------------------------|----------|----------------|
