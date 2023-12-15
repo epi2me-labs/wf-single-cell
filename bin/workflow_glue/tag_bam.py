@@ -48,7 +48,26 @@ def argparser():
 
 def add_tags(tags_file, in_bam, out_bam, chrom, rev):
     """Add all the required tags to the BAM file."""
-    df = pd.read_csv(tags_file, sep='\t', index_col=0)
+    dtypes = {
+        # Read id and quality strings are not expected to be unique. The other columns
+        # will benefit from being category types.
+        'read_id': str,
+        'CY': str,
+        'UY': str,
+        'CR': 'category',
+        'CB': 'category',
+        'UR': 'category',
+        'UB': 'category',
+        'gene': 'category',
+        'transcript': 'category'
+    }
+    df = pd.read_csv(
+        tags_file,
+        sep='\t',
+        index_col='read_id',
+        dtype=dtypes
+    )
+
     with pysam.AlignmentFile(in_bam, "rb") as bam_in:
         with pysam.AlignmentFile(out_bam, "wb", template=bam_in) as bam_out:
             for align in bam_in.fetch(contig=chrom):
@@ -57,9 +76,9 @@ def add_tags(tags_file, in_bam, out_bam, chrom, rev):
                     row = df.loc[read_id]
                 except KeyError:
                     continue  # No barcode/umi for this read
-                # uncorrectred cell barcode
+                # uncorrected cell barcode
                 align.set_tag('CR', row['CR'], value_type="Z")
-                # Correctred cell barcode
+                # Corrected cell barcode
                 align.set_tag('CB', row['CB'], value_type="Z")
                 # barcode qscores
                 align.set_tag('CY', row['CY'], value_type="Z")
