@@ -10,7 +10,7 @@ include { align } from './subworkflows/align'
 include { process_bams } from './subworkflows/process_bams'
 
 
-process summariseCatChunkReads {
+process chunkReads {
     // concatenate fastq and fastq.gz in a dir. 
     // Split into p parts where p is num threads
 
@@ -21,9 +21,6 @@ process summariseCatChunkReads {
               path(reads)
     output:
         tuple val(meta),
-              path("${meta.alias}.stats"),
-              emit: stats
-        tuple val(meta),
               path("chunks/*"),
               emit: fastq_chunks
     script:
@@ -33,8 +30,7 @@ process summariseCatChunkReads {
     def seqkit_split_opts = (params.adapter_scan_chunk_size == 0) ? "-p $params.max_threads" : "-s $params.adapter_scan_chunk_size"
 
     """
-    fastcat -s ${meta.alias} -r ${meta.alias}.stats -x ${reads} | \
-        seqkit split2 --threads ${task.cpus} ${seqkit_split_opts} -O chunks -o ${meta.alias} -e .gz
+    seqkit split2 ${reads} --threads ${task.cpus} ${seqkit_split_opts} -O chunks -o ${meta.alias} -e .gz
     """
 }
 
@@ -80,7 +76,7 @@ process makeReport {
     input:
         path 'versions'
         path 'params.csv'
-        path 'read_stats.csv'
+        path 'per_read_stats/stats_?.tsv.gz'
         path 'survival.tsv'
         path 'wf_summary.tsv'
         path umap_dirs
@@ -93,7 +89,7 @@ process makeReport {
         report_name = "wf-single-cell-report.html"
     """
     workflow-glue report \
-        --read_stats read_stats.csv \
+        --read_stats_dir per_read_stats \
         --params params.csv \
         --versions versions \
         --survival survival.tsv \
@@ -232,6 +228,8 @@ workflow pipeline {
         meta
         ref_genome_dir
         umap_genes
+        per_read_stats
+
     main:
         // throw an exception for deprecated conda users
         if (workflow.profile.contains("conda")) {
@@ -247,10 +245,9 @@ workflow pipeline {
         workflow_params = getParams()
 
         bc_longlist_dir = file("${projectDir}/data", checkIfExists: true)
+        chunkReads(meta)
 
-        summariseCatChunkReads(meta)
-
-        stranding(summariseCatChunkReads.out.fastq_chunks)
+        stranding(chunkReads.out.fastq_chunks)
 
         align(
             stranding.out.stranded_fq,
@@ -274,13 +271,11 @@ workflow pipeline {
             .join(process_bams.out.transcript_expression)
             .join(process_bams.out.mitochondrial_expression)
             .join(process_bams.out.umap_matrices))
-        
+
         makeReport(
             software_versions,
             workflow_params,
-            summariseCatChunkReads.out.stats
-                .map {it -> it[1]}
-                .collectFile(keepHeader:true),
+            per_read_stats.collect(),
             prepare_report_data.out.survival
                 .collectFile(keepHeader:true),
             prepare_report_data.out.summary
@@ -300,7 +295,6 @@ WorkflowMain.initialise(workflow, params, log)
 workflow {
 
     Pinguscript.ping_start(nextflow, workflow, params)
-    
     ref_genome_dir = file(params.ref_genome_dir, checkIfExists: true)
 
     if (params.umap_plot_genes){
@@ -320,11 +314,14 @@ workflow {
     samples = fastq_ingress([
             "input":params.fastq,
             "sample":params.sample,
-            "sample_sheet":params.sample_sheet])
-            .map {it[0, 1]}
-    
+            "sample_sheet":params.sample_sheet,
+            "stats": true])
 
-            
+    per_read_stats = samples.map { 
+        meta, reads, stats ->
+        [meta, file(stats.resolve('*read*.tsv.gz'))[0]
+        ]}.map {meta, stats -> stats}
+
     if (!params.single_cell_sample_sheet) {
 
         sc_sample_sheet = file("$projectDir/data/OPTIONAL_FILE")
@@ -340,12 +337,11 @@ workflow {
         .map {it -> [it['sample_id'], it]}
     // Merge the kit metadata onto the sample metadata
     // Put sample_id as first element for join
-    samples.map {meta, reads -> [meta.alias, meta, reads]}
-    sample_and_kit_meta = samples.map {meta, reads -> [meta.alias, meta, reads]}
+    sample_and_kit_meta = samples.map {meta, reads, stats -> [meta.alias, meta, reads]}
         .join(kit_meta)
         .map {sample_id, sample_meta, reads, kit_meta -> [sample_meta + kit_meta, reads]}
 
-    pipeline(sample_and_kit_meta, ref_genome_dir, umap_genes)
+    pipeline(sample_and_kit_meta, ref_genome_dir, umap_genes, per_read_stats)
 
     output(pipeline.out.results.flatMap({it ->
         // Convert [meta, file, file, ..] 
@@ -355,8 +351,7 @@ workflow {
                 l.add(tuple(it[0], it[i]))
             }
             return l
-        }).concat(pipeline.out.config_stats)
-    )
+        }))
 
     output_report(pipeline.out.report)
 }
