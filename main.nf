@@ -72,7 +72,7 @@ process getParams {
 }
 
 process makeReport {
-    label "singlecell"
+    label "wf_common"
     input:
         path 'versions'
         path 'params.csv'
