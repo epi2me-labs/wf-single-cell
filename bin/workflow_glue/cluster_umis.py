@@ -212,7 +212,14 @@ def process_records(df, args):
 
 def main(args):
     """Run entry point."""
-    df_tags = pd.read_csv(args.read_tags, sep='\t', index_col=0)
+    df_tags = pd.read_csv(args.read_tags, sep='\t', index_col='read_id')
+
+    dups = df_tags[df_tags.index.duplicated(keep='first')]
+    if not dups.empty:
+        raise ValueError(
+            f"One or more input reads are duplicated, please rectify.\n"
+            f"Duplicated reads: {list(set(dups.index))[:20]}")
+
     df_features = pd.read_csv(
         args.feature_assigns, sep='\t', index_col=0)
     # Merge genes and transcripts onto tags.
