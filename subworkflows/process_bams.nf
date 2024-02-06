@@ -244,7 +244,6 @@ process combine_uncorrect_bcs {
 }
 
 
-
 process combine_chrom_bams {
     // Merge all chromosome bams by sample_id
     label "singlecell"
@@ -284,30 +283,32 @@ process stringtie {
     output:
         tuple val(meta),
               val(chr),
-              path("transcriptome.fa"),
+              path("${meta.alias}.transcriptome.fa"),
               path("chr.gtf"),
-              path("stringtie.gff"),
+              path("${meta.alias}.stringtie.gff"),
               path("reads.fastq"),
               emit: read_tr_map
     script:
     if (meta.kit_name=="5prime")
     """
+    # Add chromosome label (-l) to generated transcripts 
+    # so we don't get name collisions during file merge later 
     samtools view -h align.bam ${chr}  \
-         | tee >(stringtie -L ${params.stringtie_opts} -p ${task.cpus} -G chr.gtf -l stringtie \
-             -o stringtie.gff - ) \
-         | samtools fastq > reads.fastq    
+         | tee >(stringtie -L ${params.stringtie_opts} -p ${task.cpus} -G chr.gtf -l "${chr}.stringtie" \
+             -o "${meta.alias}.stringtie.gff" - ) \
+         | samtools fastq > reads.fastq
     # Get transcriptome sequence
-    gffread -g ref_genome.fa -w transcriptome.fa stringtie.gff
+    gffread -g ref_genome.fa -w "${meta.alias}.transcriptome.fa" "${meta.alias}.stringtie.gff"
     """
     else
-    """
+    """ 
     # Data from 3prime and multiome kits must be flipped to the transcript strand before building transcriptome.
     workflow-glue process_bam_for_stringtie align.bam ${chr}  \
-        | tee >(stringtie -L ${params.stringtie_opts} -p ${task.cpus} -G chr.gtf -l stringtie \
-            -o stringtie.gff - ) \
+        | tee >(stringtie -L ${params.stringtie_opts} -p ${task.cpus} -G chr.gtf -l "${chr}.stringtie" \
+            -o "${meta.alias}.stringtie.gff" - ) \
         | samtools fastq > reads.fastq
     # Get transcriptome sequence
-    gffread -g ref_genome.fa -w transcriptome.fa stringtie.gff
+    gffread -g ref_genome.fa -w "${meta.alias}.transcriptome.fa" "${meta.alias}.stringtie.gff"
     """
 }
 
@@ -371,6 +372,9 @@ process assign_features {
               val(chr),
               path("${meta.alias}.${chr}.feature_assigns.tsv"),
               emit: feature_assigns
+        tuple val(meta),
+              path("gffcompare.annotated.gtf"),
+              emit: annotation
     """
     # gffcomapre maps transcript reference IDs to query transcripts.
     gffcompare -o gffcompare -r chr.gtf stringtie.gff
@@ -472,6 +476,27 @@ process umap_reduce_expression_matrix {
     workflow-glue umap_reduce \
         --output ${data_type}_umap_${repeat_num}.tsv \
         ${matrix}
+    """
+}
+
+process merge_transcriptome {
+    // Merge the annotated GFFs and transcriptome sequence files
+    label "singlecell"
+    cpus 1
+    memory "2GB"
+    input:
+        tuple val(meta),
+            path('fasta/?.fa'),
+            path('gffs/?.gff')
+    output:
+        tuple val(meta),
+            path("${meta.alias}.transcriptome.gff.gz"),
+            path("${meta.alias}.transcriptome.fa.gz"),
+            emit: merged_annotation
+    """
+    # Concatenate transcriptome files, remove comments (from gff) and compress
+    find fasta/ -name '*.fa' -exec cat {} + | gzip > "${meta.alias}.transcriptome.fa.gz"
+    find gffs/ -name '*.gff' -exec cat {} + |grep -v '^#' | gzip > "${meta.alias}.transcriptome.gff.gz"
     """
 }
 
@@ -618,6 +643,13 @@ workflow process_bams {
        .concat(umi_gene_saturation.out.saturation_curve)
        .groupTuple())
 
+    merge_transcriptome(
+        assign_features.out.annotation.groupTuple()
+            .join(stringtie.out.read_tr_map.groupTuple())
+            .map{
+                meta, ann_tr_gff, chr, tr_fa, ref_gtf, str_gff, fastq  ->
+                [meta, tr_fa, ann_tr_gff]})
+
     // Tidy up channels prior to output
     proc_expresion_out = process_expression_matrix.out.gene_matrix_processed_tsv
         .concat(process_expression_matrix.out.transcript_matrix_processed_tsv)
@@ -635,6 +667,7 @@ workflow process_bams {
             .join(tagged_bams)
             .join(combine_uncorrect_bcs.out)
             .join(pack_images.out)
+            .join(merge_transcriptome.out)
             .map{it -> it.flatten()}
         
         // Emit sperately for use in the report
