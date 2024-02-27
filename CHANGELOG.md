@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Added
+- `full_length_only` parameter to process only full length reads (default: true).
+
 ## [v1.0.3]
 ### Added
 - Publish stringtie transcriptome fasta and GFF files to output dir.

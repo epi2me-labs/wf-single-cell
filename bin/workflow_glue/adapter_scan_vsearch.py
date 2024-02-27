@@ -72,9 +72,8 @@ def argparser():
     )
 
     parser.add_argument(
-        "--only_strand_full_length",
-        help="Do not try to strand-orient reads where either \
-                        just a single adapter was found",
+        "--keep_fl_only",
+        help="Only write full length reads",
         action="store_true",
         default=False,
     )
@@ -192,7 +191,7 @@ def get_valid_adapter_pair_positions_in_read(vs_result):
     return fl_pairs
 
 
-def parse_vsearch(tmp_vsearch, only_strand_full_length):
+def parse_vsearch(tmp_vsearch):
     """Parse vsearch adapter scan results.
 
     Parse the vsearch results, identifying adapter configurations including
@@ -280,49 +279,47 @@ def parse_vsearch(tmp_vsearch, only_strand_full_length):
             # configurations, such as multiple unpaired adapters, we do not
             # attempt to process further.
             if config_type == 'single_adapter2':
-                if not only_strand_full_length:
-                    # We want to strand and trim reads where we only have
-                    # an adapter2 sequence but no adapter1. These MIGHT contain
-                    # the cell barcode, UMI, polyT (for --kit 3prime) and cDNA
-                    # sequence, but since the adapter1 is low-quality, these
-                    # might be of dubious value. We can only trim the
-                    # adapter2 end of the vs_read_results based on adapter2
-                    # aligned
-                    # positions, but won't touch the putative adapter1 end.
-                    stranded = True
-                    if adapter_config == "adapter2_f":
-                        strand = "+"
-                        start = 0
-                        end = read_row['qihi']
-                        readlen = end - start
-                    elif adapter_config == "adapter2_r":
-                        strand = "-"
-                        start = read_row['qilo'] - 1
-                        end = read_row['ql']
-                        readlen = end - start
-                    else:
-                        raise Exception("Shouldn't be here!")
+                # We want to strand and trim reads where we only have
+                # an adapter2 sequence but no adapter1. These MIGHT contain
+                # the cell barcode, UMI, polyT (for --kit 3prime) and cDNA
+                # sequence, but since the adapter1 is low-quality, these
+                # might be of dubious value. We can only trim the
+                # adapter2 end of the vs_read_results based on adapter2
+                # aligned
+                # positions, but won't touch the putative adapter1 end.
+                stranded = True
+                if adapter_config == "adapter2_f":
+                    strand = "+"
+                    start = 0
+                    end = read_row['qihi']
+                    readlen = end - start
+                elif adapter_config == "adapter2_r":
+                    strand = "-"
+                    start = read_row['qilo'] - 1
+                    end = read_row['ql']
+                    readlen = end - start
+                else:
+                    raise Exception("Unexpected adapter config!")
             elif config_type == "single_adapter1":
-                if not only_strand_full_length:
-                    # We want to strand and trim reads where we only have
-                    # a adapter1 sequence but no adapter2. These should contain
-                    # the cell barcode, UMI, polyT (if --kit 3prime) and cDNA
-                    # sequence, so should still have significant value. We can
-                    # only trim the adapter1 end of the vs_read_results,
-                    # but won't touch the putative adapter2 end.
-                    stranded = True
-                    if adapter_config == "adapter1_f":
-                        strand = "+"
-                        start = read_row['qilo'] - 1
-                        end = read_row['ql']
-                        readlen = end - start
-                    elif adapter_config == "adapter1_r":
-                        strand = "-"
-                        start = 0
-                        end = read_row['qihi']
-                        readlen = end - start
-                    else:
-                        raise Exception("Shouldn't be here!")
+                # We want to strand and trim reads where we only have
+                # a adapter1 sequence but no adapter2. These should contain
+                # the cell barcode, UMI, polyT (if --kit 3prime) and cDNA
+                # sequence, so should still have significant value. We can
+                # only trim the adapter1 end of the vs_read_results,
+                # but won't touch the putative adapter2 end.
+                stranded = True
+                if adapter_config == "adapter1_f":
+                    strand = "+"
+                    start = read_row['qilo'] - 1
+                    end = read_row['ql']
+                    readlen = end - start
+                elif adapter_config == "adapter1_r":
+                    strand = "-"
+                    start = 0
+                    end = read_row['qihi']
+                    readlen = end - start
+                else:
+                    raise Exception("Unexpected adapter config!")
 
             read_info[orig_read_id][read_id] = {
                 "readlen": readlen,
@@ -350,7 +347,7 @@ def write_tables(read_info, output_tsv):
     df_table.to_csv(output_tsv, sep="\t", index=True)
 
 
-def write_stranded_fastq(fastq, read_info, output_fastq):
+def write_stranded_fastq(fastq, read_info, output_fastq, fl_only):
     """Write stranded fastq.
 
     Trimmed sub-read segments defined in read_info are written out with the
@@ -371,21 +368,23 @@ def write_stranded_fastq(fastq, read_info, output_fastq):
             for entry in f_in:
                 if read_info.get(entry.name):
                     # This read had some VSEARCH hits for adapter sequences
-                    for subread_id, d in read_info[entry.name].items():
+                    for subread_id, subread in read_info[entry.name].items():
+                        if fl_only and not subread["fl"]:
+                            continue
                         # The read may contain more than one subread -
                         # segments flaked by compatible adapters.
-                        subread_seq = entry.sequence[d["start"]: d["end"]]
-                        subread_quals = entry.quality[d["start"]: d["end"]]
+                        subread_seq = entry.sequence[subread["start"]: subread["end"]]
+                        subread_quals = entry.quality[subread["start"]: subread["end"]]
 
-                        if d["orig_strand"] == "-":
-                            # Read in reverse orientation relatve to mRNA
+                        if subread["orig_strand"] == "-":
+                            # Read in reverse orientation relative to mRNA
                             # Reverse the config string and reverse
                             # complement the subread
                             rc_config = "-".join(
-                                [adap_rev_config[a] for a in
-                                 d["adapter_config"].split("-")[::-1]])
+                                [adap_rev_config[adapter] for adapter in
+                                 subread["adapter_config"].split("-")[::-1]])
 
-                            d["adapter_config"] = rc_config
+                            subread["adapter_config"] = rc_config
                             subread_seq = subread_seq[::-1].translate(
                                 complement_trans)
                             subread_quals = subread_quals[::-1]
@@ -413,8 +412,8 @@ def main(args):
         adapters['adapter1'], adapters['adapter2'], adapter_file)
     vsearch_results = call_vsearch(
         args.fastq, args.min_adapter_id, adapter_file)
-    read_info = parse_vsearch(vsearch_results, args.only_strand_full_length)
-    write_stranded_fastq(args.fastq, read_info, args.output_fastq)
+    read_info = parse_vsearch(vsearch_results)
+    write_stranded_fastq(args.fastq, read_info, args.output_fastq, args.keep_fl_only)
     write_tables(read_info, args.output_tsv)
     logging.debug(f"Writing output table to {args.output_tsv}")
 

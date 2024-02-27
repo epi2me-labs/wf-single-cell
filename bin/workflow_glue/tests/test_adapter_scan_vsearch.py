@@ -90,8 +90,7 @@ def test_call_vsearch(adapters, expected_results, segment):
             adapter_fasta)
 
         vsearch_results = call_vsearch(Path(fastq_file.name), 0.7, adapter_fasta)
-        parsed_results = parse_vsearch(
-            vsearch_results, only_strand_full_length=False)
+        parsed_results = parse_vsearch(vsearch_results)
 
         # Each result can contain 0 or more subreads -
         #  segments with consecutive pairs of compatible adapters.
@@ -144,7 +143,7 @@ def test_write_stranded_fastq():
     with open(temp_fq.name, 'w') as fh:
         fh.write(fastq)
 
-    write_stranded_fastq(temp_fq.name, config, temp_fq_out.name)
+    write_stranded_fastq(temp_fq.name, config, temp_fq_out.name, fl_only=True)
 
     results = []
     with pysam.FastxFile(temp_fq_out.name) as fh_res:

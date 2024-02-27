@@ -136,6 +136,7 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 | kit_name | string | 10x kit name | If `single_cell_sample_sheet` is not defined, kit_name is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied. | 3prime |
 | kit_version | string | 10x kit version | 10x kits can be released with different versions, each requiring a specific whitelist that is looked-up by the workflow. If `single_cell_sample_sheet` is not defined, kit_version is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied. 3prime kit options: [v2, v3]. For 5prime and multiome kits only `v1` is available. | v3 |
 | expected_cells | integer | Number of expected cells in the sample. | The number of expected cells. If `single_cell_sample_sheet` is not defined, `expected_cells` is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied. | 500 |
+| full_length_only | boolean | Only process full length reads. | If set to true, only process reads or subreads that are classified as full length (read segments flanked by compatible adapters in the expected orientation). | True |
 
 
 ### Sample Options
@@ -272,6 +273,9 @@ The following table details the various configurations and the actions taken for
 | other           | No valid adapters found; not used in further analysis     | 
 
 Adapter configuration summaries can be found in the output file  `{{ alias }}/{{ alias }}.config_stats.json"`
+
+To only process full length reads the option `--full_length_only` should be set to true (default: true). 
+If set to false, reads with only a single adapter or other non-full-length adapter configurations will also be processed.
 
 ### 3. Aligning reads to genome
 The next stage is to align the preprocessed reads to the reference genome. This enables gene and transcript

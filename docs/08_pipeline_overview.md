@@ -49,6 +49,9 @@ The following table details the various configurations and the actions taken for
 
 Adapter configuration summaries can be found in the output file  `{{ alias }}/{{ alias }}.config_stats.json"`
 
+To only process full length reads the option `--full_length_only` should be set to true (default: true). 
+If set to false, reads with only a single adapter or other non-full-length adapter configurations will also be processed.
+
 ### 3. Aligning reads to genome
 The next stage is to align the preprocessed reads to the reference genome. This enables gene and transcript
 read assignment in downstream steps.

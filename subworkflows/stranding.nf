@@ -13,7 +13,8 @@ process call_adapter_scan {
     output:
         tuple val(meta), path("${meta.alias}_adapt_scan.fastq.gz"), emit: stranded_fq_chunked
         tuple val(meta), path("${meta.alias}_adapt_scan.tsv"), emit: read_config_chunked
-    
+    script:
+    def fl = params.full_length_only ? "--keep_fl_only": ""
     """
     export POLARS_MAX_THREADS=$task.cpus
 
@@ -21,7 +22,8 @@ process call_adapter_scan {
     chunk.fq.gz \
     --kit ${meta['kit_name']} \
     --output_fastq "${meta.alias}_adapt_scan.fastq.gz" \
-    --output_tsv  "${meta.alias}_adapt_scan.tsv"
+    --output_tsv  "${meta.alias}_adapt_scan.tsv" \
+    ${fl}
     """
 }
 
