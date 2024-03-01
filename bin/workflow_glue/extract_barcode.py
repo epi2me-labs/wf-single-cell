@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """Extract barcode."""
 import collections
+from enum import Enum
 from pathlib import Path
 
 import editdistance as ed
@@ -8,8 +9,16 @@ import pandas as pd
 import parasail
 from pysam import AlignmentFile
 
-from .sc_util import kit_adapters  # noqa: ABS101
+from .sc_util import kit_adapters, rev_cmp  # noqa: ABS101
 from .util import get_named_logger, wf_parser  # noqa: ABS101
+
+
+class KitName(str, Enum):
+    """Kit name Enum."""
+
+    prime3 = '3prime'
+    prime5 = '5prime'
+    multiome = 'multiome'
 
 
 def argparser():
@@ -59,8 +68,8 @@ def argparser():
         gene expression kit (5prime), or the multiome kit (multiome) This \
         determines which adapter sequences to search for in the reads \
         [3prime]",
-        default="3prime",
-        choices=['3prime', '5prime', 'multiome']
+        type=KitName,
+        default=KitName.prime3
     )
 
     parser.add_argument(
@@ -233,7 +242,10 @@ def parse_probe_alignment(
         p_alignment, adapter1_probe_seq, barcode_length, umi_length,
         prefix_qual, prefix_seq
         ):
-    """Parse probe alignment."""
+    """Parse probe alignment.
+
+    Regardless of kit, the sequences need to be in adapter orientation.
+    """
     ref_alignment = p_alignment.traceback.ref
     query_alignment = p_alignment.traceback.query
 
@@ -307,16 +319,16 @@ def align_adapter(args):
     # Use only the specified suffix length of adapter1
     adapter1_probe_seq = args.adapter1_seq[-args.adapter1_suff_length:]
 
-    if args.kit in ("3prime", "multiome"):
-        # Compile the actual probe sequence of
+    if args.kit in (KitName.prime3, KitName.multiome):
+        # For these kits the probe needs to be reverse complemented
         # <adapter1_suffix>NNN...NNN<TTTTT....>
         probe_seq = "{a1}{bc}{umi}{pt}".format(
             a1=adapter1_probe_seq,
             bc="N" * args.barcode_length,
             umi="N" * args.umi_length,
-            pt="T" * args.polyt_length,
+            pt="T" * args.polyt_length
         )
-    elif args.kit == "5prime":
+    elif args.kit == KitName.prime5:
         # Compile the actual probe sequence of
         # <adapter1_suffix>NNN...NNN<TTTCTTATATGGG>
         probe_seq = "{a1}{bc}{umi}{tso}".format(
@@ -326,7 +338,8 @@ def align_adapter(args):
             tso="TTTCTTATATGGG",
         )
     else:
-        raise Exception("Invalid kit name! Specify either 3prime or 5prime.")
+        raise Exception(
+            "Invalid kit_name parameter! Specify either 3prime, multiome, or 5prime.")
 
     with AlignmentFile(
             str(args.bam), "rb") as bam_fh, \
@@ -340,8 +353,14 @@ def align_adapter(args):
         for align in bam_fh.fetch(contig=args.contig):
             if align.is_supplementary:
                 continue
-            prefix_seq = align.get_forward_sequence()[: args.window]
-            prefix_qv = align.get_forward_qualities()[: args.window]
+
+            if args.kit in (KitName.prime3, KitName.multiome):
+                # Flip back to barcode orientation (reverse)
+                prefix_seq = rev_cmp(align.get_forward_sequence())[: args.window:]
+                prefix_qv = align.get_forward_qualities()[::-1][: args.window:]
+            else:
+                prefix_seq = align.get_forward_sequence()[: args.window]
+                prefix_qv = align.get_forward_qualities()[: args.window]
 
             p_alignment = parasail.sw_trace(
                 s1=prefix_seq,

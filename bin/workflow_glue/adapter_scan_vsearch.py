@@ -91,7 +91,7 @@ def argparser():
 
 # complement translation table with support for regex punctuation
 complement_trans = str.maketrans(
-    "ACGTWSMKRYBDHVNacgtwsmkrybdhvn", "TGCAWSKMYRVHDBNtgcawskmyrvhdbn"
+    "ACGTacgt", "TGCAtgca"
 )
 
 vsearch_colnames = [
@@ -347,7 +347,7 @@ def write_tables(read_info, output_tsv):
     df_table.to_csv(output_tsv, sep="\t", index=True)
 
 
-def write_stranded_fastq(fastq, read_info, output_fastq, fl_only):
+def write_stranded_fastq(fastq, read_info, output_fastq, kit, fl_only):
     """Write stranded fastq.
 
     Trimmed sub-read segments defined in read_info are written out with the
@@ -376,8 +376,25 @@ def write_stranded_fastq(fastq, read_info, output_fastq, fl_only):
                         subread_seq = entry.sequence[subread["start"]: subread["end"]]
                         subread_quals = entry.quality[subread["start"]: subread["end"]]
 
-                        if subread["orig_strand"] == "-":
-                            # Read in reverse orientation relative to mRNA
+                        if any([
+                            (subread["orig_strand"] == "-" and kit == '5prime'),
+                            (subread["orig_strand"] == '+' and kit in [
+                                '3prime', 'multiome'])
+                        ]):
+                            # Do any necessary stranding
+                            #
+                            # 5prime read structure:
+                            #   adapter-BC-UMI-TSO-cDNA-polyA
+                            # 5 prime kit reads adapters are on the same strand as the
+                            # mRNA, therefore the reads are re-oriented if the original
+                            # strand is '-'
+                            #
+                            # 3prime read structure:
+                            #   adapter-BC-UMI-polyT-cDNA
+                            # For 3prime and multiome kits, the adapters are on the
+                            # opposite strand relative to mRNA sense, so reverse
+                            # complement the read if the original strand is '+'
+                            #
                             # Reverse the config string and reverse
                             # complement the subread
                             rc_config = "-".join(
@@ -413,7 +430,9 @@ def main(args):
     vsearch_results = call_vsearch(
         args.fastq, args.min_adapter_id, adapter_file)
     read_info = parse_vsearch(vsearch_results)
-    write_stranded_fastq(args.fastq, read_info, args.output_fastq, args.keep_fl_only)
+    write_stranded_fastq(
+        args.fastq, read_info, args.output_fastq, args.kit, args.keep_fl_only
+    )
     write_tables(read_info, args.output_tsv)
     logging.debug(f"Writing output table to {args.output_tsv}")
 

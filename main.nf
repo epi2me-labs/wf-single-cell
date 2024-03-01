@@ -344,7 +344,7 @@ workflow {
     pipeline(sample_and_kit_meta, ref_genome_dir, umap_genes, per_read_stats)
 
     output(pipeline.out.results.flatMap({it ->
-        // Convert [meta, file, file, ..] 
+        // Convert [meta, file, file, ..]
         // to      [[meta, file], [meta, file], ...]
         l = [];
             for (i=1; i<it.size(); i++) {

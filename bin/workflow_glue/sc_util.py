@@ -1,4 +1,4 @@
-"""Common code to be used acrosss workflow scripts."""
+"""Common code to be used across workflow scripts."""
 
 kit_adapters = {
     '3prime': {
@@ -14,3 +14,9 @@ kit_adapters = {
         'adapter2': 'GTACTCTGCGTTGATACCACTGCTT'
     }
 }
+
+
+def rev_cmp(seq):
+    """Reverse complement a DNA sequence."""
+    revcomp_map = str.maketrans("ACGTacgt", "TGCAtgca")
+    return seq[::-1].translate(revcomp_map)
