@@ -105,7 +105,9 @@ def test_call_vsearch(adapters, expected_results, segment):
 
 def test_write_stranded_fastq():
     """Test that the  correct stranded and trimmed fastq files are being written."""
-    # Buld a dummy fastq file containing a single reads with two subreads.
+    # Build a dummy fastq file containing a single read with two subreads.
+
+    # This is a 3prime read
     seq = 't' * 10 + 'A' * 100 + 't' * 10 + 'G' * 200
     fastq = (
         f"@read_1\n"
@@ -113,8 +115,8 @@ def test_write_stranded_fastq():
         "+\n"
         f"{'<' * len(seq)}")
 
-    # The config defines the location and orientation of the segment withon the read
-    # This config defines one read contining two subreads.
+    # The config defines the location and orientation of the subreads within the read
+    # This config defines one read containing two subreads.
     config = {
         'read_1': {
             'read_1_0': {
@@ -143,7 +145,7 @@ def test_write_stranded_fastq():
     with open(temp_fq.name, 'w') as fh:
         fh.write(fastq)
 
-    write_stranded_fastq(temp_fq.name, config, temp_fq_out.name, fl_only=True)
+    write_stranded_fastq(temp_fq.name, config, temp_fq_out.name, '3prime', fl_only=True)
 
     results = []
     with pysam.FastxFile(temp_fq_out.name) as fh_res:
@@ -151,7 +153,8 @@ def test_write_stranded_fastq():
             results.append(entry)
     assert len(results) == 2
     assert len(results[0].sequence) == 100
-    assert set(results[0].sequence) == {'A'}
+    # Subread 0 should have been reverse complemented and be all 'T'
+    assert set(results[0].sequence) == {'T'}
     assert len(results[1].sequence) == 200
-    # Result 1 should have been reverse complemented and be all 'C'
-    assert set(results[1].sequence) == {'C'}
+    # Subread 1 should remain unchanged
+    assert set(results[1].sequence) == {'G'}

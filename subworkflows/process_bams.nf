@@ -61,10 +61,10 @@ process generate_whitelist{
         tuple val(meta),
               path("counts")
     output:
-        tuple val(meta), 
+        tuple val(meta),
               path("*whitelist.tsv"), 
               emit: whitelist
-        tuple val(meta), 
+        tuple val(meta),
               path("*kneeplot.png"), 
               emit: kneeplot
     """
@@ -162,14 +162,12 @@ process tag_bams {
               path("${meta.alias}.${chr}.tagged.bam.bai"),
               emit: tagged_bam
     script:
-    def opt_flip = (meta.kit_name != '5prime') ? "--flip": ""
     """
     workflow-glue tag_bam \
         --in_bam align.bam \
         --tags tags.tsv \
         --out_bam ${meta.alias}.${chr}.tagged.bam \
-        --chrom ${chr} \
-        ${opt_flip}
+        --chrom ${chr}
 
     samtools index ${meta.alias}.${chr}.tagged.bam
     """
@@ -249,16 +247,16 @@ process combine_chrom_bams {
     label "singlecell"
     cpus Math.min(8, params.max_threads)
     input:
-        tuple val(meta), 
+        tuple val(meta),
               path(chrom_bams),
               path('chrom.bam.bai')
     output:
-        tuple val(meta), 
+        tuple val(meta),
               path("*tagged.sorted.bam"), 
               path("*tagged.sorted.bam.bai"),
               emit: bam_fully_tagged
     """
-    samtools merge -@ ${task.cpus} -o "${meta.alias}.tagged.sorted.bam" ${chrom_bams}; 
+    samtools merge -@ ${task.cpus} -o "${meta.alias}.tagged.sorted.bam" ${chrom_bams};
     samtools index -@ ${task.cpus} "${meta.alias}.tagged.sorted.bam";
     """
 }
@@ -289,24 +287,13 @@ process stringtie {
               path("reads.fastq"),
               emit: read_tr_map
     script:
-    if (meta.kit_name=="5prime")
     """
-    # Add chromosome label (-l) to generated transcripts 
-    # so we don't get name collisions during file merge later 
+    # Add chromosome label (-l) to generated transcripts
+    # so we don't get name collisions during file merge later
     samtools view -h align.bam ${chr}  \
          | tee >(stringtie -L ${params.stringtie_opts} -p ${task.cpus} -G chr.gtf -l "${chr}.stringtie" \
              -o "${meta.alias}.stringtie.gff" - ) \
          | samtools fastq > reads.fastq
-    # Get transcriptome sequence
-    gffread -g ref_genome.fa -w "${meta.alias}.transcriptome.fa" "${meta.alias}.stringtie.gff"
-    """
-    else
-    """ 
-    # Data from 3prime and multiome kits must be flipped to the transcript strand before building transcriptome.
-    workflow-glue process_bam_for_stringtie align.bam ${chr}  \
-        | tee >(stringtie -L ${params.stringtie_opts} -p ${task.cpus} -G chr.gtf -l "${chr}.stringtie" \
-            -o "${meta.alias}.stringtie.gff" - ) \
-        | samtools fastq > reads.fastq
     # Get transcriptome sequence
     gffread -g ref_genome.fa -w "${meta.alias}.transcriptome.fa" "${meta.alias}.stringtie.gff"
     """
@@ -416,7 +403,7 @@ process construct_expression_matrix {
         tuple val(meta),
               path("read_tags.tsv")
     output:
-        tuple val(meta), 
+        tuple val(meta),
               path("*gene_expression.counts.tsv"),
               path("*transcript_expression.counts.tsv"),
               emit: matrix_counts_tsv
@@ -538,7 +525,7 @@ workflow process_bams {
 
         // Keep only the contigs that are referenced in the gtf
         contigs = chr_gtf
-            .cross(contigs) // -> [[ chr, chr.gtf], [chr, meta]] 
+            .cross(contigs) // -> [[ chr, chr.gtf], [chr, meta]]
             // [meta, chr, chr.gtf]
             .map {chr_gtf, chr_meta -> [chr_meta[1], chr_meta[0], chr_gtf[1]]}
 
@@ -546,7 +533,7 @@ workflow process_bams {
             bam
             .cross(contigs.map {meta, chr, gtf -> [meta, chr]}) // -> [[meta, bam, bai], [meta, chr, chr.gtf]]
             .map{
-                meta_bam_bai, meta_chr -> 
+                meta_bam_bai, meta_chr ->
                 // [meta, bam, bai, chr]
                 [meta_bam_bai[0], meta_bam_bai[1], meta_bam_bai[2], meta_chr[1]]
             },

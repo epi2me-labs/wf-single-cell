@@ -9,6 +9,7 @@ import pytest
 from pytest import fixture
 from workflow_glue.extract_barcode import (
     align_adapter, main, parse_probe_alignment)
+from ..sc_util import rev_cmp  # noqa: ABS101
 
 
 def gene():
@@ -22,13 +23,17 @@ def make_bam(
         read_adapter1='CTACACGACGCTCTTCCGATCT',
         read_barcode='AAACCCAAGAAACACT',
         read_umi='GACTGACTGACT',
-        read_polyt='T'*12):
+        read_polyt='T'*12,
+        rev=False
+):
     """Create a synthetic bam file containing adapter and barcode sequences."""
     # make a bam
     header = """@SQ	SN:chr17	LN:10000000\n"""
 
     read = \
         f'{read_adapter1}{read_barcode}{read_umi}{read_polyt}{gene()}'
+    if rev:
+        read = rev_cmp(read)
 
     # Make a sam file containing the read and a quality qscore of 60.
     sam = (
@@ -98,12 +103,14 @@ def test_main(args):
     tags_file = tempfile.NamedTemporaryFile(
         mode='w', suffix='.tsv')
 
-    args.bam = make_bam(read_adapter1=args.adapter1_seq)
+    args.bam = make_bam(read_adapter1=args.adapter1_seq, rev=True)
 
     args.output_barcode_counts = counts_file.name
     args.output_read_tags = tags_file.name
     main(args)
 
+    # Barcode we expect to find in the input BAM
+    # For 3prime this will be reverse
     expected_barcode = 'AAACCCAAGAAACACT'
 
     counts_result = pd.read_csv(
@@ -137,8 +144,9 @@ def test_align_adapter(args, adapter1_seq, tags_results_shape, counts_results_sh
     """
     tags_file = tempfile.NamedTemporaryFile(
         mode='w', suffix='.tsv')
-    args.bam = make_bam(read_adapter1=adapter1_seq)
+    args.bam = make_bam(read_adapter1=adapter1_seq, rev=True)
     args.output_read_tags = tags_file.name
+    args.kit = '3prime'
     df_counts = align_adapter(args)
     assert df_counts.shape == counts_results_shape
 
@@ -152,9 +160,11 @@ def ascii_decode_qscores(string):
 
 
 @pytest.mark.parametrize(
+    # 3 prime tests
     'query,query_aln,query_ascii_q,expected_adapter1_ed',
     [
-        # Adapter 1             BC                UMI          polyT
+
+        # polyA             UMI(rev)     BC(rev)      Read1 (rev)
 
         # 100% match of the query adapter1 and the 10bp adapter1 prefix in the ref probe
         ["CTACACGACGCTCTTCCGATCT AAACCCAAGAAACACT GACTGACTGACT TTTTTTTTTTTT",
@@ -175,13 +185,12 @@ def ascii_decode_qscores(string):
          2],
 
     ]
-
 )
 def test_parse_probe_alignment(query, query_aln, query_ascii_q, expected_adapter1_ed):
     """Test_parse_probe_alignment.
 
-    In this test a mocked parasail alignment is created. We want to test that the
-    correct barcode, UMI and asscoatated quality scores are extracted from the
+    In this test, a mocked parasail alignment is created. We want to test that the
+    correct barcode, UMI and associated quality scores are extracted from the
     query.
 
     :param query: read query
@@ -203,6 +212,7 @@ def test_parse_probe_alignment(query, query_aln, query_ascii_q, expected_adapter
     qual_ints = ascii_decode_qscores(query_ascii_q)
 
     # The parasail reference alignment. Contains only the 10 bp suffix of the adapter1
+    # For 3prime kit
     ref_align = (
         # 10 bp A1  Ns for BC        Ns for UMI   PolyT
         "CTTCCGATCT NNNNNNNNNNNNNNNN NNNNNNNNNNNN TTTTTTTTTTTT"
@@ -212,7 +222,7 @@ def test_parse_probe_alignment(query, query_aln, query_ascii_q, expected_adapter
     p_alignment.traceback.query = query_aln
     p_alignment.traceback.ref = ref_align
 
-    adapter1_probe_suffix = 'CTTCCGATCT'
+    adapter1_probe_suffix = 'CTTCCGATCT'  # Forward seq
 
     (
         adapter1_editdist, barcode_result, umi_result,

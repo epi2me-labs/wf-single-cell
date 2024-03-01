@@ -38,15 +38,10 @@ def argparser():
         help="Chromosome name",
         required=True
     )
-    parser.add_argument(
-        "--flip",
-        help="Reverse the seq by toggling the SAM flag",
-        action='store_true'
-    )
     return parser
 
 
-def add_tags(tags_file, in_bam, out_bam, chrom, rev):
+def add_tags(tags_file, in_bam, out_bam, chrom):
     """Add all the required tags to the BAM file."""
     dtypes = {
         # Read id and quality strings are not expected to be unique. The other columns
@@ -93,15 +88,9 @@ def add_tags(tags_file, in_bam, out_bam, chrom, rev):
                 # Annotated transcript name = TR:Z
                 align.set_tag("TR", row['transcript'], value_type="Z")
 
-                # Up to this point in the workflow the alignments are in reverse
-                # orientation in relation to the mRNA for 31 and multiome kits.
-                # Optionally reverse the orientation for the output BAMs.
-                if rev:
-                    align.flag ^= 16  # reverse read alignment flag
-
                 bam_out.write(align)
 
 
 def main(args):
     """Entry point."""
-    add_tags(args.tags, args.in_bam, args.out_bam, args.chrom, args.flip)
+    add_tags(args.tags, args.in_bam, args.out_bam, args.chrom)
