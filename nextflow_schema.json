@@ -239,7 +239,7 @@
                 "umap_n_repeats": {
                     "type": "integer",
                     "title": "Number of UMAP repetitions",
-                    "default": 6,
+                    "default": 3,
                     "description": "Number of UMAP projection to repeat for each dataset.",
                     "help_text": "The UMAP algorithm contains elements of randomness that can mislead users into seeing associations between cells that are not meaningful. It is recommended to view multiple plots generated with the same parameters and check that any observed structure is consistent across runs."
                 },

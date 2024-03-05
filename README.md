@@ -177,7 +177,7 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 | adapter_scan_chunk_size | integer | Chunk size for adapter scanning step. | Set the number of reads per chunk to process in the adapter_scan stage. If set to 0 (the default), the input reads will be split into one chunk per threads provided with `max_threads`. | 0 |
 | process_chunk_size | integer | Control the size of chunks for processing of data. | Several steps process the data into chunks of n reads/alignments. Use a smaller number to reduce peak memory use. | 100000 |
 | mito_prefix | string | Gene name prefix to identify for mitochondrial genes. | Parts of the workflow analyse mitochondrial genes separately. These genes are identified by searching for a gene name prefix. Human mitochondrial genes can be identified with prefix 'MT-' and mouse genes with prefix 'mt-'. If the reference genome contains data from multiple organisms with different nomenclature, multiple prefixes can be supplied like so: 'MT-,mt-' | MT- |
-| umap_n_repeats | integer | Number of UMAP projection to repeat for each dataset. | The UMAP algorithm contains elements of randomness that can mislead users into seeing associations between cells that are not meaningful. It is recommended to view multiple plots generated with the same parameters and check that any observed structure is consistent across runs. | 6 |
+| umap_n_repeats | integer | Number of UMAP projection to repeat for each dataset. | The UMAP algorithm contains elements of randomness that can mislead users into seeing associations between cells that are not meaningful. It is recommended to view multiple plots generated with the same parameters and check that any observed structure is consistent across runs. | 3 |
 | stringtie_opts | string | StringTie options for transcriptome assembly. | StringTie option string can be supplied at the command line as in this example: `--stringtie_opts="-c 5 -m 100 "`. StringTie options can be found here: http://ccb.jhu.edu/software/stringtie/index.shtml?t=manual. The default option (-c 2) ensures that only transcripts with a coverage of 2 or higher are included in the generated transcriptome | -c 2 |
 
 
@@ -443,7 +443,7 @@ Several UMAP plots are created:
 
 The UMAP algorithm is stochastic, therefore analysing the same data multiple times, using identical parameters, can lead to visually different projections. 
 In order to have some confidence in the observed results, it can be useful to run the projection multiple times.
-The number of repeated projections can be set with `umap_n_repeats` (default 6)
+The number of repeated projections can be set with `umap_n_repeats` (default 3)
 
 
 
