@@ -450,6 +450,11 @@ process process_expression_matrix {
 process umap_reduce_expression_matrix {
     label "singlecell"
     cpus 1
+    // Most runs will use less than 10GB memory, but large numbers of cells (above 15K)
+    // nan lead to memory usage over 20GB. Max here is 32GB 
+    memory { 8.GB * task.attempt }
+    maxRetries 4
+    errorStrategy {task.exitStatus in [137,140] ? 'retry' : 'terminate'}
     input:
         tuple val(repeat_num),
               val(meta),

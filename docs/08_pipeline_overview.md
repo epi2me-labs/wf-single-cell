@@ -218,6 +218,6 @@ Several UMAP plots are created:
 
 The UMAP algorithm is stochastic, therefore analysing the same data multiple times, using identical parameters, can lead to visually different projections. 
 In order to have some confidence in the observed results, it can be useful to run the projection multiple times.
-The number of repeated projections can be set with `umap_n_repeats` (default 6)
+The number of repeated projections can be set with `umap_n_repeats` (default 3)
 
 

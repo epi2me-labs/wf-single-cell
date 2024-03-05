@@ -7,8 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - `full_length_only` parameter to process only full length reads (default: true).
+- Memory directive for umap process to prevent parallel processes from using too much memory.
 ### Changed
-- Orient 3prime/multiome reads to mRNA sense to avoid need to flip later. 
+- Orient 3prime/multiome reads to mRNA sense to avoid need to flip later.
+- Default `umap_n_repeats` lowered to 3.
 
 ## [v1.0.3]
 ### Added
