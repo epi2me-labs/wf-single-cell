@@ -102,6 +102,34 @@ process makeReport {
 }
 
 
+process mergeTags {
+    /*
+    Merge a subset of columns from the bam info and extracted barcode TSVs
+    To give a TSV with the following columns
+        [read_id, CR, CY, UR, UY, start, end, chr, mapq]
+    */
+    label "wf_common"
+    input:
+        tuple val(meta),
+              path('extracted_barcodes/*bcs.tsv'),
+              path('bam_info.tsv')
+
+    output:
+        tuple val(meta),
+              path("chr_tags/*")
+    """
+    mkdir chr_tags
+    csvtk cut -tf Read,Pos,EndPos,Ref,MapQual bam_info.tsv > bam_info_cut.tsv
+    csvtk concat -t extracted_barcodes/* > barcodes.tsv
+    # Left join of barcode
+    csvtk join -tf 1 bam_info_cut.tsv barcodes.tsv --left-join \
+        | csvtk rename -t -f Pos,EndPos,Ref,MapQual -n start,end,chr,mapq \
+        | csvtk split -tf chr -o chr_tags
+    # Strip appended source filename ("stdin-"") from the split TSVs
+    for file in chr_tags/*; do mv "\${file}" "\${file//stdin-//}"; done
+    """
+}
+
 
 // See https://github.com/nextflow-io/nextflow/issues/1636
 // This is the only way to publish files from a workflow whilst
@@ -247,21 +275,36 @@ workflow pipeline {
         bc_longlist_dir = file("${projectDir}/data", checkIfExists: true)
         chunkReads(meta)
 
-        stranding(chunkReads.out.fastq_chunks)
+        stranding(
+            chunkReads.out.fastq_chunks,
+            bc_longlist_dir)
 
         align(
-            stranding.out.stranded_fq,
+            // Group by meta 
+            stranding.out.stranded_trimmed_fq.groupTuple(),
             ref_genome_fasta,
             ref_genome_idx,
             ref_genes_gtf)
 
+        barcodes = mergeTags(
+            // Group by meta
+            stranding.out.extracted_barcodes.groupTuple()
+            .join(align.out.bam_info))
+            .flatMap {meta, files ->
+            chroms = [];
+            for (i=0; i<files.size(); i++) {
+                chroms.add(tuple(meta, files[i], files[i].baseName))
+            }
+            chroms
+        }
+
         process_bams(
             align.out.bam_sort,
+            barcodes,
             ref_genes_gtf,
             bc_longlist_dir,
             ref_genome_fasta,
             ref_genome_idx)
-
 
         prepare_report_data(
             process_bams.out.final_read_tags

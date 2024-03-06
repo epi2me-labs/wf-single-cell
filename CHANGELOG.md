@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [v1.1.0]
 ### Added
 - `full_length_only` parameter to process only full length reads (default: true).
+- Trim adapters, barcodes and UMIs from reads before alignment.
 - Memory directive for umap process to prevent parallel processes from using too much memory.
 ### Changed
 - Orient 3prime/multiome reads to mRNA sense to avoid need to flip later.
