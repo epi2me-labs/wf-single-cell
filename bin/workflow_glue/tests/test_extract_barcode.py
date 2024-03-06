@@ -1,6 +1,4 @@
 """Test adapter_scan_vsearch."""
-
-import subprocess as sub
 import tempfile
 from unittest.mock import Mock
 
@@ -19,40 +17,33 @@ def gene():
         "ATCGCGCACGGGACTACTCATTGGGACTGCGGCAATAGGGGAGGGGCCTAACAACGTT")
 
 
-def make_bam(
+def make_fastq(
         read_adapter1='CTACACGACGCTCTTCCGATCT',
         read_barcode='AAACCCAAGAAACACT',
         read_umi='GACTGACTGACT',
         read_polyt='T'*12,
-        rev=False
-):
-    """Create a synthetic bam file containing adapter and barcode sequences."""
-    # make a bam
-    header = """@SQ	SN:chr17	LN:10000000\n"""
-
+        rev=True):
+    """Create a synthetic fastq file containing adapter and barcode sequences."""
     read = \
         f'{read_adapter1}{read_barcode}{read_umi}{read_polyt}{gene()}'
     if rev:
         read = rev_cmp(read)
 
-    # Make a sam file containing the read and a quality qscore of 60.
-    sam = (
-        f'{header}'
-        f"test_id\t0\tchr17\t1\t60\t{len(read)}M\t*\t0\t0\t"
-        f"{read}\t{'?' * len(read)}"
+    # Make a FASTQ file containing the read and a quality score of 60.
+    fastq = (
+        '@test_id\n'
+        f"{read}\n"
+        '+\n'
+        f"{'?' * len(read)}\n"
     )
 
-    # Write out a test BAM
+    # Write out a test FASTQ
     with tempfile.NamedTemporaryFile(
-            mode='w', suffix='.sam', delete=False) as fh_sam:
-        fh_sam.write(sam)
-        sam_file = fh_sam.name
+            mode='w', suffix='.fastq', delete=False) as fh_fq:
+        fh_fq.write(fastq)
+        fq_fn = fh_fq.name
 
-    bam = 'test.bam'
-    sub.check_output(['samtools', 'view', sam_file, '-o', bam])
-    sub.check_output(['samtools', 'index', bam])
-
-    return bam
+    return fq_fn
 
 
 @fixture
@@ -74,7 +65,7 @@ def args(make_superlist):
     """Mock Args with workflow defaults set."""
     class Args:
         contig = 'chr17'
-        bam = make_bam
+        fastq = make_fastq()
         match = 5
         mismatch = -1
         acg_to_n_match = 1
@@ -98,15 +89,18 @@ def args(make_superlist):
 
 def test_main(args):
     """Test the final output from main()."""
+    # Make temp files to store the output
     counts_file = tempfile.NamedTemporaryFile(
-            mode='w', suffix='.tsv')
+        mode='w', suffix='.tsv')
     tags_file = tempfile.NamedTemporaryFile(
         mode='w', suffix='.tsv')
+    trimmed_fastq_file = tempfile.NamedTemporaryFile(
+        mode='w', suffix='.tsv')
 
-    args.bam = make_bam(read_adapter1=args.adapter1_seq, rev=True)
-
+    args.fastq = make_fastq(read_adapter1=args.adapter1_seq, rev=True)
     args.output_barcode_counts = counts_file.name
     args.output_read_tags = tags_file.name
+    args.output_trimmed_fastq = trimmed_fastq_file.name
     main(args)
 
     # Barcode we expect to find in the input BAM
@@ -121,7 +115,8 @@ def test_main(args):
 
     tags_result = pd.read_csv(tags_file.name, sep='\t', index_col=0)
 
-    assert tags_result.shape == (1, 8)
+    # Check we have correct number of rows returned # read_id(index), CR, CY, UR, UY
+    assert tags_result.shape == (1, 4)
     assert tags_result.loc['test_id', 'CR'] == 'AAACCCAAGAAACACT'
     assert tags_result.loc['test_id', 'UR'] == 'GACTGACTGACT'
 
@@ -131,9 +126,11 @@ def test_main(args):
 @pytest.mark.parametrize(
     'adapter1_seq,tags_results_shape,counts_results_shape',
     [
-        ['CTACACGACGCTCTTCCGATCT', (1, 9), (1, 1)],  # ED 0
-        ['CTACACGACGCTCTTCCGAggg', (1, 9), (1, 1)],  # ED 3
-        ['CTACACGACGCTCTTCCGgggg', (0, 9), (0, 1)]   # ED 4; no results
+        # Tags files should have 5 columns (read_id, CR, CY, UR, UY) ,
+        # counts results should have one column (count) with read_id index
+        ['CTACACGACGCTCTTCCGATCT', (1, 5), (1, 1)],  # ED 0
+        ['CTACACGACGCTCTTCCGAggg', (1, 5), (1, 1)],  # ED 3
+        ['CTACACGACGCTCTTCCGgggg', (0, 5), (0, 1)]   # ED 4; no results
     ]
 )
 def test_align_adapter(args, adapter1_seq, tags_results_shape, counts_results_shape):
@@ -144,9 +141,12 @@ def test_align_adapter(args, adapter1_seq, tags_results_shape, counts_results_sh
     """
     tags_file = tempfile.NamedTemporaryFile(
         mode='w', suffix='.tsv')
-    args.bam = make_bam(read_adapter1=adapter1_seq, rev=True)
+    trimmed_fastq_file = tempfile.NamedTemporaryFile(
+        mode='w', suffix='.tsv')
+    args.fastq = make_fastq(read_adapter1=adapter1_seq, rev=True)
     args.output_read_tags = tags_file.name
     args.kit = '3prime'
+    args.output_trimmed_fastq = trimmed_fastq_file.name
     df_counts = align_adapter(args)
     assert df_counts.shape == counts_results_shape
 
@@ -159,12 +159,16 @@ def ascii_decode_qscores(string):
     return list(map(lambda x: ord(x) - 33, string))
 
 
+def ascii_encode_qscores(integers):
+    """Convert integer quality values into ASCII characters."""
+    return "".join(map(lambda x: chr(x + 33), integers))
+
+
 @pytest.mark.parametrize(
     # 3 prime tests
     'query,query_aln,query_ascii_q,expected_adapter1_ed',
     [
-
-        # polyA             UMI(rev)     BC(rev)      Read1 (rev)
+        # Adapter 1             BC                UMI          polyT
 
         # 100% match of the query adapter1 and the 10bp adapter1 prefix in the ref probe
         ["CTACACGACGCTCTTCCGATCT AAACCCAAGAAACACT GACTGACTGACT TTTTTTTTTTTT",
@@ -230,6 +234,10 @@ def test_parse_probe_alignment(query, query_aln, query_ascii_q, expected_adapter
     ) = parse_probe_alignment(
         p_alignment, adapter1_probe_suffix,
         16, 12, qual_ints, query)
+
+    # convert the return qscores to ascii-encoded values
+    bc_qscores = ascii_encode_qscores(bc_qscores)
+    umi_qscores = ascii_encode_qscores(umi_qscores)
 
     assert adapter1_editdist == expected_adapter1_ed
     assert barcode_result == barcode

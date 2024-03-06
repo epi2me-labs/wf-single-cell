@@ -265,7 +265,7 @@ The following table details the various configurations and the actions taken for
 
 | configuration   | action                                                    |
 |-----------------|-----------------------------------------------------------|
-| Full length     | Reads are trimmed from each side and oriented             |
+| Full length     | Reads are trimmed from each side and oriented and adapter2 is removed           |
 | Single adapter1 | Reads are oriented and trimmed from adapter1 end only     |
 | Single adapter2 | Reads are oriented and trimmed from the adapter2 end only |
 | double adapter1 | Reads are trimmed from both sides                         |
@@ -277,15 +277,8 @@ Adapter configuration summaries can be found in the output file  `{{ alias }}/{{
 To only process full length reads the option `--full_length_only` should be set to true (default: true). 
 If set to false, reads with only a single adapter or other non-full-length adapter configurations will also be processed.
 
-### 3. Aligning reads to genome
-The next stage is to align the preprocessed reads to the reference genome. This enables gene and transcript
-read assignment in downstream steps.
 
-The stranded fastq reads are mapped to the reference genome using minimap2.  
-The parameter `resources_mm2_max_threads int` controls the threads given to an alignment process.
-Other optional parameters can be supplied to minimap2 using `resources_mm2_flags` (for example `--resources_mm2_flags="-I 16GB"`).
-
-### 4. Extract cell barcodes and UMIs
+### 3. Extract cell barcodes and UMIs
 The next step is to extract 10x Genomics barcodes and UMI sequences from the stranded and trimmed reads.
 
 In order to do this, the first 100bp of each read are aligned to a reference probe using [parasail](https://github.com/jeffdaily/parasail). This probe contains a suffix of the adapter1 sequence, some ambiguities ("Ns") representing the barcode and UMI, and a polyT tract.
@@ -311,6 +304,19 @@ following table.
 
 Workflow options:
 - The size of the adapter1 suffix can be specified with: `barcode_adapter1_suff_length`
+
+Once the barcode and UMI has been extracted, these are then trimmed from the reads along
+with the adapter1 sequence. These trimmed reads are then used in the alignment step.
+
+### 4. Aligning reads to genome
+The next stage is to align the preprocessed reads to the reference genome. This enables gene and transcript
+read assignment in downstream steps.
+
+The stranded and trimmed FASTQ reads are mapped to the reference genome using minimap2.  
+The parameter `resources_mm2_max_threads int` controls the threads given to an alignment process.
+Other optional parameters can be supplied to minimap2 using `resources_mm2_flags` (for example `--resources_mm2_flags="-I 16GB"`).
+
+
 
 ### 5. Barcode correction
 The aim of this stage is to correct errors present in the previously extracted barcodes.

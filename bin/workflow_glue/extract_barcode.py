@@ -7,7 +7,7 @@ from pathlib import Path
 import editdistance as ed
 import pandas as pd
 import parasail
-from pysam import AlignmentFile
+from pysam import FastxFile
 
 from .sc_util import kit_adapters, rev_cmp  # noqa: ABS101
 from .util import get_named_logger, wf_parser  # noqa: ABS101
@@ -33,15 +33,9 @@ def argparser():
 
     # Positional mandatory arguments
     parser.add_argument(
-        "bam",
-        help="Sorted BAM file of stranded sequencing \
-            reads aligned to a reference",
+        "fastq",
+        help="fastq_input",
         type=Path,
-    )
-
-    parser.add_argument(
-        "--contig",
-        help="Contig/chromosome to process",
     )
 
     parser.add_argument(
@@ -177,14 +171,17 @@ def argparser():
 
     parser.add_argument(
         "--output_read_tags",
-        help="Output TSV file with read_ids and associated tags",
-        type=Path
+        help="Output TSV file with read_ids and associated tags"
     )
 
     parser.add_argument(
         "--output_barcode_counts",
-        help="Output TSV file containing high-quality barcode counts",
-        type=Path
+        help="Output TSV file containing high-quality barcode counts"
+    )
+
+    parser.add_argument(
+        "--output_trimmed_fastq",
+        help="Output path for trimmed fastq"
     )
 
     return parser
@@ -273,10 +270,6 @@ def parse_probe_alignment(
         adapter1 = query_alignment[0:bc_start_pos]
         adapter1_ed = ed.eval(adapter1, adapter1_probe_seq)
 
-        # Extract the corresponding positions from both the query sequence
-        # and qscores (prefix_qual)
-        ascii_q = ascii_encode_qscores(prefix_qual)
-
         barcode = query_alignment[bc_start_pos: bc_start_pos + barcode_length]
         umi = query_alignment[
             bc_start_pos + barcode_length: bc_start_pos + barcode_length + umi_length]
@@ -284,12 +277,12 @@ def parse_probe_alignment(
         barcode_no_ins = barcode.replace("-", "")
         prefix_seq_bc_start = prefix_seq.find(barcode_no_ins)
         prefix_seq_bc_end = prefix_seq_bc_start + len(barcode_no_ins)
-        bc_q_ascii = ascii_q[prefix_seq_bc_start:prefix_seq_bc_end]
+        bc_q_ascii = prefix_qual[prefix_seq_bc_start:prefix_seq_bc_end]
 
         umi_no_ins = umi.replace("-", "")
         prefix_seq_umi_start = prefix_seq.find(umi_no_ins)
         prefix_seq_umi_end = prefix_seq_umi_start + len(umi_no_ins)
-        umi_q_ascii = ascii_q[prefix_seq_umi_start:prefix_seq_umi_end]
+        umi_q_ascii = prefix_qual[prefix_seq_umi_start:prefix_seq_umi_end]
 
     else:
         # No Ns in the probe successfully aligned -- we will ignore this read
@@ -299,13 +292,36 @@ def parse_probe_alignment(
         bc_q_ascii = ""
         umi_q_ascii = ""
 
-    return adapter1_ed, barcode_no_ins, umi_no_ins, bc_q_ascii, umi_q_ascii
+    return (
+        adapter1_ed, barcode_no_ins, umi_no_ins,
+        bc_q_ascii, umi_q_ascii
+    )
+
+
+def write_trimmed_fastq(read, trim_pos, trim_side, fout):
+    """Trim and write fastq.
+
+    Now that the barcodes, UMIs and have been extracted, they can be trimmed away
+    along with adapter1.
+
+    :param read: The pysam.Fastx read to write
+    :param trim_pos: The left index position to trim up to.
+    :param fout: The output file handle
+    """
+    if trim_side == 'right':
+        read.sequence = read.sequence[:-trim_pos]
+        read.quality = read.quality[:-trim_pos]
+    else:
+        read.sequence = read.sequence[trim_pos:]
+        read.quality = read.quality[trim_pos:]
+    fout.write(str(read) + '\n')
 
 
 def align_adapter(args):
-    """Align a single adapter template to read and compute identity.
+    """
+    Align a single adapter template to read and compute identity.
 
-    :param bam_path: BAM file
+    :param fastq: FASTQ file
     :param chrom: Chromosome/contig to process
     :param: matrix: custom parasail alignment matrix
     :returns: tuple containing two DataFrames
@@ -313,6 +329,7 @@ def align_adapter(args):
         -  Index: barcode, Columns: count
     """
     # Build align matrix and define the probe sequence for alignments
+    # Note: once CW-2853 is done, the 3prime reads will need flipping
     matrix = update_matrix(
         args.match, args.mismatch, args.acg_to_n_match, args.t_to_n_match)
 
@@ -335,32 +352,31 @@ def align_adapter(args):
             a1=adapter1_probe_seq,
             bc="N" * args.barcode_length,
             umi="N" * args.umi_length,
-            tso="TTTCTTATATGGG",
+            tso="TTTCTTATATGGG"
         )
     else:
         raise Exception(
             "Invalid kit_name parameter! Specify either 3prime, multiome, or 5prime.")
 
-    with AlignmentFile(
-            str(args.bam), "rb") as bam_fh, \
-            open(args.output_read_tags, 'w') as tags_fh:
+    with FastxFile(
+            str(args.fastq), "rb") as fastq_fh, \
+            open(args.output_read_tags, 'w') as tags_fh, \
+            open(args.output_trimmed_fastq, 'w') as fq_fh:
 
         # Write the header
-        tags_fh.write("read_id\tCR\tCY\tUR\tUY\tchr\tstart\tend\tmapq\n")
+        tags_fh.write("read_id\tCR\tCY\tUR\tUY\n")
 
         barcode_counts = collections.Counter()
 
-        for align in bam_fh.fetch(contig=args.contig):
-            if align.is_supplementary:
-                continue
+        for read in fastq_fh:
 
             if args.kit in (KitName.prime3, KitName.multiome):
                 # Flip back to barcode orientation (reverse)
-                prefix_seq = rev_cmp(align.get_forward_sequence())[: args.window:]
-                prefix_qv = align.get_forward_qualities()[::-1][: args.window:]
+                prefix_seq = rev_cmp(read.sequence)[: args.window]
+                prefix_qv = read.quality[::-1][: args.window:]
             else:
-                prefix_seq = align.get_forward_sequence()[: args.window]
-                prefix_qv = align.get_forward_qualities()[: args.window]
+                prefix_seq = read.sequence[: args.window]
+                prefix_qv = read.quality[: args.window]
 
             p_alignment = parasail.sw_trace(
                 s1=prefix_seq,
@@ -383,15 +399,30 @@ def align_adapter(args):
                 bc_min_qv = min(ascii_decode_qscores(bc_qscores))
                 if bc_min_qv >= args.min_barcode_qv:
                     barcode_counts[barcode] += 1
-                    # nh: I think if we are not including a barcode in the
-                    # count due to low min qual, then we should also be
-                    # ommiting from the records
                 tags_fh.write('\t'.join([
-                    align.query_name, barcode, bc_qscores,
-                    umi, umi_qscores, args.contig,
-                    str(align.get_reference_positions()[0]),
-                    str(align.get_reference_positions()[-1]),
-                    str(align.mapping_quality)]) + '\n')
+                    read.name, barcode, bc_qscores,
+                    umi, umi_qscores]) + '\n')
+                # For full length reads, adapter2 already trimmed.
+                # Now the barcode and UMI have been extracted, these along with adapter1
+                # can be removed.
+                if args.kit in (KitName.prime3, KitName.multiome):
+                    # The reads will be cDNA-polyA-UMI-BC-Adapter1,
+                    # so to trim from right
+                    trim_side = 'right'
+                    trim_pos = p_alignment.end_query - 1
+                    trim_pos -= args.polyt_length
+                else:
+                    # 5prime kit
+                    # The reads will be adatper1-BC-UMI-TSO-cDNA-polyT,
+                    # so trim from left
+                    trim_side = 'left'
+                    trim_pos = p_alignment.end_query
+
+                write_trimmed_fastq(
+                    read,
+                    trim_pos,
+                    trim_side,
+                    fq_fh)
 
     bc_counts = pd.DataFrame.from_dict(
         barcode_counts,
@@ -406,7 +437,7 @@ def main(args):
     args.adapter1_seq = kit_adapters[args.kit]['adapter1']
     wl = pd.read_csv(args.superlist, header=None).iloc[:, 0].values
 
-    logger.info(f"Extracting uncorrected barcodes from {args.bam}")
+    logger.info(f"Extracting uncorrected barcodes from {args.fastq}")
 
     barcode_counts = align_adapter(args)
 

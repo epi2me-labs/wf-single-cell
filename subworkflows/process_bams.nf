@@ -19,47 +19,13 @@ process get_contigs {
     """
 }
 
-process extract_barcodes{
-    label "singlecell"
-    cpus 2
-    memory "1.5 GB"
-    input:
-        tuple val(meta),
-              path("sort.bam"),
-              path("sort.bam.bai"),
-              val(chrom)
-        path "bc_longlist_dir"
-
-    output:
-        tuple val(meta),
-              path("*.bc_extract.sorted.tsv"),
-              val(chrom),
-              emit: bc_uncorr_tsv
-        tuple val(meta),
-              // Group on alias not not meta to enable collectFile to work on this channel
-              path("*.uncorrected_bc_counts.tsv"), emit: barcode_counts
-
-    """
-    workflow-glue extract_barcode \
-    sort.bam bc_longlist_dir/${meta['bc_long_list']}\
-    -t $task.cpus \
-    --kit ${meta['kit_name']} \
-    --adapter1_suff_length $params.barcode_adapter1_suff_length \
-    --min_barcode_qv $params.barcode_min_quality \
-    --barcode_length ${meta['barcode_length']} \
-    --umi_length ${meta['umi_length']} \
-    --output_read_tags "${meta.alias}.bc_extract.sorted.tsv" \
-    --output_barcode_counts "${meta.alias}.${chrom}.uncorrected_bc_counts.tsv" \
-    --contig ${chrom}
-    """
-}
-
 process generate_whitelist{
     label "singlecell"
     cpus 1
     input:
         tuple val(meta),
-              path("counts")
+              path("barcodes/?_barcode.tsv")
+        path("barcode_longlist_dir")
     output:
         tuple val(meta),
               path("*whitelist.tsv"), 
@@ -67,12 +33,17 @@ process generate_whitelist{
         tuple val(meta),
               path("*kneeplot.png"), 
               emit: kneeplot
+        tuple val(meta),
+              path("${meta.alias}.uncorrected_bc_counts.tsv"), 
+              emit: uncorrected_bc_counts
     """
     workflow-glue knee_plot \
-        counts \
+        --barcodes_dir barcodes/ \
+        --long_list "barcode_longlist_dir/${meta['bc_long_list']}" \
         --exp_cells ${meta['expected_cells']} \
         --output_whitelist "${meta.alias}.whitelist.tsv" \
-        --output_plot "${meta.alias}.kneeplot.png"
+        --output_plot "${meta.alias}.kneeplot.png" \
+        --output_uncorrected_barcodes "${meta.alias}.uncorrected_bc_counts.tsv"
     """
 }
 
@@ -203,41 +174,6 @@ process combine_final_tag_files {
               path("${meta.alias}.read_tags.tsv")
     """
     awk 'FNR>1 || NR==1' *.tsv > "${meta.alias}.read_tags.tsv"
-    """
-}
-
-process combine_uncorrect_bcs {
-    label "singlecell"
-    cpus 1
-    input:
-        tuple val(meta),
-              path("uncorrected_bcs*.tsv")
-    output:
-        tuple val(meta),
-              path("${meta.alias}.uncorrected_bc_counts.tsv")
-    shell:
-    """
-    #!/usr/bin/env python
-    import pandas as pd
-    from pathlib import Path
-
-    # Combine all the uncorrected barcode counts files for all chromsomes.
-    # Sum the counts per barcode to get uncorrected barcode counts for the whole sample.
-    # Write output to a TSV file.
-    cwd = Path()
-    all_files = cwd.glob("*.tsv")
-    dfs = []
-    for fn in all_files:
-        try:
-            dfs.append(pd.read_csv(str(fn), sep='\t', index_col=0, header=None))
-        except pd.errors.EmptyDataError:
-            continue
-    if len(dfs) < 1:
-        raise ValueError('No uncorrected barcode counts')
-    df = pd.concat(dfs).reset_index()
-    df.columns = ['barcode', 'count']
-    df_final = df.groupby('barcode').sum().sort_values('count', ascending=False)
-    df_final.to_csv("${meta.alias}.uncorrected_bc_counts.tsv", sep='\t')
     """
 }
 
@@ -511,11 +447,11 @@ process pack_images {
 workflow process_bams {
     take:
         bam
+        extracted_barcodes
         gtf
         bc_longlist_dir
         ref_genome_fasta
         ref_genome_idx
-   
     main:
         chr_gtf = split_gtf_by_chroms(gtf)
             .flatten()
@@ -534,36 +470,14 @@ workflow process_bams {
             // [meta, chr, chr.gtf]
             .map {chr_gtf, chr_meta -> [chr_meta[1], chr_meta[0], chr_gtf[1]]}
 
-        extract_barcodes(
-            bam
-            .cross(contigs.map {meta, chr, gtf -> [meta, chr]}) // -> [[meta, bam, bai], [meta, chr, chr.gtf]]
-            .map{
-                meta_bam_bai, meta_chr ->
-                // [meta, bam, bai, chr]
-                [meta_bam_bai[0], meta_bam_bai[1], meta_bam_bai[2], meta_chr[1]]
-            },
+        generate_whitelist(
+            extracted_barcodes.groupTuple()
+                .map{meta, tags, chr -> [meta, tags]},
             bc_longlist_dir)
 
-        un_corr_bcs = combine_uncorrect_bcs(
-            extract_barcodes.out.barcode_counts
-            .groupTuple())
-
-        alias_to_meta = extract_barcodes.out.barcode_counts
-            .map {meta, _ -> [meta.alias, meta]}.unique()
-
-        generate_whitelist(
-            extract_barcodes.out.barcode_counts
-            // Collect file on [meta.alias, counts_file]
-            .map {meta, counts -> [meta.alias, counts]}
-            .collectFile()
-            // Get alias from result of collectFile
-            .map {it -> tuple(it.getSimpleName(), it)}
-            // Merge meta back
-            .join(alias_to_meta).map {alias, counts, meta -> [meta, counts]})
-
        assign_barcodes(
-            generate_whitelist.out.whitelist
-            .cross(extract_barcodes.out.bc_uncorr_tsv)
+             generate_whitelist.out.whitelist
+            .cross(extracted_barcodes)
             .map {it -> it.flatten()[0, 1, 3, 4]})
 
         stringtie(
@@ -655,13 +569,13 @@ workflow process_bams {
             .join(proc_expresion_out)
             .join(process_expression_matrix.out.mito_expression_tsv)
             .join(generate_whitelist.out.whitelist)
+            .join(generate_whitelist.out.uncorrected_bc_counts)
             .join(generate_whitelist.out.kneeplot)
             .join(tagged_bams)
-            .join(combine_uncorrect_bcs.out)
             .join(pack_images.out)
             .join(merge_transcriptome.out)
             .map{it -> it.flatten()}
-        
+
         // Emit sperately for use in the report
         final_read_tags = final_read_tags
         plots = pack_images.out.collect{it -> it[1]}.collect()

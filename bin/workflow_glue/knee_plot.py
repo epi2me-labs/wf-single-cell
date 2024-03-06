@@ -2,6 +2,7 @@
 """Knee plot."""
 from collections import Counter
 import operator
+from pathlib import Path
 import sys
 
 import matplotlib.pyplot as plt
@@ -18,14 +19,16 @@ def argparser():
     """Create argument parser."""
     parser = wf_parser("knee_plot")
 
-    # Positional mandatory arguments
     parser.add_argument(
-        "barcodes",
-        help="TSV file containing counts for uncorrected barcodes that are \
-            present in the barcode superlist.",
+        "--barcodes_dir",
+        help="Directory of TSV tag files.",
     )
 
-    # Optional arguments
+    parser.add_argument(
+        "--long_list",
+        help="Path to 10x whitelist list (long list).",
+    )
+
     parser.add_argument(
         "--knee_method",
         help="Method (quantile/distance/density) to use for calculating \
@@ -76,6 +79,11 @@ def argparser():
         "--output_whitelist",
         help="Barcode whitelist filename [ont_barcodes.tsv]",
         default="ont_barcodes.tsv",
+    )
+
+    parser.add_argument(
+        "--output_uncorrected_barcodes",
+        help="path to store list of uncorrected, high quality barcodes"
     )
 
     parser.add_argument(
@@ -240,16 +248,6 @@ def get_knee_estimate_density(
     return final_barcodes, threshold
 
 
-def get_barcode_counts(barcodes):
-    """Get barcode counts."""
-    dft = pd.read_csv(
-        barcodes, sep='\t', names=['bc', 'count']).reset_index(drop=True)
-    dft.set_index('bc', drop=True, inplace=True)
-    gb = dft.groupby('bc').sum()
-    barcode_counts = gb['count'].to_dict()
-    return barcode_counts
-
-
 def apply_bc_cutoff(ont_bc_sorted, idx):
     """Apply bc cutoff."""
     return set(list(ont_bc_sorted.keys())[: idx + 1])
@@ -276,19 +274,19 @@ def get_threshold_rank_index(read_count_threshold, ont_bc_sorted, args):
     return cutoff_ont_bcs, idx_of_best_point
 
 
-def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
-    """Make kneeplot."""
+def make_kneeplot(ont_bc, args):
+    """Make kneeplot.
+
+    param: ont_bc: pd.DataFrame with columns [barcodes, counts]
+    """
     logger = get_named_logger('KneePlot')
+    ont_bc = dict(zip(ont_bc.index, ont_bc['count']))
     ont_bc_sorted = dict(
         sorted(ont_bc.items(), key=operator.itemgetter(1), reverse=True)
     )
 
-    if args.ilmn_barcodes is not None:
-        fig = plt.figure(figsize=[6, 10])
-        ax1 = fig.add_subplot(311)
-    else:
-        fig = plt.figure(figsize=[6, 6])
-        ax1 = fig.add_subplot(111)
+    fig = plt.figure(figsize=[6, 6])
+    ax1 = fig.add_subplot(111)
 
     # Only plot 50 cells for a given number of reads. This dramatically reduces
     # the number of points to plot in the long tail, which is helpful when
@@ -362,105 +360,36 @@ def make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args):
     ax1.set_title(
         "Found {} cells using ONT barcodes".format(idx_of_best_point + 1))
 
-    if args.ilmn_barcodes is not None:
-        pct_ilmn_in_ont = 100 * len(cutoff_ont_bcs & ilmn_bc) / len(ilmn_bc)
-
-        ax2 = fig.add_subplot(312)
-        ax2.scatter(
-            range(len(ont_bc.keys())),
-            ont_bc_sorted.values(),
-            color="k",
-            label="ONT",
-            alpha=0.1,
-            s=5,
-        )
-        conserved_to_plot = []
-        for i, (bc, n) in enumerate(ont_bc_sorted.items()):
-            if conserved_bc.get(bc) is not None:
-                conserved_to_plot.append((i, conserved_bc.get(bc)))
-        x, y = zip(*conserved_to_plot)
-        ax2.scatter(
-            x,
-            y,
-            color="r",
-            alpha=0.6,
-            marker="+",
-            s=15,
-            label="Both ONT + ILMN")
-        ax2.vlines(
-            idx_of_best_point,
-            ymin=1,
-            ymax=ymax,
-            linestyle="--",
-            color="k")
-        ax2.set_xscale("log")
-        ax2.set_yscale("log")
-        ax2.set_xlim([1, 100000])
-        ax2.set_ylim([1, ymax])
-        ax2.legend()
-        ax2.set_xlabel("Cells")
-        ax2.set_ylabel("Read count")
-        ax2.set_title(
-            "{:.1f}% of {} ILMN barcodes in {} ONT barcodes".format(
-                pct_ilmn_in_ont, len(ilmn_bc), len(cutoff_ont_bcs)
-            )
-        )
-
-        ax3 = fig.add_subplot(313)
-        ont_only_to_plot = []
-        ont_only_bcs = set()
-        for i, (bc, n) in enumerate(ont_bc_sorted.items()):
-            if conserved_bc.get(bc) is None:
-                ont_only_to_plot.append((i, ont_bc_sorted.get(bc)))
-                if bc in cutoff_ont_bcs:
-                    ont_only_bcs.add(bc)
-        x, y = zip(*ont_only_to_plot)
-        ax3.scatter(
-            x,
-            y,
-            color="b",
-            label="ONT only (not in ILMN)",
-            alpha=0.1,
-            s=5)
-        ax3.vlines(
-            idx_of_best_point,
-            ymin=1,
-            ymax=ymax,
-            linestyle="--",
-            color="k")
-        ax3.set_xscale("log")
-        ax3.set_yscale("log")
-        ax3.set_xlim([1, 100000])
-        ax3.set_ylim([1, ymax])
-        ax3.legend()
-        ax3.set_xlabel("Cells")
-        ax3.set_ylabel("Read count")
-        ax3.set_title(
-            "{:.1f}% of {} ONT barcodes not in {} ILMN barcodes".format(
-                100 * len(ont_only_bcs) / len(cutoff_ont_bcs),
-                len(cutoff_ont_bcs),
-                len(ilmn_bc),
-            )
-        )
-
     ax1.legend()
     fig.tight_layout()
     fig.savefig(args.output_plot)
 
 
-def read_ilmn_barcodes(barcodes):
-    """Read ilmn barcodes."""
-    bc = set([x.split("-")[0] for x in np.loadtxt(barcodes, dtype="str")])
-    return bc
+def ascii_decode_qscores(string):
+    """Convert ASCII character quality values into integers.
+
+    phred+33 encoding starts at ASCII 33 because 1-32 are non-printable characters
+    """
+    return list(map(lambda x: ord(x) - 33, string))
 
 
-def intersect_ont_ilmn(ont_bc, ilmn_bc):
-    """Intersect ont ilmn."""
-    conserved_bc = {}
-    for bc, n in ont_bc.items():
-        if bc in ilmn_bc:
-            conserved_bc[bc] = n
-    return conserved_bc
+def make_shortlist(longlist, barcode_tags_dir, min_qv=15):
+    """Make shortlist."""
+    wl = pd.read_csv(longlist, header=None).iloc[:, 0].values
+    # Make combined dataframe of read_id,barcode,barcode_qual
+
+    counts = []
+    for file_ in Path(barcode_tags_dir).iterdir():
+        df = pd.read_csv(file_, sep='\t', usecols=['CR', 'CY'])
+        # Remove reads with a minimum BC quality
+        df['min_q'] = df.CY.apply(lambda x: min(ascii_decode_qscores(x)))
+        # Keep only barcodes with 100% match in long list
+        df = df[df.CR.isin(wl)]
+        df = df[df.min_q >= 15]
+        # Count barcode occurrences and update
+        counts.append(pd.DataFrame(df.CR.value_counts().reset_index()))
+    final_counts = pd.concat(counts).groupby('CR').sum()
+    return final_counts.sort_values('count', ascending=False)
 
 
 def main(args):
@@ -483,16 +412,11 @@ def main(args):
                 (>= {args.read_count_threshold}) for creating whitelist,\
                     not the distance or density algorithm")
 
-    ont_bc = get_barcode_counts(args.barcodes)
-    if args.ilmn_barcodes is not None:
-        ilmn_bc = read_ilmn_barcodes(args.ilmn_barcodes)
-        conserved_bc = intersect_ont_ilmn(ont_bc, ilmn_bc)
-    else:
-        ilmn_bc = {}
-        conserved_bc = {}
+    shortlist = make_shortlist(args.long_list, args.barcodes_dir)
+    shortlist.to_csv(args.output_uncorrected_barcodes, sep='\t')
 
     logger.info(f"Generating knee plot: {args.output_plot}")
-    make_kneeplot(ont_bc, ilmn_bc, conserved_bc, args)
+    make_kneeplot(shortlist, args)
 
 
 if __name__ == "__main__":

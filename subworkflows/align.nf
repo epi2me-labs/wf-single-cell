@@ -33,15 +33,20 @@ process align_to_ref {
         path "ref_chrom_sizes.tsv"
     output:
         tuple val(meta),
-            path("*sorted.bam"), 
-            path("*sorted.bam.bai"), 
-            emit: bam_sort
+              path("${meta.alias}_sorted.bam"), 
+              path("${meta.alias}_sorted.bam.bai"), 
+              emit: bam_sort
+        tuple val(meta),
+              path("bam_info.tsv"),
+              emit: bam_info
     """
      minimap2 -ax splice -uf --secondary=no --MD -t $task.cpus \
       --junc-bed ref_genes.bed $params.resources_mm2_flags  \
       ref_genome.fasta reads.fastq* \
         | samtools view -b --no-PG -t ref_chrom_sizes - \
-        | samtools sort -@ 2 --no-PG  - > "${meta.alias}_sorted.bam"
+        | tee >(samtools sort -@ 2 --no-PG  - > "${meta.alias}_sorted.bam") \
+        | seqkit bam -F - 2> bam_info.tsv
+
     samtools index -@ ${task.cpus} "${meta.alias}_sorted.bam"
     """
 }
@@ -58,10 +63,11 @@ workflow align {
         call_paftools(ref_genes_gtf)
         get_chrom_sizes(ref_genome_idx)
         align_to_ref(
-            stranded_fq.groupTuple(),
+            stranded_fq,
             ref_genome,
             call_paftools.out.ref_genes_bed,
             get_chrom_sizes.out.ref_chrom_sizes)
     emit:
         bam_sort = align_to_ref.out.bam_sort
+        bam_info = align_to_ref.out.bam_info
 }

@@ -59,11 +59,48 @@ process summarize_adapter_table {
     """
 }
 
+process extract_barcodes{
+    label "singlecell"
+    cpus 2
+    memory "2.0 GB"
+    input:
+        tuple val(meta),
+              path("fastq_chunk.fq")
+        path "bc_longlist_dir"
+
+    output:
+        tuple val(meta),
+              path("bc_extract.tsv"),
+              emit: extracted_bc_umi
+        tuple val(meta),
+              path("high_quality_bc_counts.tsv"),
+              emit: barcode_counts
+        tuple val(meta),
+            path('stranded_trimmed.fastq'),
+            emit: trimmed_fq
+
+    """
+    workflow-glue extract_barcode \
+        fastq_chunk.fq \
+        bc_longlist_dir/${meta['bc_long_list']} \
+        -t ${task.cpus} \
+        --kit ${meta["kit_name"]} \
+        --adapter1_suff_length $params.barcode_adapter1_suff_length \
+        --min_barcode_qv $params.barcode_min_quality \
+        --barcode_length ${meta['barcode_length']} \
+        --umi_length ${meta['umi_length']} \
+        --output_read_tags "bc_extract.tsv" \
+        --output_barcode_counts "high_quality_bc_counts.tsv" \
+        --output_trimmed_fastq "stranded_trimmed.fastq"
+    """
+}
+
 
 // workflow module
 workflow stranding {
     take:
         read_chunks
+        bc_longlist_dir
     main:
          // Rejig checks to so each is  [meta, fastq_chunk]
         meta_chunks = read_chunks.flatMap({it ->
@@ -80,8 +117,13 @@ workflow stranding {
         call_adapter_scan(meta_chunks)
         combine_adapter_tables(call_adapter_scan.out.read_config_chunked.groupTuple())
         summarize_adapter_table(combine_adapter_tables.out.read_config)
+        extract_barcodes(
+            call_adapter_scan.out.stranded_fq_chunked,
+            bc_longlist_dir)
 
     emit:
-        stranded_fq = call_adapter_scan.out.stranded_fq_chunked
+        stranded_trimmed_fq = extract_barcodes.out.trimmed_fq
+        extracted_barcodes = extract_barcodes.out.extracted_bc_umi
+        high_qual_bc_counts = extract_barcodes.out.barcode_counts
         config_stats = summarize_adapter_table.out.config_stats
 }

@@ -152,6 +152,11 @@ def call_vsearch(fastq, min_adapter_id, adapters_fasta):
 def get_valid_adapter_pair_positions_in_read(vs_result):
     """Get valid adapter positions.
 
+    Note on vsearch terminology
+    qilo:  the first query position aligning with the reference
+    qihi: the last query position aligning with the reference
+    vsearch results.
+
     :param vs_result: vsearch results
     :type vs_result: polars.DataFrame
     """
@@ -172,17 +177,33 @@ def get_valid_adapter_pair_positions_in_read(vs_result):
                 # Is the next found adapter an adapter2_f?
                 if vs_result.item(adapter_2_idx, 'target') \
                         == compat_adapters[first_adapter]:
-                    # This is a valid adapter pairing (adapter1_f-adapter2_f)
+                    # This is a valid adapter pairing
+                    # (adapter1_f-adapter2_f or adapter2_R-adapter1_R)
                     read_id = vs_result.item(0, 'query')
                     pair_str = (
                         f"{vs_result.item(adapter_1_idx, 'target')}-"
                         f"{vs_result.item(adapter_2_idx, 'target')}"
                     )
+
+                    # Get the start and end of the subsequence bounded by the two
+                    # compatible adapters
+                    start = vs_result.item(adapter_1_idx, 'qilo') - 1
+                    end = vs_result.item(adapter_2_idx, 'qihi')
+
+                    # Adapter2 is not needed for downstream processing
+                    # So trim adapter2_F or adapter2_R but keep adapter_1
+                    if first_adapter == 'adapter1_f':
+                        # Adapter2 is at the end of the read, set end to be start of
+                        end = vs_result.item(adapter_2_idx, 'qilo') - 1
+                    elif first_adapter == 'adapter2_r':
+                        start = vs_result.item(adapter_1_idx, 'qihi')
+                    else:
+                        raise ValueError('bad')
                     fl_pair = {
                         "read_id": f"{read_id}_{valid_pairs_n}",
                         "config": pair_str,
-                        "start": vs_result.item(adapter_1_idx, 'qilo') - 1,
-                        "end": vs_result.item(adapter_2_idx, 'qihi'),
+                        "start": start,
+                        "end": end
                     }
 
                     fl_pair["strand"] = "+" if first_adapter == "adapter1_f" else "-"
@@ -348,10 +369,12 @@ def write_tables(read_info, output_tsv):
 
 
 def write_stranded_fastq(fastq, read_info, output_fastq, kit, fl_only):
-    """Write stranded fastq.
+    """Write stranded and trimmed fastq.
 
-    Trimmed sub-read segments defined in read_info are written out with the
-    correct orientation.
+    For reads with adapter1, trim up to the adapter. The adapter sequence is needed
+    in the read for downstream BC searching.
+
+    For reads containing an adapter2 sequence, trim that away as it's not needed.
     """
     adap_rev_config = {
         "adapter1_f": "adapter1_r",
@@ -360,7 +383,7 @@ def write_stranded_fastq(fastq, read_info, output_fastq, kit, fl_only):
         "adapter2_r": "adapter2_f"
     }
 
-    # Iterate through FASTQ reads and re-write them with proper stranding based
+    # Iterate through FASTQ reads and re-write them with proper stranding based on
     # the results of the VSEARCH alignments.
     with pysam.FastxFile(fastq) as f_in:
         # with open(tmp_stranded_fastq, "w") as f_out:
@@ -372,7 +395,8 @@ def write_stranded_fastq(fastq, read_info, output_fastq, kit, fl_only):
                         if fl_only and not subread["fl"]:
                             continue
                         # The read may contain more than one subread -
-                        # segments flaked by compatible adapters.
+                        # segments flaked by compatible adapters. Extract these and
+                        # trim
                         subread_seq = entry.sequence[subread["start"]: subread["end"]]
                         subread_quals = entry.quality[subread["start"]: subread["end"]]
 
@@ -384,13 +408,13 @@ def write_stranded_fastq(fastq, read_info, output_fastq, kit, fl_only):
                             # Do any necessary stranding
                             #
                             # 5prime read structure:
-                            #   adapter-BC-UMI-TSO-cDNA-polyA
-                            # 5 prime kit reads adapters are on the same strand as the
+                            #   adapter1-BC-UMI-TSO-cDNA-polyA
+                            # 5 prime kit adapters are the same sense as the
                             # mRNA, therefore the reads are re-oriented if the original
                             # strand is '-'
                             #
                             # 3prime read structure:
-                            #   adapter-BC-UMI-polyT-cDNA
+                            #   adapter1-BC-UMI-polyT-cDNA
                             # For 3prime and multiome kits, the adapters are on the
                             # opposite strand relative to mRNA sense, so reverse
                             # complement the read if the original strand is '+'
