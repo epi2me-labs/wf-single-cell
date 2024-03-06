@@ -4,13 +4,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v1.1.0]
 ### Added
 - `full_length_only` parameter to process only full length reads (default: true).
 - Memory directive for umap process to prevent parallel processes from using too much memory.
 ### Changed
 - Orient 3prime/multiome reads to mRNA sense to avoid need to flip later.
 - Default `umap_n_repeats` lowered to 3.
+### Fixed
+- Issue where splice junctions were searched for on incorrect strand.
 
 ## [v1.0.3]
 ### Added
