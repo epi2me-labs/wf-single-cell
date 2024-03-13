@@ -54,15 +54,12 @@ process assign_barcodes{
     input:
          tuple val(meta),
                path("whitelist.tsv"),
-               path("extract_barcodes.tsv"),
-               val(chr)
+               path("extract_barcodes.tsv")
     output:
         tuple val(meta),
-              val(chr),
               path("bc_assign_counts.tsv"),
               emit: chrom_assigned_barcode_counts
         tuple val(meta),
-              val(chr),
               path("extract_barcodes_with_bc.tsv"),
               emit: tags
     """
@@ -178,22 +175,52 @@ process combine_final_tag_files {
 }
 
 
+process combine_bams_and_tags {
+    // Merge all BAM and tags files chunks
+    label "wf_common"
+    cpus Math.min(8, params.max_threads)
+    memory "8 GB"
+    input:
+        tuple val(meta),
+              path('bams/*aln.bam'),
+              path('bams/*.aln.bam.bai'),
+              path('tags/*tags.tsv')
+    output:
+        tuple val(meta),
+              path("*tagged.sorted.bam"), 
+              path("*tagged.sorted.bam.bai"),
+              emit: merged_bam
+        tuple val(meta),
+              path("chr_tags/*"),
+              emit: merged_tags
+    """
+    samtools merge -@ ${task.cpus -1} --write-index -o "${meta.alias}.tagged.sorted.bam##idx##${meta.alias}.tagged.sorted.bam.bai" bams/*.bam
+
+    mkdir chr_tags
+    # merge the tags TSVs, keep header from first
+    csvtk concat -tT tags/* \
+        | csvtk split -tl -f chr -o chr_tags/
+    # Strip appended source filename ("stdin-"") from the split TSVs
+    for file in chr_tags/*; do mv "\${file}" "\${file//stdin-//}"; done
+    """
+}
+
 process combine_chrom_bams {
     // Merge all chromosome bams by sample_id
-    label "singlecell"
+    label "wf_common"
     cpus Math.min(8, params.max_threads)
+    memory "8 GB"
     input:
         tuple val(meta),
               path(chrom_bams),
               path('chrom.bam.bai')
     output:
         tuple val(meta),
-              path("*tagged.sorted.bam"), 
+              path("*tagged.sorted.bam"),
               path("*tagged.sorted.bam.bai"),
               emit: bam_fully_tagged
     """
-    samtools merge -@ ${task.cpus} -o "${meta.alias}.tagged.sorted.bam" ${chrom_bams};
-    samtools index -@ ${task.cpus} "${meta.alias}.tagged.sorted.bam";
+    samtools merge -@ ${task.cpus - 1} --write-index -o "${meta.alias}.tagged.sorted.bam##idx##${meta.alias}.tagged.sorted.bam.bai" ${chrom_bams};
     """
 }
 
@@ -471,31 +498,45 @@ workflow process_bams {
             .map {chr_gtf, chr_meta -> [chr_meta[1], chr_meta[0], chr_gtf[1]]}
 
         generate_whitelist(
-            extracted_barcodes.groupTuple()
-                .map{meta, tags, chr -> [meta, tags]},
+            extracted_barcodes.groupTuple(),
             bc_longlist_dir)
 
-       assign_barcodes(
+        assign_barcodes(
              generate_whitelist.out.whitelist
             .cross(extracted_barcodes)
-            .map {it -> it.flatten()[0, 1, 3, 4]})
+            .map {it ->
+                    meta = it[0][0]
+                    whitelist = it[0][1]
+                    barcodes = it[1][1]
+                    [meta, whitelist, barcodes]
+                })
+
+        // Combine the BAM and tags chunks
+        combine_bams_and_tags(
+            bam.groupTuple()
+                .join(assign_barcodes.out.tags.groupTuple()))
+
+        // Split the tags by chromosome
+        chr_tags = combine_bams_and_tags.out.merged_tags
+            .transpose()
+            .map {meta, file -> [meta, file.baseName, file]}
 
         stringtie(
             ref_genome_fasta,
             ref_genome_idx,
-            bam
-            .combine(chr_gtf))
+            combine_bams_and_tags.out.merged_bam
+                .combine(chr_gtf))
 
         align_to_transcriptome(stringtie.out.read_tr_map)
 
         assign_features(
             align_to_transcriptome.out.read_tr_map
-            .join(assign_barcodes.out.tags, by: [0, 1]))
+            .join(chr_tags, by: [0, 1]))
 
         cluster_umis(
             assign_features.out.feature_assigns
-            // Join on sample_id,chr
-            .join(assign_barcodes.out.tags, by: [0, 1]))
+            // Join on [sample meta,chr]
+            .join(chr_tags, by: [0, 1]))
 
         tag_bams(bam
              // cross by sample_id on the output of cluster_umis to return
@@ -536,7 +577,6 @@ workflow process_bams {
                 .groupTuple())
             // [sample_id, bam]
             tagged_bams = combine_chrom_bams.out.bam_fully_tagged
-
         }else{
             tagged_bams = tag_bams.out.tagged_bam
             // [sample_id, bam, bai]

@@ -160,8 +160,7 @@ def process_records(
     # The csv from extract_barcodes was not created with pandas so no quoting will
     # have been done on the tags file
     for df_tags in pd.read_csv(
-            extract_barcode_tags, sep='\t', index_col=0,
-            chunksize=chunksize, quoting=3):
+            extract_barcode_tags, sep='\t', index_col=0, chunksize=chunksize):
         corrected_bcs = []
         for row in df_tags.itertuples():
             read_id = row.Index

@@ -314,7 +314,9 @@ def write_trimmed_fastq(read, trim_pos, trim_side, fout):
     else:
         read.sequence = read.sequence[trim_pos:]
         read.quality = read.quality[trim_pos:]
-    fout.write(str(read) + '\n')
+    # If there is some sequence remaining after trimming, write it out.
+    if read.sequence:
+        fout.write(str(read) + '\n')
 
 
 def align_adapter(args):
@@ -399,9 +401,15 @@ def align_adapter(args):
                 bc_min_qv = min(ascii_decode_qscores(bc_qscores))
                 if bc_min_qv >= args.min_barcode_qv:
                     barcode_counts[barcode] += 1
+
+                # Escape double quotes, with a precedding `"` in the quality strings
+                # see https://rfc-editor.org/rfc/rfc4180.html
+                umi_q_quoted = umi_qscores.replace('"', '""')
+                barcode_q_quoted = bc_qscores.replace('"', '""')
+
                 tags_fh.write('\t'.join([
-                    read.name, barcode, bc_qscores,
-                    umi, umi_qscores]) + '\n')
+                    f'"{read.name}"', f'"{barcode}"', f'"{barcode_q_quoted}"',
+                    f'"{umi}"', f'"{umi_q_quoted}"']) + '\n')
                 # For full length reads, adapter2 already trimmed.
                 # Now the barcode and UMI have been extracted, these along with adapter1
                 # can be removed.

@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Orient 3prime/multiome reads to mRNA sense to avoid need to flip later.
 - Default `umap_n_repeats` lowered to 3.
+- Genome reference alignment done by chunk.
 ### Fixed
 - Issue where splice junctions were searched for on incorrect strand.
 
