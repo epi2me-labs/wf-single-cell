@@ -430,6 +430,9 @@ def write_stranded_fastq(fastq, read_info, output_fastq, kit, fl_only):
                                 complement_trans)
                             subread_quals = subread_quals[::-1]
 
+                        if not subread_seq:
+                            # Rarely a sequence is totally trimmed away.
+                            continue
                         f_out.write(
                             (f"@{subread_id}\n"
                              f"{subread_seq}\n"

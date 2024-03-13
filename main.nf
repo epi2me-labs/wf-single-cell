@@ -111,22 +111,18 @@ process mergeTags {
     label "wf_common"
     input:
         tuple val(meta),
-              path('extracted_barcodes/*bcs.tsv'),
+              val(chunk_id),
+              path('barcodes.tsv'),
               path('bam_info.tsv')
 
     output:
         tuple val(meta),
-              path("chr_tags/*")
+              path("merged_tags.tsv")
     """
-    mkdir chr_tags
-    csvtk cut -tf Read,Pos,EndPos,Ref,MapQual bam_info.tsv > bam_info_cut.tsv
-    csvtk concat -t extracted_barcodes/* > barcodes.tsv
+    csvtk cut -tlf Read,Pos,EndPos,Ref,MapQual bam_info.tsv > bam_info_cut.tsv
     # Left join of barcode
-    csvtk join -tf 1 bam_info_cut.tsv barcodes.tsv --left-join \
-        | csvtk rename -t -f Pos,EndPos,Ref,MapQual -n start,end,chr,mapq \
-        | csvtk split -tf chr -o chr_tags
-    # Strip appended source filename ("stdin-"") from the split TSVs
-    for file in chr_tags/*; do mv "\${file}" "\${file//stdin-//}"; done
+    csvtk join -tlf 1 bam_info_cut.tsv barcodes.tsv --left-join \
+        | csvtk rename -tl -f Read,Pos,EndPos,Ref,MapQual -n read_id,start,end,chr,mapq -o merged_tags.tsv
     """
 }
 
@@ -275,28 +271,26 @@ workflow pipeline {
         bc_longlist_dir = file("${projectDir}/data", checkIfExists: true)
         chunkReads(meta)
 
+        // Add chunk id to chunks channel; allows resulting BAM info and tags channels to be combined in mergeTags()
+        fastq_chunks = chunkReads.out.fastq_chunks
+            .transpose()
+            .map {meta, file -> [meta, file.baseName, file]}
+
         stranding(
-            chunkReads.out.fastq_chunks,
+            fastq_chunks,
             bc_longlist_dir)
 
         align(
             // Group by meta 
-            stranding.out.stranded_trimmed_fq.groupTuple(),
+            stranding.out.stranded_trimmed_fq,
             ref_genome_fasta,
             ref_genome_idx,
             ref_genes_gtf)
 
-        barcodes = mergeTags(
-            // Group by meta
-            stranding.out.extracted_barcodes.groupTuple()
-            .join(align.out.bam_info))
-            .flatMap {meta, files ->
-            chroms = [];
-            for (i=0; i<files.size(); i++) {
-                chroms.add(tuple(meta, files[i], files[i].baseName))
-            }
-            chroms
-        }
+        // Combine barcodes and BAM by chunk, then merge the tags
+        barcodes = mergeTags(stranding.out.extracted_barcodes
+            .join(align.out.bam_info, by: [0, 1])
+        )
 
         process_bams(
             align.out.bam_sort,
@@ -394,7 +388,8 @@ workflow {
                 l.add(tuple(it[0], it[i]))
             }
             return l
-        }))
+        }).concat(pipeline.out.config_stats)
+    )
 
     output_report(pipeline.out.report)
 }

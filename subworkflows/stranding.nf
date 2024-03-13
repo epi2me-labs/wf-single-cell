@@ -9,9 +9,10 @@ process call_adapter_scan {
     errorStrategy = { task.exitStatus in 137..140 ? 'retry' : 'terminate' }
     input:
         tuple val(meta),
+              val(chunk_id),
               path(chunk, stageAs: 'chunk.fq.gz')
     output:
-        tuple val(meta), path("${meta.alias}_adapt_scan.fastq.gz"), emit: stranded_fq_chunked
+        tuple val(meta), val(chunk_id), path("${meta.alias}_adapt_scan.fastq.gz"), emit: stranded_fq_chunked
         tuple val(meta), path("${meta.alias}_adapt_scan.tsv"), emit: read_config_chunked
     script:
     def fl = params.full_length_only ? "--keep_fl_only": ""
@@ -65,18 +66,21 @@ process extract_barcodes{
     memory "2.0 GB"
     input:
         tuple val(meta),
+              val(chunk_id),
               path("fastq_chunk.fq")
         path "bc_longlist_dir"
 
     output:
         tuple val(meta),
-              path("bc_extract.tsv"),
+              val(chunk_id),
+              path("bc_extract_${chunk_id}.tsv"),
               emit: extracted_bc_umi
         tuple val(meta),
               path("high_quality_bc_counts.tsv"),
               emit: barcode_counts
         tuple val(meta),
-            path('stranded_trimmed.fastq'),
+            val(chunk_id),
+            path("stranded_trimmed_${chunk_id}.fastq"),
             emit: trimmed_fq
 
     """
@@ -89,9 +93,9 @@ process extract_barcodes{
         --min_barcode_qv $params.barcode_min_quality \
         --barcode_length ${meta['barcode_length']} \
         --umi_length ${meta['umi_length']} \
-        --output_read_tags "bc_extract.tsv" \
+        --output_read_tags "bc_extract_${chunk_id}.tsv" \
         --output_barcode_counts "high_quality_bc_counts.tsv" \
-        --output_trimmed_fastq "stranded_trimmed.fastq"
+        --output_trimmed_fastq "stranded_trimmed_${chunk_id}.fastq"
     """
 }
 

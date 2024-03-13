@@ -375,12 +375,12 @@ def ascii_decode_qscores(string):
 
 def make_shortlist(longlist, barcode_tags_dir, min_qv=15):
     """Make shortlist."""
-    wl = pd.read_csv(longlist, header=None).iloc[:, 0].values
+    wl = pd.read_csv(longlist, header=None, dtype=str).iloc[:, 0].values
     # Make combined dataframe of read_id,barcode,barcode_qual
 
     counts = []
     for file_ in Path(barcode_tags_dir).iterdir():
-        df = pd.read_csv(file_, sep='\t', usecols=['CR', 'CY'])
+        df = pd.read_csv(file_, sep='\t', usecols=['CR', 'CY'], dtype=str)
         # Remove reads with a minimum BC quality
         df['min_q'] = df.CY.apply(lambda x: min(ascii_decode_qscores(x)))
         # Keep only barcodes with 100% match in long list
