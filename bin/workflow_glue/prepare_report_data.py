@@ -38,9 +38,9 @@ def _get_sample_summaries(read_tags, white_list):
 
     total_tagged = 0
     gene_tagged = 0
-    total_genes = 0
     transcript_tagged = 0
-    total_transcripts = 0
+    unique_genes = set()
+    unique_transcripts = set()
 
     # Read in read tags chunkwise so as not to use too much memory.
     # For each chunk, increment the summary variables.
@@ -51,16 +51,16 @@ def _get_sample_summaries(read_tags, white_list):
             total_tagged += len(df)
             gene_tagged_df = df[df.gene != '-']
             gene_tagged += len(gene_tagged_df)
-            total_genes += len(gene_tagged_df['gene'].unique())
+            unique_genes = unique_genes | set(gene_tagged_df['gene'])
             transcript_tagged_df = df[df.transcript != '-']
             transcript_tagged += len(transcript_tagged_df)
-            total_transcripts += len(transcript_tagged_df['transcript'].unique())
+            unique_transcripts = unique_transcripts | set(transcript_tagged_df['transcript'])
     cols = [
         'total_tagged', 'gene_tagged', 'transcript_tagged',
         'total_genes', 'total_transcripts', 'total_cells']
     record = [[
         total_tagged, gene_tagged, transcript_tagged,
-        total_genes, total_transcripts, total_cells]]
+        len(unique_genes), len(unique_transcripts), total_cells]]
 
     df = pd.DataFrame.from_records(record, columns=cols)
     return df
