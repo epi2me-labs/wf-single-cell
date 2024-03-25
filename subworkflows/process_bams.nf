@@ -542,7 +542,7 @@ workflow process_bams {
             // Join on [sample meta,chr]
             .join(chr_tags, by: [0, 1]))
 
-        tag_bams(bam
+        tag_bams(combine_bams_and_tags.out.merged_bam
              // cross by sample_id on the output of cluster_umis to return
              // [sample_id, chr, kit_name, bam, bai, tags.tsv]
             .cross(cluster_umis.out.read_tags)
