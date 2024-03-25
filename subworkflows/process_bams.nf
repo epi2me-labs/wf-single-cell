@@ -197,11 +197,15 @@ process combine_bams_and_tags {
     samtools merge -@ ${task.cpus -1} --write-index -o "${meta.alias}.tagged.sorted.bam##idx##${meta.alias}.tagged.sorted.bam.bai" bams/*.bam
 
     mkdir chr_tags
-    # merge the tags TSVs, keep header from first
-    csvtk concat -tT tags/* \
-        | csvtk split -tl -f chr -o chr_tags/
-    # Strip appended source filename ("stdin-"") from the split TSVs
-    for file in chr_tags/*; do mv "\${file}" "\${file//stdin-//}"; done
+    # Find the chr column number
+    files=(tags/*)
+    chr_col=\$(awk -v RS='\t' '/chr/{print NR; exit}' "\${files[0]}")
+
+    # merge the tags TSVs, keep header from first file and split entries by chromosome
+    awk -F'\t' -v chr_col=\$chr_col 'FNR==1{hdr=\$0; next} \
+    {if (!seen[\$chr_col]++) \
+        print hdr>"chr_tags/"\$chr_col".tsv"; \
+        print>"chr_tags/"\$chr_col".tsv"}' tags/*
     """
 }
 
