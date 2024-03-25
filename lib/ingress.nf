@@ -1024,6 +1024,8 @@ process validate_sample_sheet {
 // Generate an index for an input XAM file
 process samtools_index {
     cpus 4
+    label "ingress"
+    label "wf_common"
     memory 4.GB
     input:
         tuple val(meta), path("reads.bam")
