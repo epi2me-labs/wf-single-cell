@@ -76,7 +76,7 @@ process makeReport {
     input:
         path 'versions'
         path 'params.csv'
-        path 'per_read_stats/stats_?.tsv.gz'
+        path 'histogram_stats/'
         path 'survival.tsv'
         path 'wf_summary.tsv'
         path umap_dirs
@@ -89,7 +89,7 @@ process makeReport {
         report_name = "wf-single-cell-report.html"
     """
     workflow-glue report \
-        --read_stats_dir per_read_stats \
+        --histogram_stats histogram_stats \
         --params params.csv \
         --versions versions \
         --survival survival.tsv \
@@ -205,6 +205,7 @@ process prepare_report_data {
         tuple val(meta),
               path('read_tags'),
               path('config_stats'),
+              path('stats_dir'),
               path('white_list'),
               path('gene_expression'),
               path('transcript_expression'),
@@ -217,9 +218,12 @@ process prepare_report_data {
             emit: summary
         path "${meta.alias}_umap",
             emit: umap_dir
+        path "histogram_stats/*",
+            emit: histogram_stats
 
     script:
         opt_umap = umaps.name != 'OPTIONAL_FILE'
+        String hist_dir = "histogram_stats/${meta.alias}"
     """
     workflow-glue prepare_report_data \
         --read_tags read_tags \
@@ -228,7 +232,7 @@ process prepare_report_data {
         --sample_id ${meta.alias} \
         --summary_out sample_summary.tsv \
         --survival_out survival_data.tsv
-
+    
     umd=${meta.alias}_umap
     mkdir \$umd
 
@@ -242,6 +246,10 @@ process prepare_report_data {
     else
         touch "\$umd"/OPTIONAL_FILE
     fi
+
+    # Output the histogram stats
+    mkdir -p $hist_dir
+    cp stats_dir/length.hist stats_dir/quality.hist $hist_dir
     """
 }
 
@@ -252,7 +260,7 @@ workflow pipeline {
         meta
         ref_genome_dir
         umap_genes
-        per_read_stats
+        stats_dir
 
     main:
         // throw an exception for deprecated conda users
@@ -303,6 +311,7 @@ workflow pipeline {
         prepare_report_data(
             process_bams.out.final_read_tags
             .join(stranding.out.config_stats)
+            .join(stats_dir)
             .join(process_bams.out.white_list)
             .join(process_bams.out.gene_expression)
             .join(process_bams.out.transcript_expression)
@@ -312,7 +321,7 @@ workflow pipeline {
         makeReport(
             software_versions,
             workflow_params,
-            per_read_stats.collect(),
+            prepare_report_data.out.histogram_stats,
             prepare_report_data.out.survival
                 .collectFile(keepHeader:true),
             prepare_report_data.out.summary
@@ -374,11 +383,19 @@ workflow {
         .map {it -> [it['sample_id'], it]}
     // Merge the kit metadata onto the sample metadata
     // Put sample_id as first element for join
-    sample_and_kit_meta = samples.map {meta, reads, stats -> [meta.alias, meta, reads]}
+    sample_and_kit_meta = samples.map {meta, reads, stats -> [meta.alias, meta, reads, stats]}
         .join(kit_meta)
-        .map {sample_id, sample_meta, reads, kit_meta -> [sample_meta + kit_meta, reads]}
+        .map {sample_id, sample_meta, reads, stats, kit_meta -> [sample_meta + kit_meta, reads, stats]}
 
-    pipeline(sample_and_kit_meta, ref_genome_dir, umap_genes, per_read_stats)
+    // Add the kit meta to the stats directory
+    stats_dir = sample_and_kit_meta.map {meta, reads, stats -> [meta, file(stats)]}
+
+
+    pipeline(
+        sample_and_kit_meta.map {meta, reads, stats -> [meta, reads]},
+        ref_genome_dir,
+        umap_genes,
+        stats_dir)
 
     output(pipeline.out.results.flatMap({it ->
         // Convert [meta, file, file, ..]

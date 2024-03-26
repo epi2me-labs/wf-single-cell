@@ -173,7 +173,7 @@ def main(args):
         head_resources=[*LAB_head_resources])
 
     with report.add_section('Read summaries', 'Read summary'):
-        SeqSummary(args.read_stats_dir)
+        SeqSummary(histogram_stats_dir=args.histogram_stats)
 
     survival_df = pd.read_csv(args.survival, sep='\t', index_col=0)
     wf_summ_df = pd.read_csv(args.wf_summary, sep='\t', index_col=0)
@@ -350,9 +350,10 @@ def argparser():
     parser = wf_parser("report")
 
     parser.add_argument(
-        "--read_stats_dir",
-        "--read_stats",
-        help="fastcat read stats file or folder of files", type=Path)
+        "--histogram_stats",
+        help="path to a folder containing subfolders named by sample alias, "
+             "each containing the *.hist files output by fastcat",
+        type=Path)
     parser.add_argument(
         "--images", nargs='+',
         help="Sample directories containing various images to put in report")
