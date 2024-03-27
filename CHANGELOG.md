@@ -5,11 +5,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-### Fixed 
+### Fixed
+- Issue with TSV concat/splitting during `combine_bam_and_tags` stage.
 - Issue introduced in v1.1.0 that caused a partial BAM file to be output.
-- Fixed issue with TSV concat/splitting during `combine_bam_and_tags` stage.
 - Corrected example command in README.
 - Fixed incorrect reporting of unique gene and transcripts in report table.
+
+### Changed
+- Expression matrix construction code to reduce memory usage.
+
 
 ## [v1.1.0]
 ### Added
