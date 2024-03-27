@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Issue introduced in v1.1.0 that caused a partial BAM file to be output.
 - Fixed issue with TSV concat/splitting during `combine_bam_and_tags` stage.
 - Corrected example command in README.
+- Fixed incorrect reporting of unique gene and transcripts in report table.
 
 ## [v1.1.0]
 ### Added
