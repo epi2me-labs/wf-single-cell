@@ -25,12 +25,11 @@ wget https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/w
 The workflow can be run with the demo data using:
 ```
 nextflow run epi2me-labs/wf-single-cell \
-    --fastq wf-single-cell-demo/chr17.fq.gz \
-    --kit_name 3prime \
-    --kit_version v3 \
     --expected_cells 100 \
-    --ref_genome_dir wf-single-cell-demo/ \
-    --plot_umaps \
-    -profile standard
+    --fastq 'wf-single-cell-demo/chr17.fq.gz' \
+    --kit_name '3prime' \
+    --kit_version 'v3' \
+    --ref_genome_dir 'wf-single-cell-demo' \
+    --umap_plot_genes 'wf-single-cell-demo/umap_plot_genes.csv'
 ```
 For further information about running a workflow on the cmd line see https://labs.epi2me.io/wfquickstart/
