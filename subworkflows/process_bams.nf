@@ -9,6 +9,7 @@ include {
 process get_contigs {
     label "singlecell"
     cpus 1
+    memory "2 GB"
     input:
         tuple val(meta),
               path('sample.bam'),
@@ -25,9 +26,11 @@ process get_contigs {
     """
 }
 
+
 process generate_whitelist{
     label "singlecell"
     cpus 1
+    memory "2 GB"
     input:
         tuple val(meta),
               path("barcodes/?_barcode.tsv")
@@ -53,10 +56,11 @@ process generate_whitelist{
     """
 }
 
+
 process assign_barcodes{
     label "singlecell"
     cpus 1
-    memory 1.5.GB
+    memory "2 GB"
     input:
          tuple val(meta),
                path("whitelist.tsv"),
@@ -75,14 +79,15 @@ process assign_barcodes{
         --max_ed $params.barcode_max_ed \
         --min_ed_diff $params.barcode_min_ed_diff \
         --extract_barcode_tags extract_barcodes.tsv \
-        --chunksize $params.process_chunk_size \
         --whitelist whitelist.tsv
     """
 }
 
+
 process split_gtf_by_chroms {
     label "singlecell"
     cpus 1
+    memory "1 GB"
     input:
         path("ref.gtf")
     output:
@@ -91,6 +96,7 @@ process split_gtf_by_chroms {
     gawk '/^[^#]/ {print>\$1".gtf"}' ref.gtf 
     """
 }   
+
 
 process cluster_umis {
     label "singlecell"
@@ -121,9 +127,11 @@ process cluster_umis {
     """
 }
 
+
 process tag_bams {
     label "singlecell"
-    cpus 1
+    cpus 4
+    memory "16 GB"
     input:
         tuple val(meta),
               path("align.bam"),
@@ -143,9 +151,10 @@ process tag_bams {
         --out_bam ${meta.alias}.${chr}.tagged.bam \
         --chrom ${chr}
 
-    samtools index ${meta.alias}.${chr}.tagged.bam
+    samtools index -@ ${task.cpus} ${meta.alias}.${chr}.tagged.bam
     """
 }
+
 
 process combine_tag_files {
     // A file named 'read_tags' is a required output.
@@ -154,6 +163,7 @@ process combine_tag_files {
     // first element of the tuple. Hence this process.
     label "singlecell"
     cpus 1
+    memory "1 GB"
     input:
         tuple val(meta),
               path("tags*.tsv")
@@ -165,10 +175,12 @@ process combine_tag_files {
     """
 }
 
+
 process combine_final_tag_files {
     // Combine the final
     label "singlecell"
     cpus 1
+    memory "1 GB"
     input:
         tuple val(meta),
               path("tags*.tsv")
@@ -184,7 +196,7 @@ process combine_final_tag_files {
 process combine_bams_and_tags {
     // Merge all BAM and tags files chunks
     label "wf_common"
-    cpus Math.min(8, params.max_threads)
+    cpus params.threads
     memory "8 GB"
     input:
         tuple val(meta),
@@ -200,7 +212,9 @@ process combine_bams_and_tags {
               path("chr_tags/*"),
               emit: merged_tags
     """
-    samtools merge -@ ${task.cpus -1} --write-index -o "${meta.alias}.tagged.sorted.bam##idx##${meta.alias}.tagged.sorted.bam.bai" bams/*.bam
+    samtools cat -b <(find bams -name '*aln.bam') \
+    | samtools sort - -@ ${task.cpus} --write-index \
+        -o "${meta.alias}.tagged.sorted.bam##idx##${meta.alias}.tagged.sorted.bam.bai"
 
     mkdir chr_tags
     # Find the chr column number
@@ -218,7 +232,7 @@ process combine_bams_and_tags {
 process combine_chrom_bams {
     // Merge all chromosome bams by sample_id
     label "wf_common"
-    cpus Math.min(8, params.max_threads)
+    cpus params.threads
     memory "8 GB"
     input:
         tuple val(meta),
@@ -230,14 +244,15 @@ process combine_chrom_bams {
               path("*tagged.sorted.bam.bai"),
               emit: bam_fully_tagged
     """
-    samtools merge -@ ${task.cpus - 1} --write-index -o "${meta.alias}.tagged.sorted.bam##idx##${meta.alias}.tagged.sorted.bam.bai" ${chrom_bams};
+    samtools merge -@ ${task.cpus - 1} --write-index \
+        -o "${meta.alias}.tagged.sorted.bam##idx##${meta.alias}.tagged.sorted.bam.bai" ${chrom_bams};
     """
 }
 
 
 process stringtie {
     label "singlecell"
-    cpus Math.max(params.max_threads / 4, 4.0)
+    cpus params.threads
     // Memory usage for this process is usually less than 3GB, but some cases it may go over this.
     memory = { 3.GB * task.attempt }
     maxRetries = 3
@@ -275,13 +290,8 @@ process stringtie {
 
 process align_to_transcriptome {
     label "singlecell"
-    cpus Math.max(params.max_threads / 10, 4.0)
-    // The average memory required for this step is usually ~ 4-5GB. However peak RSS scales with reference size but
-    // not all that predicatably. So until a better memory heuristic is found, employ a error strategy where
-    // the default 5GB is increased by 5GB upon each error, up to a maximum value of 25GB
-    memory = { 5.GB  * task.attempt }
-    maxRetries = 5
-    errorStrategy = { task.exitStatus in 137..140 ? 'retry' : 'terminate' }
+    cpus params.threads
+    memory = "32 GB"
     input:
         tuple val(meta),
               val(chr),
@@ -297,29 +307,27 @@ process align_to_transcriptome {
               path('stringtie.gff'),
               emit: read_tr_map
     script:
-    // Provide at least 2 cores to mm2
-    def mm2_threads = Math.max(task.cpus - 3, 2)
-    // Remove the mm2 + samtools view cores and give the rest to sorting
-    def st_threads = Math.max(task.cpus - 1 - mm2_threads, 1)
+    def view_threads = 1
+    def sort_threads = 3
+    def mm2_threads = Math.max(task.cpus - view_threads - sort_threads, 4)
     """
     minimap2 -ax map-ont \
-        --end-bonus 10 \
-        -p 0.9 \
-        -N 3 \
-        -t $mm2_threads \
-        transcriptome.fa \
-        reads.fq \
-        | samtools view -h -@ 1 -b -F 2052 - \
-        | samtools sort -n -@ $st_threads --no-PG - > tr_align.bam
+        --cap-kalloc 100m --cap-sw-mem 50m \
+        --end-bonus 10 -p 0.9 -N 3 -t $mm2_threads \
+        transcriptome.fa reads.fq \
+    | samtools view -h -@ $view_threads -b -F 2052 - \
+    | samtools sort -n -@ $sort_threads --no-PG - > tr_align.bam
     """
 }
 
 
 process assign_features {
     label "singlecell"
-    // Benchmarking showed that memory usage scales with tags file size.
-    memory { 1.0.GB.toBytes() + (tags.size() * 2 ) }
     cpus 1
+    // This step is performed per-chromosome. The tags file per chrom can vary
+    // quite widely in size. We don't have a fixed memory size here in order
+    // to get better parallelism on single-host setups.
+    memory { 1.0.GB.toBytes() + (tags.size() * 2 ) }
     input:
         tuple val(meta),
               val(chr),
@@ -353,6 +361,7 @@ process assign_features {
 process umi_gene_saturation {
     label "singlecell"
     cpus 4
+    memory "32 GB"
     input:
         tuple val(meta),
               path("read_tags.tsv")
@@ -372,11 +381,11 @@ process umi_gene_saturation {
 
 process umap_reduce_expression_matrix {
     label "singlecell"
-    cpus 1
+    cpus 2
     // Most runs will use less than 10GB memory, but large numbers of cells (above 15K)
-    // nan lead to memory usage over 20GB. Max here is 32GB 
+    // may lead to memory usage over 20GB. Max here is 32GB 
     memory { 8.GB * task.attempt }
-    maxRetries 4
+    maxRetries 3
     errorStrategy {task.exitStatus in [137,140] ? 'retry' : 'terminate'}
     input:
         tuple val(repeat_num),
@@ -393,6 +402,7 @@ process umap_reduce_expression_matrix {
         ${matrix}
     """
 }
+
 
 process merge_transcriptome {
     // Merge the annotated GFFs and transcriptome sequence files
@@ -419,6 +429,7 @@ process merge_transcriptome {
 process pack_images {
     label "singlecell"
     cpus 1
+    memory "1 GB"
     input:
         tuple val(meta),
               path("images_${meta.alias}/*")

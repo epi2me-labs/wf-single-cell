@@ -32,6 +32,7 @@ process call_adapter_scan {
 process combine_adapter_tables {
     label "singlecell"
     cpus 1
+    memory "1 GB"
     input:
         tuple val(meta), path("adapters.tsv")
     output:
@@ -46,7 +47,7 @@ process combine_adapter_tables {
 process summarize_adapter_table {
     label "singlecell"
     cpus 1
-    memory 1.5.GB
+    memory "2 GB"
     input:
         tuple val(meta), path(read_config)
     output:
@@ -59,6 +60,7 @@ process summarize_adapter_table {
         --threads $task.cpus
     """
 }
+
 
 process extract_barcodes{
     label "singlecell"

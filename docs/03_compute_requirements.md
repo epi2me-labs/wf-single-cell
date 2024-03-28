@@ -6,8 +6,8 @@ Recommended requirements:
 Minimum requirements:
 
 + CPUs = 8
-+ Memory = 16GB
++ Memory = 32GB
 
-Approximate run time: 48h for 120M reads
+Approximate run time: Approximately 16h for 120M reads with the recommended requirements.
 
-ARM processor support: True
+ARM processor support: False

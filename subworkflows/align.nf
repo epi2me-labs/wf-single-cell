@@ -1,5 +1,6 @@
 process call_paftools {
     label "singlecell"
+    memory "2 GB"
     cpus 1
     input:
         path "ref_genes.gtf"
@@ -12,6 +13,7 @@ process call_paftools {
 
 process get_chrom_sizes{
     label "singlecell"
+    memory "1 GB"
     cpus 1
     input:
         path "ref_genome.fai"
@@ -27,7 +29,7 @@ process build_minimap_index{
     Build minimap index from reference genome
     */
     label "singlecell"
-    cpus params.resources_mm2_max_threads
+    cpus params.threads
     memory '16 GB'
     input:
         path "reference.fa"
@@ -41,7 +43,8 @@ process build_minimap_index{
 
 process align_to_ref {
     label "singlecell"
-    cpus params.resources_mm2_max_threads
+    cpus params.threads
+    memory "32 GB"
     input:
         tuple val(meta),
               val(chunk_id),
@@ -58,15 +61,18 @@ process align_to_ref {
               val(chunk_id),
               path("bam_info.tsv"),
               emit: bam_info
+    script:
+    def view_threads = 1
+    def sort_threads = 3
+    def mm2_threads = Math.max(task.cpus - view_threads - sort_threads, 4)
     """
-     minimap2 -ax splice -uf --secondary=no --MD -t $task.cpus \
-      --junc-bed ref_genes.bed $params.resources_mm2_flags  \
-      genome_index.mmi reads.fastq \
-        | samtools view -b --no-PG -t ref_chrom_sizes - \
-        | tee >(samtools sort -@ 2 --no-PG  - > "${meta.alias}_sorted.bam") \
-        | seqkit bam -F - 2> bam_info.tsv
-
-    samtools index -@ ${task.cpus} "${meta.alias}_sorted.bam"
+    minimap2 -ax splice -uf --secondary=no --MD -t $mm2_threads \
+        --junc-bed ref_genes.bed  \
+        --cap-kalloc 100m --cap-sw-mem 50m \
+        genome_index.mmi reads.fastq \
+    | samtools view -@ $view_threads -b --no-PG -t ref_chrom_sizes - \
+    | tee >(samtools sort -@ $sort_threads --write-index -o "${meta.alias}_sorted.bam"##idx##"${meta.alias}_sorted.bam.bai" --no-PG  -) \
+    | seqkit bam -F - 2> bam_info.tsv
     """
 }
 
