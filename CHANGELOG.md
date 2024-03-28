@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Expression matrix construction code to reduce memory usage.
+- Add additional resources declarations in Nextflow processes.
 
 
 ## [v1.1.0]

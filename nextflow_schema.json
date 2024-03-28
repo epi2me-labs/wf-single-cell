@@ -130,12 +130,19 @@
                     "description": "A file defining the configurations associated with the various supported 10x kits.",
                     "help_text": "A CSV file is expected with the following headers [kit_name, kit_version, barcode_length, umi_length]. If not specified, a default `kit_configs.csv` (found in the project directory root) will be used. This parameter does not typically need be changed."
                 },
-                "max_threads": {
+                "threads": {
                     "type": "integer",
                     "title": "Maximum number of threads",
-                    "description": "This is used to control how many threads the following multithread-capable processes can use: combine_chrom_bams(max 8 threads), stringtie(max_threads/4), align_to_transcriptome(max_threads/2). It is also used as the number of parts to chunk the FASTQ data into before processing.",
+                    "description": "Number of CPU threads to use in resource intensive processes.",
                     "help_text": "The total CPU resource used by the workflow is constrained by the executor configuration.",
-                    "default": 4
+                    "default": 8
+                },
+                "process_chunk_size": {
+                    "type": "integer",
+                    "title": "Process chunk size",
+                    "description": "Control the size of chunks for processing of data.",
+                    "default": 1000000,
+                    "help_text": "Controls batching of reads for processing."
                 },
                 "barcode_adapter1_suff_length": {
                     "type": "integer",
@@ -200,34 +207,6 @@
                     "format": "path",
                     "title": "UMAP gene list",
                     "description": "File containing a list of gene symbols (one symbol per line) to annotate with expression values in the UMAP projections."
-                },
-                "resources_mm2_max_threads": {
-                    "type": "integer",
-                    "title": "Minimap2 threads",
-                    "description": "Maximum allowed threads for the minimap2 stage.",
-                    "help_text": "The total CPU resource used by the workflow is constrained by the executor configuration.",
-                    "default": 4
-                },
-                "resources_mm2_flags": {
-                    "type": "string",
-                    "title": "Minimap2 flags",
-                    "description": "Optional flags for the minimap2 stage.",
-                    "default": "-I 16G",
-                    "help_text": "Minimap2 options can be supplied to modify the alignment parameters: eg '-I 4G' loads at max 4G bases into memory for indexing."
-                },
-                "adapter_scan_chunk_size": {
-                    "type": "integer",
-                    "title": "Adapter scanning chunk size",
-                    "description": "Chunk size for adapter scanning step.",
-                    "default": 0,
-                    "help_text": "Set the number of reads per chunk to process in the adapter_scan stage. If set to 0 (the default), the input reads will be split into one chunk per threads provided with `max_threads`."
-                },
-                "process_chunk_size": {
-                    "type": "integer",
-                    "title": "Process chunk size",
-                    "description": "Control the size of chunks for processing of data.",
-                    "default": 100000,
-                    "help_text": "Several steps process the data into chunks of n reads/alignments. Use a smaller number to reduce peak memory use."
                 },
                 "mito_prefix": {
                     "type": "string",
@@ -324,9 +303,9 @@
         },
         "minimum": {
             "cpus": 8,
-            "memory": "16GB"
+            "memory": "32GB"
         },
-        "run_time": "48h for 120M reads",
-        "arm_support": true
+        "run_time": "Approximately 16h for 120M reads with the recommended requirements.",
+        "arm_support": false
     }
 }

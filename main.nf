@@ -11,11 +11,9 @@ include { process_bams } from './subworkflows/process_bams'
 
 
 process chunkReads {
-    // concatenate fastq and fastq.gz in a dir. 
-    // Split into p parts where p is num threads
-
     label "singlecell"
     cpus 4
+    memory "4 GB"
     input:
         tuple val(meta),
               path(reads)
@@ -24,19 +22,16 @@ process chunkReads {
               path("chunks/*"),
               emit: fastq_chunks
     script:
-    // Split the input fastq into chunks for processing by downstream processes.
-    // If params.adapter_scan_chunk_size is set to 0, partition data into $params.max_threads chunks (with seqkit -p)
-    // Else partition into chunks with params.adapter_scan_chunk_size reads (with seqkit -s)
-    def seqkit_split_opts = (params.adapter_scan_chunk_size == 0) ? "-p $params.max_threads" : "-s $params.adapter_scan_chunk_size"
-
     """
-    seqkit split2 ${reads} --threads ${task.cpus} ${seqkit_split_opts} -O chunks -o ${meta.alias} -e .gz
+    seqkit split2 ${reads} --threads ${task.cpus} -s ${params.process_chunk_size} -O chunks -o ${meta.alias} -e .gz
     """
 }
+
 
 process getVersions {
     label "singlecell"
     cpus 1
+    memory "1 GB"
     output:
         path "versions.txt"
     script:
@@ -61,6 +56,7 @@ process getVersions {
 process getParams {
     label "singlecell"
     cpus 1
+    memory "1 GB"
     output:
         path "params.json"
     script:
@@ -71,8 +67,11 @@ process getParams {
     """
 }
 
+
 process makeReport {
     label "wf_common"
+    cpus 1
+    memory "32 GB"
     input:
         path 'versions'
         path 'params.csv'
@@ -109,6 +108,8 @@ process mergeTags {
         [read_id, CR, CY, UR, UY, start, end, chr, mapq]
     */
     label "wf_common"
+    cpus 1
+    memory "2 GB"
     input:
         tuple val(meta),
               val(chunk_id),
@@ -132,6 +133,8 @@ process mergeTags {
 // decoupling the publish from the process steps.
 process output {
     label "singlecell"
+    cpus 1
+    memory "1 GB"
     // // publish inputs to output directory
     publishDir "${params.out_dir}", mode: 'copy', pattern: "*.{bam,bai}",
         saveAs: { filename -> "${meta.alias}/bams/$filename" }
@@ -155,6 +158,8 @@ process output {
 process output_report {
     // publish inputs to output directory
     label "singlecell"
+    cpus 1
+    memory "1 GB"
     publishDir "${params.out_dir}", mode: 'copy', pattern: "*"
     input:
         path fname
@@ -165,8 +170,11 @@ process output_report {
     """
 }
 
+
 process parse_kit_metadata {
     label "singlecell"
+    cpus 1
+    memory "1 GB"
     input:
         path 'sample_ids'
         path sc_sample_sheet
@@ -200,7 +208,7 @@ process parse_kit_metadata {
 process prepare_report_data {
     label "singlecell"
     cpus 1
-    memory 1.GB
+    memory "1 GB"
     input:
         tuple val(meta),
               path('read_tags'),
