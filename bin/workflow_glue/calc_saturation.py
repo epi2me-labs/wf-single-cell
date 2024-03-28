@@ -93,14 +93,16 @@ def downsample_dataframe(df, fraction):
     logger = get_named_logger('ClcSat')
 
     logger.info(f"Doing {fraction}")
-    df_scaled = df.sample(frac=fraction)
+    df_scaled = df.sample(fraction=fraction)
     n_reads = df_scaled.shape[0]
 
     # Get the unique number of reads, genes and UMIs per cell barcode
-    gb = df_scaled.groupby("barcode").n_unique().median()
-    reads_per_cell = gb['read_id'][0]
-    genes_per_cell = gb['gene'][0]
-    umis_per_cell = gb['umi'][0]
+    gb_cell = df_scaled.groupby("barcode")
+    gb_cell_median = gb_cell.n_unique().median()
+    genes_per_cell = gb_cell_median['gene'][0]
+    umis_per_cell = gb_cell_median['umi'][0]
+    # Since polars 0.20.5 groupby.count() has been renamed groupby.len()
+    reads_per_cell = gb_cell.count().median()['count'][0]
 
     n_deduped_reads = df_scaled.groupby(['gene', 'barcode', 'umi']).count().shape[0]
     if n_reads < 1:
@@ -129,8 +131,13 @@ def run_jobs(args):
     df = pl.read_csv(
         args.read_tags,
         separator='\t',
-        columns=['read_id', 'CB', 'UB', 'gene'],
-        new_columns=['read_id', 'barcode', 'umi', 'gene']
+        columns=['CB', 'UB', 'gene'],
+        new_columns=['barcode', 'umi', 'gene'],
+        low_memory=True,
+        dtypes={
+            'CB': pl.Categorical,
+            'UB': pl.Categorical,
+            'gene': str}
     )
 
     df.filter((df['barcode'] != '-') & (df['umi'] != '-'))
