@@ -41,20 +41,20 @@ def test_run_jobs():
 # @pytest.mark.skip
 def test_downsample_dataframe():
     """Test calc_saturation."""
-    header = ['read_id', 'barcode', 'umi', 'gene']
+    header = ['barcode', 'umi', 'gene']
 
     rows = (
         # Cell 1: 4 reads, 2 umis with two reads each, 2 genes.
-        ('read1', 'AGATAGATAGATAGAT', 'ATAGATAGATAG', 'YFG1'),
-        ('read2', 'AGATAGATAGATAGAT', 'ATAGATAGATAG', 'YFG1'),
-        ('read3', 'AGATAGATAGATAGAT', 'ccccATAGATAG', 'YFG2'),
-        ('read4', 'AGATAGATAGATAGAT', 'ccccATAGATAG', 'YFG2'),
+        ('AGATAGATAGATAGAT', 'ATAGATAGATAG', 'YFG1'),
+        ('AGATAGATAGATAGAT', 'ATAGATAGATAG', 'YFG1'),
+        ('AGATAGATAGATAGAT', 'ccccATAGATAG', 'YFG2'),
+        ('AGATAGATAGATAGAT', 'ccccATAGATAG', 'YFG2'),
 
         # Cell 2: 4 reads, 3 umis, 3 genes.
-        ('read5', 'TATATATATATATATA', 'TACTACTACTAC', 'YFG3'),
-        ('read6', 'TATATATATATATATA', 'CACTACTACTCA', 'YFG4'),
-        ('read7', 'TATATATATATATATA', 'CACTACTACTCA', 'YFG4'),
-        ('read8', 'TATATATATATATATA', 'GACGACGACGAC', 'YFG5')
+        ('TATATATATATATATA', 'TACTACTACTAC', 'YFG3'),
+        ('TATATATATATATATA', 'CACTACTACTCA', 'YFG4'),
+        ('TATATATATATATATA', 'CACTACTACTCA', 'YFG4'),
+        ('TATATATATATATATA', 'GACGACGACGAC', 'YFG5')
     )
 
     df = pl.from_records(
