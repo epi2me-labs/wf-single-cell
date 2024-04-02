@@ -40,7 +40,7 @@ def argparser():
     parser.add_argument(
         "--chunksize",
         type=int,
-        default=10000,
+        default=100000,
         help="Process the BAM in chunks no larger than this."
     )
 
@@ -96,9 +96,12 @@ def parse_gtf(annotation_file):
 
 
 def parse_bam(transcriptome_bam, chunksize):
-    """Parse the transcriptome alignment BAM sorted by name.
+    """Create batched dataframes summarising alignments.
 
-    Yield chunks with a maximum size 100,000
+    Alignments with equal query name are guaranteed to be grouped in one batch
+    provided the input file is namesorted.
+
+    :param chunksize: (approximate) number of alignments to yield in one go.
     """
     cols = [
         'read_id', 'query_transcript', 'aln_score', 'tr_cov', 'q_cov', 'tr_mapq']

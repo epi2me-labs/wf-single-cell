@@ -352,7 +352,6 @@ process assign_features {
         --gffcompare_tmap gffcompare.stringtie.gff.tmap \
         --gtf chr.gtf \
         --tags tags.tsv \
-        --chunksize $params.process_chunk_size \
         --output "${meta.alias}.${chr}.feature_assigns.tsv" \
         --min_mapq ${params.gene_assigns_minqv}
     """
