@@ -93,7 +93,7 @@ def filter_cells(
                     mito_features.append(feature)
 
         mito_total = df.loc[:, mito_features].sum(axis=1)
-        mito_pct = 100 * mito_total / df["counts_per_cell"]
+        mito_pct = (100 * mito_total / df["counts_per_cell"]).rename('mito_pct')
         mito_pct.to_csv(
             f"{output_prefix}_expression.mito.tsv", sep="\t")
         n_mito = mito_pct[mito_pct > max_mito].shape[0]

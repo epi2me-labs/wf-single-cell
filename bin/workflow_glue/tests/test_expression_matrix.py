@@ -87,3 +87,10 @@ def test_main(tags_df):
         pd.testing.assert_frame_equal(
             expected_processed_result,
             procs_result_df, check_like=True, check_dtype=False)
+
+        mito_results_df_file = (
+                tmp_test_dir / f'{Args.output_prefix}_expression.mito.tsv'
+        )
+        mito_results_df = pd.read_csv(mito_results_df_file, sep='\t', index_col=None)
+        assert "CB" in mito_results_df.columns
+        assert "mito_pct" in mito_results_df.columns
