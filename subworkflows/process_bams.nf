@@ -380,12 +380,9 @@ process umi_gene_saturation {
 
 process umap_reduce_expression_matrix {
     label "singlecell"
-    cpus 2
-    // Most runs will use less than 10GB memory, but large numbers of cells (above 15K)
-    // may lead to memory usage over 20GB. Max here is 32GB 
-    memory { 8.GB * task.attempt }
-    maxRetries 3
-    errorStrategy {task.exitStatus in [137,140] ? 'retry' : 'terminate'}
+    cpus 4
+    // around 8GB is used for a 17k cells x 57k features matrix 
+    memory "16 GB"
     input:
         tuple val(repeat_num),
               val(meta),
@@ -396,6 +393,7 @@ process umap_reduce_expression_matrix {
                 path("${data_type}_umap_${repeat_num}.tsv"),
                 emit: matrix_umap_tsv
     """
+    export NUMBA_NUM_THREADS=${task.cpus}
     workflow-glue umap_reduce \
         --output ${data_type}_umap_${repeat_num}.tsv \
         ${matrix}
