@@ -30,7 +30,7 @@ process get_contigs {
 process generate_whitelist{
     label "singlecell"
     cpus 1
-    memory "2 GB"
+    memory "4 GB"
     input:
         tuple val(meta),
               path("barcodes/?_barcode.tsv")
