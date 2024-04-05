@@ -395,8 +395,8 @@ process umap_reduce_expression_matrix {
     """
     export NUMBA_NUM_THREADS=${task.cpus}
     workflow-glue umap_reduce \
-        --output ${data_type}_umap_${repeat_num}.tsv \
-        ${matrix}
+        ${matrix} \
+        ${data_type}_umap_${repeat_num}.tsv \
     """
 }
 
