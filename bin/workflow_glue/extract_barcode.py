@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Extract barcode."""
 import collections
 from enum import Enum

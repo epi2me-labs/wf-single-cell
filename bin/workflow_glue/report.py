@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Make report."""
 import base64
 from pathlib import Path
@@ -378,8 +377,3 @@ def argparser():
     parser.add_argument(
         "--umap_genes", help="File containing list of genes to annnotate UMAPs")
     return parser
-
-
-if __name__ == "__main__":
-    args = argparser().parse_args()
-    main(args)
