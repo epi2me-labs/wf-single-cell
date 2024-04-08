@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Assign reference genes and transcripts to read_id."""
 import re
 

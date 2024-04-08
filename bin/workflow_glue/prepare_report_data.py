@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-"""Preapre data for the report."""
+"""Prepare data for the report."""
 from collections import defaultdict
 import json
 
@@ -139,8 +138,3 @@ def main(args):
     df_summ['n_reads'] = n_reads
     df_summ.to_csv(args.summary_out, sep='\t')
     df_survival.to_csv(args.survival_out, sep='\t')
-
-
-if __name__ == "__main__":
-    args = argparser().parse_args()
-    main(args)

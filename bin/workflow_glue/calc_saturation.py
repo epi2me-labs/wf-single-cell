@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Calculate saturation."""
 
 from matplotlib import pyplot as plt

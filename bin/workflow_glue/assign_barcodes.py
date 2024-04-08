@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Assign barcodes.
 
 Given a whitelist of barcodes (10x or generated here?) assign raw barcodes to corrected

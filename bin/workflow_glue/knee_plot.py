@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Knee plot."""
 from collections import Counter
 import operator
@@ -417,8 +416,3 @@ def main(args):
 
     logger.info(f"Generating knee plot: {args.output_plot}")
     make_kneeplot(shortlist, args)
-
-
-if __name__ == "__main__":
-    args = argparser().parse_args()
-    main(args)

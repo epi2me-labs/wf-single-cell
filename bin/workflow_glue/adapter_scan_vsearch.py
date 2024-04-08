@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Adapter scan vsearch."""
 import gzip
 from pathlib import Path
@@ -462,8 +461,3 @@ def main(args):
     )
     write_tables(read_info, args.output_tsv)
     logging.debug(f"Writing output table to {args.output_tsv}")
-
-
-if __name__ == "__main__":
-    args = argparser().parse_args()
-    main(args)

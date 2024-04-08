@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Expression counts matrix construction."""
 from pathlib import Path
 
@@ -191,8 +190,3 @@ def main(args):
     df_proc.to_csv(
         f'{args.output_prefix}_expression.processed.tsv',
         sep="\t")
-
-
-if __name__ == "__main__":
-    args = argparser().parse_args()
-    main(args)
