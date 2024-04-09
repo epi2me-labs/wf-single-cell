@@ -1,11 +1,12 @@
-#!/usr/bin/env python
-"""Cluster UMIs."""
+"""Add tags from a text file to a BAM."""
 
 from pathlib import Path
 
 import pandas as pd
 import pysam
-from .util import wf_parser  # noqa: ABS101
+from .util import get_named_logger, wf_parser  # noqa: ABS101
+
+logger = get_named_logger("TagBAMs")
 
 
 def argparser():
@@ -13,84 +14,57 @@ def argparser():
     parser = wf_parser("tag_bams")
 
     parser.add_argument(
-        "--in_bam",
-        help="BAM file for tagging",
-        type=Path,
-        required=True
-    )
+        "in_bam", type=Path,
+        help="BAM file for tagging")
 
     parser.add_argument(
-        "--out_bam",
-        help="Path for tagged output BAM",
-        type=Path,
-        required=True
-    )
+        "out_bam", type=Path,
+        help="Path for tagged output BAM")
 
     parser.add_argument(
-        "--tags",
-        help="Read tags TSV",
-        type=Path,
-        required=True
-    )
+        "tags", type=Path,
+        help="Read tags TSV")
 
     parser.add_argument(
-        "--chrom",
-        help="Chromosome name",
-        required=True
-    )
+        "chrom",
+        help="Chromosome name")
+
+    parser.add_argument(
+        "--threads", default=2, type=int,
+        help="Number of threads used for BAM reading/writing.")
     return parser
 
 
-def add_tags(tags_file, in_bam, out_bam, chrom):
+def add_tags(tags_file, in_bam, out_bam, chrom, threads):
     """Add all the required tags to the BAM file."""
-    dtypes = {
-        # Read id and quality strings are not expected to be unique. The other columns
-        # will benefit from being category types.
-        'read_id': str,
-        'CY': str,
-        'UY': str,
-        'CR': 'category',
-        'CB': 'category',
-        'UR': 'category',
-        'UB': 'category',
-        'gene': 'category',
-        'transcript': 'category'
-    }
-    df = pd.read_csv(
-        tags_file,
-        sep='\t',
-        index_col='read_id',
-        dtype=dtypes
-    )
+    logger.info("Reading tag data.")
 
-    with pysam.AlignmentFile(in_bam, "rb") as bam_in:
-        with pysam.AlignmentFile(out_bam, "wb", template=bam_in) as bam_out:
+    # read everything as str since we need to serialse to string anyway
+    tags = pd.read_csv(
+        tags_file, sep='\t', dtype=str, index_col="read_id").rename(
+            columns={"gene": "GN", "transcript": "TR"}, copy=False)
+    logger.info("Indexing tag data by read_id")
+    tags = tags.to_dict(orient="index")
+
+    logger.info("Tagging reads.")
+    names = "CR CB CY UR UB UY GN TR".split()
+    with pysam.AlignmentFile(
+            in_bam, "rb", threads=threads) as bam_in:
+        with pysam.AlignmentFile(
+                out_bam, "wb", template=bam_in, threads=threads) as bam_out:
             for align in bam_in.fetch(contig=chrom):
                 read_id = align.query_name
                 try:
-                    row = df.loc[read_id]
+                    row = tags[read_id]
                 except KeyError:
-                    continue  # No barcode/umi for this read
-                # uncorrected cell barcode
-                align.set_tag('CR', row['CR'], value_type="Z")
-                # Corrected cell barcode
-                align.set_tag('CB', row['CB'], value_type="Z")
-                # barcode qscores
-                align.set_tag('CY', row['CY'], value_type="Z")
-                # Uncorrected UMI
-                align.set_tag('UR', row['UR'], value_type="Z")
-                # UMI quality score
-                align.set_tag('UY', row['UY'], value_type="Z")
-                # Corrected UMI = UB:Z
-                align.set_tag("UB", row['UB'], value_type="Z")
-                # Annotated gene name = GN:Z
-                align.set_tag("GN", row['gene'], value_type="Z")
-                # Annotated transcript name = TR:Z
-                align.set_tag("TR", row['transcript'], value_type="Z")
-
-                bam_out.write(align)
+                    continue  # don't write reads without tags
+                else:
+                    for key in names:
+                        align.set_tag(key, row[key], value_type="Z")
+                    bam_out.write(align)
+    logger.info("Done.")
 
 
 def main(args):
     """Entry point."""
-    add_tags(args.tags, args.in_bam, args.out_bam, args.chrom)
+    add_tags(args.tags, args.in_bam, args.out_bam, args.chrom, args.threads)

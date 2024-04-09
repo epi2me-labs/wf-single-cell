@@ -5,7 +5,7 @@ import tempfile
 import pandas as pd
 import pysam
 import pytest
-from workflow_glue.tag_bam import main
+from workflow_glue import tag_bam
 
 
 @pytest.fixture
@@ -73,18 +73,11 @@ def tags_file():
 def test_add_tags(tags_file, input_bam):
     """Check that the output - bams and tag file - are correct."""
     # create_inputs
-    class Args:
-        in_bam = input_bam
-        tags = tags_file
-        out_bam = tempfile.NamedTemporaryFile('w', suffix='.bam').name
-        chrom = 'chr17'
-        flip = True
-
-    args = Args()
-    main(args)
+    out_bam = tempfile.NamedTemporaryFile('w', suffix='.bam').name
+    tag_bam.add_tags(tags_file, input_bam, out_bam, "chr17", 1)
 
     # Check that the correct tags have been set
-    with pysam.AlignmentFile(args.out_bam, "rb") as bam_result:
+    with pysam.AlignmentFile(out_bam, "rb") as bam_result:
         for align in bam_result:
             read_id = align.query_name
             # Check that some of the tags have been set correctly
