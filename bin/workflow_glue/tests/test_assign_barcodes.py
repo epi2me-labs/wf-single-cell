@@ -4,43 +4,32 @@ import tempfile
 import pandas as pd
 from pytest import fixture
 from workflow_glue.assign_barcodes import (
-    calc_ed_with_whitelist, process_records
+    determine_barcode, process_records
 )
 
 
 @fixture
 def whitelist():
     """Make a small barcode whitelist."""
-    return (
-        'AAAAAAAAAAAAAAAA',
-        'ttAAAAAAAAAAAAAA',
-        'ttttAAAAAAAAAAAA',
-        'AAAAAAAAAAAAAccc',
-        'AAAggggAAAAAAAAA')
+    return set(
+        ('AAAAAAAAAAAAAAAA',
+         'ttAAAAAAAAAAAAAA',
+         'ttttAAAAAAAAAAAA',
+         'AAAAAAAAAAAAAccc',
+         'AAAggggAAAAAAAAA'))
 
 
 def test_calc_ed_with_whitelist(whitelist):
     """Test edit distance calculation."""
     bc1 = 'AAAAAAAAAAAAAAAA'
-    bc_match, bc_match_ed, next_match_diff = \
-        calc_ed_with_whitelist(bc1, whitelist)
-    # This BC should match the first BC in the whitelist with an ED of 0
+    bc_match = determine_barcode(bc1, whitelist, 2, 2)
     assert bc_match == 'AAAAAAAAAAAAAAAA'
-    assert bc_match_ed == 0
-
-    # AAAAAAAAAAAAAAAA -> 0
-    # ttAAAAAAAAAAAAAA -> 2
-    # Check ED difference between top match and second-top match
-    assert next_match_diff == 2
 
     # An uncorrected BC with a nearest match ED of 7 (cutoff = 6)
-    # will return a string of 'X's and an ED the size of the BC.
+    # return no match
     bc2 = 'AAAAAAAAAggggggg'
-    bc_match, bc_match_ed, next_match_diff = \
-        calc_ed_with_whitelist(bc2, whitelist)
-    assert bc_match == 'X' * 16
-    assert bc_match_ed == 16
-    assert next_match_diff == 16
+    bc_match = determine_barcode(bc2, whitelist, 2, 2)
+    assert bc_match == '-'
 
 
 def test_process_records(whitelist):
@@ -67,12 +56,11 @@ def test_process_records(whitelist):
     tags.to_csv(tags_file.name, sep='\t')
     tags_output = tempfile.NamedTemporaryFile(mode='w', suffix='.tsv')
 
-    barcode_length = 16
     max_ed = 16
     min_ed_diff = 2
     barcode_counter = process_records(
-            tags_file.name, whitelist, barcode_length,
-            max_ed, min_ed_diff, tags_output.name)
+        tags_file.name, whitelist,
+        max_ed, min_ed_diff, tags_output.name)
 
     result_tags_df = pd.read_csv(tags_output.name, sep='\t', index_col=0)
 

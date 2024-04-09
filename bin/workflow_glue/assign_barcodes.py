@@ -1,7 +1,6 @@
 """Assign barcodes.
 
-Given a whitelist of barcodes (10x or generated here?) assign raw barcodes to corrected
-barcodes.
+Given a whitelist of barcodes assign raw barcodes to nearest match.
 """
 import collections
 from pathlib import Path
@@ -10,7 +9,9 @@ import pandas as pd
 import rapidfuzz
 from rapidfuzz.process import extract
 
-from .util import wf_parser  # noqa: ABS101
+from .util import get_named_logger, wf_parser  # noqa: ABS101
+
+logger = get_named_logger("AsgnBrcdes")
 
 
 def argparser():
@@ -18,82 +19,60 @@ def argparser():
     parser = wf_parser("assign_barcodes")
 
     parser.add_argument(
-        "--extract_barcode_tags",
-        help="TSV file of read_id, uncorrected_barcode, qscores"
-    )
+        "whitelist", type=Path,
+        help="File containing list of expected cell barcodes.")
 
     parser.add_argument(
-        "--whitelist",
-        help="File containing list of expected cell barcodes",
-        type=Path
-    )
+        "barcode_tags", type=Path,
+        help="TSV file of read_id, uncorrected_barcode, qscores.")
 
     parser.add_argument(
-        "--output_tags",
-        help="Output TSV containing columns from `extract_barcode_tags` \
-            + CB (correctred barcode) [tags.tsv]",
-        type=Path
-    )
+        "output_tags", type=Path,
+        help="Output TSV containing columns from `barcode_tags` \
+            and additional a CB (corrected barcode) column.")
 
     parser.add_argument(
-        "--output_counts",
+        "output_counts", type=Path,
         help="Output TSV file containing counts for each of the assigned \
-        barcodes [barcode_counts.tsv]",
-        type=Path
-    )
+            barcodes.")
 
     parser.add_argument(
-        "--chunksize",
-        type=int,
-        default=100000,
-        help="Process the BAM in chunks no larger than this."
-    )
+        "--chunksize", type=int, default=100000,
+        help="Process the BAM in chunks no larger than this.")
 
     parser.add_argument(
-        "--max_ed",
-        help="Max edit distance between putative barcode \
-                        and the matching whitelist barcode [2]",
-        type=int,
-        default=2,
-    )
+        "--max_ed", type=int, default=2,
+        help="Max. edit distance between putative barcode \
+            and the matching whitelist barcode.")
 
     parser.add_argument(
-        "--min_ed_diff",
-        help="Min difference in edit distance between the \
-                        (1) putative barcode vs top hit and (2) putative \
-                        barcode vs runner-up hit [2]",
-        type=int,
-        default=2,
-    )
-
-    parser.add_argument(
-        "--barcode_length",
-        help="Cell barcode length [16]",
-        type=int,
-        default=16
-    )
+        "--min_ed_diff", type=int, default=2,
+        help="Min. difference in edit distance between the \
+            best and second best whitelist matches.")
 
     return parser
 
 
-def calc_ed_with_whitelist(bc_uncorr, whitelist, score_cutoff=6):
-    """Find barcodes in a whilelist with the smallest edit distance.
+def determine_barcode(bc_uncorr, whitelist, max_ed, min_ed_diff):
+    """Find barcode in a whitelist corresponding to read barcode.
 
-    :param bc_uncorr: uncorrected barcode
-    :param whitelist: List of possible barcodes
-    :param: score_cutoff: rapidfuzz score cutoff - edit distances above this are not
-        reported.
-    :return:
-        best matching barcode
-        edit distance between best match and uncorrected barcode
-        edit distance difference between top match and second top match
+    :param bc_uncorr: uncorrected barcode.
+    :param whitelist: list of possible barcodes.
+    :param max_ed: max. edit distance between barcode and whitelist hit.
+    :param min_ed_diff: min. edit distance difference between first and
+        second best hits in order to accept the first as valid.
     """
+    # quick return
+    if bc_uncorr in whitelist:
+        return bc_uncorr
+
+    # now do levenstein on anything left
     # result is a list of tuples (bc, ed, idx) sorted by ed.
     result = extract(
         bc_uncorr,
         whitelist,
         scorer=rapidfuzz.distance.Levenshtein.distance,
-        score_cutoff=score_cutoff)
+        score_cutoff=max_ed + min_ed_diff + 1)
 
     if len(result) > 0:
         bc_match = result[0][0]
@@ -106,97 +85,64 @@ def calc_ed_with_whitelist(bc_uncorr, whitelist, score_cutoff=6):
     else:
         next_match_diff = len(bc_uncorr)
 
-    return bc_match, bc_match_ed, next_match_diff
+    # are we better than the second place?
+    corrected = "-"
+    if (bc_match_ed <= max_ed) and (next_match_diff >= min_ed_diff):
+        corrected = bc_match
+    return corrected
 
 
 def process_records(
-        extract_barcode_tags, whitelist, barcode_length, max_ed, min_ed_diff,
-        tags_output, chunksize=100000):
-    """Process read tag records.
+        barcode_tags, whitelist, max_ed, min_ed_diff, tags_output,
+        chunksize=100000):
+    """Process read barcodes stored in text file to find whitelist equivalents.
 
-    Process read tags to assign each read a corrected cell barcode.
-    Iterate over the uncorrected barcodes and for each barcode search
-    for matches in the whitelist and assign corrected barocodes if there is an
-    unambiguous match.
-
-    Write results chunks of no greater than 100,000 reads.
-
-    :param extract_barcode_tags: path to TSV with
-        Index: read_id
-        columns: the read tags
+    :param barcode_tags: path to TSV with tag data
     :param whitelist: list of potential barcodes.
-    :param: barcode_length: expected lengt of barcode
     :param: max_ed: max allowed edit distance between am uncorrected barcode
         and a potential corected whitelist barcode.
     :param: min_ed_diff: minimum allowed edit distance between top two
         barcode candidates.
-    :return:
-        barcode counts DataFrame
-        read tags DataFrame
     """
     barcode_counter = collections.Counter()
+    bc = whitelist.pop()
+    barcode_length = len(bc)
+    whitelist.add(bc)
 
     output_cols = [
         'read_id', 'CR', 'CY', 'UR', 'UY', 'chr', 'start', 'end', 'mapq', 'CB']
-    # Write dataframe header to file
-    pd.DataFrame(
-        columns=output_cols
-    ).to_csv(tags_output, mode='w', sep='\t', header=True, index=False)
+    with open(tags_output, 'w') as fh:
+        fh.write("\t".join(output_cols))
+        fh.write("\n")
 
-    def write_chunk(bc_records, df_tags_):
-        corr_bc_df = pd.DataFrame.from_records(
-            bc_records, index='read_id',
-            columns=['read_id', 'CB'])
+    for df_tags in pd.read_csv(barcode_tags, sep='\t', chunksize=chunksize):
+        df_tags["CB"] = "-"
+        selected = df_tags["CR"].str.len() >= barcode_length - max_ed
+        df_tags.loc[selected, "CB"] = df_tags.loc[selected].apply(
+            lambda x: determine_barcode(
+                x.CR, whitelist, max_ed, min_ed_diff),
+            axis=1)
+        df_tags[output_cols].to_csv(
+            tags_output, mode='a', sep='\t', header=None, index=False)
+        barcode_counter.update(df_tags["CB"])
 
-        result_tags_df = df_tags_.merge(
-            corr_bc_df, how='left', left_index=True, right_index=True)
-        result_tags_df.CB.fillna('-', inplace=True)
-        # Ensure columns in correct order
-        col_order = [x for x in output_cols if x != 'read_id']
-        result_tags_df = result_tags_df[col_order]
-        result_tags_df.to_csv(tags_output, mode='a', sep='\t', header=None)
-
-    # The csv from extract_barcodes was not created with pandas so no quoting will
-    # have been done on the tags file
-    for df_tags in pd.read_csv(
-            extract_barcode_tags, sep='\t', index_col=0, chunksize=chunksize):
-        corrected_bcs = []
-        for row in df_tags.itertuples():
-            read_id = row.Index
-            bc_uncorr = row.CR
-            if not bc_uncorr:
-                continue
-
-            # No use considering barcodes that are too small
-            if len(bc_uncorr) >= barcode_length - max_ed:
-
-                bc_match, bc_match_ed, next_match_diff = \
-                    calc_ed_with_whitelist(bc_uncorr, whitelist)
-
-                # Check barcode match edit distance and difference to
-                # runner-up edit distance.
-                if (bc_match_ed <= max_ed) and (next_match_diff >= min_ed_diff):
-                    corrected_bcs.append([read_id, bc_match])
-                    barcode_counter[bc_match] += 1
-                # Set bc as '-' as a suitable fix cannot be foundin the whitelist
-                else:
-                    corrected_bcs.append([read_id, '-'])
-
-        write_chunk(corrected_bcs, df_tags)
-
+    del barcode_counter["-"]
     return barcode_counter
 
 
 def main(args):
     """Run main entry point."""
-    whitelist = pd.read_csv(
-        args.whitelist, index_col=None, sep='\t', header=None)[0].to_list()
+    logger.info("Reading whitelist.")
+    whitelist = set(pd.read_csv(
+        args.whitelist, index_col=None, sep='\t', header=None)[0])
 
+    logger.info("Processing reads.")
     barcode_counter = process_records(
-        args.extract_barcode_tags, whitelist,
-        args.barcode_length, args.max_ed, args.min_ed_diff,
+        args.barcode_tags, whitelist,
+        args.max_ed, args.min_ed_diff,
         args.output_tags)
 
     with open(args.output_counts, "w") as f:
         for bc, n in barcode_counter.most_common():
             f.write(f"{bc}\t{n}\n")
+    logger.info("Finished.")

@@ -74,12 +74,10 @@ process assign_barcodes{
               emit: tags
     """
     workflow-glue assign_barcodes \
-        --output_tags extract_barcodes_with_bc.tsv \
-        --output_counts bc_assign_counts.tsv \
-        --max_ed $params.barcode_max_ed \
-        --min_ed_diff $params.barcode_min_ed_diff \
-        --extract_barcode_tags extract_barcodes.tsv \
-        --whitelist whitelist.tsv
+        whitelist.tsv extract_barcodes.tsv \
+        extract_barcodes_with_bc.tsv bc_assign_counts.tsv \
+        --max_ed ${params.barcode_max_ed} \
+        --min_ed_diff ${params.barcode_min_ed_diff}
     """
 }
 

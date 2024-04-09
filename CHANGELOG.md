@@ -10,10 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Issue introduced in v1.1.0 that caused a partial BAM file to be output.
 - Corrected example command in README.
 - Fixed incorrect reporting of unique gene and transcripts in report table.
-
 ### Changed
 - Expression matrix construction code to reduce memory usage.
 - Add additional resources declarations in Nextflow processes.
+- Speed up barcode assign program 3x.
 
 
 ## [v1.1.0]
