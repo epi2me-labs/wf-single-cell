@@ -7,9 +7,8 @@ import pysam
 import pytest
 from pytest import fixture
 from workflow_glue.adapter_scan_vsearch import (
-    call_vsearch, complement_trans,
-    parse_vsearch, write_adapters_fasta,
-    write_stranded_fastq)
+    call_vsearch, complement_trans, create_stranded_reads,
+    parse_vsearch, write_adapters_fasta)
 from workflow_glue.sc_util import kit_adapters
 
 
@@ -89,8 +88,10 @@ def test_call_vsearch(adapters, expected_results, segment):
             kit_adapters[kit]['adapter1'], kit_adapters[kit]['adapter2'],
             adapter_fasta)
 
-        vsearch_results = call_vsearch(Path(fastq_file.name), 0.7, adapter_fasta)
-        parsed_results = parse_vsearch(vsearch_results)
+        vsearch_results = tempfile.NamedTemporaryFile(suffix='.fq')
+        call_vsearch(
+            Path(fastq_file.name), Path(vsearch_results.name), 0.7, adapter_fasta)
+        parsed_results = parse_vsearch(vsearch_results.name)
 
         # Each result can contain 0 or more subreads -
         #  segments with consecutive pairs of compatible adapters.
@@ -140,12 +141,15 @@ def test_write_stranded_fastq():
 
     temp_fq = tempfile.NamedTemporaryFile(suffix='.fq')
 
-    temp_fq_out = tempfile.NamedTemporaryFile(suffix='.fq.gz')
+    temp_fq_out = tempfile.NamedTemporaryFile(mode='wt', suffix='.fq')
 
     with open(temp_fq.name, 'w') as fh:
         fh.write(fastq)
 
-    write_stranded_fastq(temp_fq.name, config, temp_fq_out.name, '3prime', fl_only=True)
+    data = create_stranded_reads(temp_fq.name, config, '3prime', fl_only=True)
+    for read in data:
+        temp_fq_out.write(read)
+    temp_fq_out.flush()
 
     results = []
     with pysam.FastxFile(temp_fq_out.name) as fh_res:
