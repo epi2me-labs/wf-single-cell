@@ -9,11 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Issue with TSV concat/splitting during `combine_bam_and_tags` stage.
 - Issue introduced in v1.1.0 that caused a partial BAM file to be output.
 - Corrected example command in README.
-- Fixed incorrect reporting of unique gene and transcripts in report table.
+- Incorrect reporting of unique gene and transcripts in report table.
 ### Changed
-- Expression matrix construction code to reduce memory usage.
-- Add additional resources declarations in Nextflow processes.
-- Speed up barcode assign program 3x.
+- Resource declarations in Nextflow processes.
+- Simplified read batching and decoupled from CPU usage parameters.
+- Expression matrix construction code reworked to reduce memory usage.
+- Adapter search step now 3x faster.
+- Barcode assignment 3x faster.
+- Feature assignment now 4.5x faster.
+- UMAP creation memory use reduced 6-fold and up-to 30x faster.
+- Final read tagging step is 3x faster.
+### Removed
+- Several workflow parameters as part of resource management simplification.
 
 
 ## [v1.1.0]
