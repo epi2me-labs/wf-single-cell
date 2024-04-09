@@ -19,12 +19,13 @@ process call_adapter_scan {
     """
     export POLARS_MAX_THREADS=$task.cpus
 
+    # writing fastq occurs in a single-loop - fine to give bgzip some more juice
     workflow-glue adapter_scan_vsearch \
-    chunk.fq.gz \
-    --kit ${meta['kit_name']} \
-    --output_fastq "${meta.alias}_adapt_scan.fastq.gz" \
-    --output_tsv  "${meta.alias}_adapt_scan.tsv" \
-    ${fl}
+        chunk.fq.gz \
+        --kit ${meta['kit_name']} \
+        --output_tsv  "${meta.alias}_adapt_scan.tsv" \
+        ${fl} \
+        | bgzip --threads ${task.cpus} -c > "${meta.alias}_adapt_scan.fastq.gz"
     """
 }
 
