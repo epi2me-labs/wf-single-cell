@@ -216,29 +216,41 @@ def main(args):
 
         assigned = []
 
-        # Attempt to choose one of the multi-mapped alignments
-        for read_id, df_read in df_multimap.groupby('read_id'):
-            df_read.sort_values(
-                ['aln_score', 'q_cov', 'tr_cov'], ascending=False, inplace=True)
+        df_multimap = df_multimap.sort_values(
+            ['read_id', 'aln_score', 'q_cov', 'tr_cov'], ascending=False)
+
+        # Get the column indices for faster .iat indexing later.
+        aln_score_col = df_multimap.columns.get_loc('aln_score')
+        q_cov_col = df_multimap.columns.get_loc('q_cov')
+        tr_cov_col = df_multimap.columns.get_loc('tr_cov')
+        transcript_col = df_multimap.columns.get_loc('transcript')
+
+        # Attempt to choose one of the multi-mapped alignments.
+        # sort refers to the returned order of groupby groups, which we don't care about
+        for read_id, df_read in df_multimap.groupby('read_id', sort=False):
 
             tr = '-'
-            # Choose alignment with the best alignment score or query coverage
+            # Check if an alignment has a better alignment score or a better
+            # query coverage
             if (
-                    df_read.iloc[0].aln_score > df_read.iloc[1].aln_score
-                    or df_read.iloc[0].q_cov > df_read.iloc[1].q_cov
+
+                    df_read.iat[0, aln_score_col] != df_read.iat[1, aln_score_col]
+                    or df_read.iat[0, q_cov_col] != df_read.iat[1, q_cov_col]
             ):
-                # Assign if there is enough read coverage
-                if df_read.iloc[0].tr_cov >= args.min_tr_coverage and \
-                        df_read.iloc[0].q_cov >= args.min_read_coverage:
-                    tr = df_read.iloc[0].transcript
+                # If no AS or query coverage tie,
+                # assign if there is enough read coverage
+                if df_read.iat[0, tr_cov_col] >= args.min_tr_coverage and \
+                        df_read.iat[0, q_cov_col] >= args.min_read_coverage:
+                    tr = df_read.iat[0, transcript_col]
 
             # If there's an alignment score (AS) and read coverage tie,
-            # but a higher transcript coverage
-            elif df_read.iloc[0].tr_cov > df_read.iloc[1].tr_cov:
-                if df_read.iloc[0].tr_cov > 0.8:
-                    tr = df_read.iloc[0].transcript
+            # but a higher transcript coverage above 80%, assign transcript
+            elif df_read.iat[0, tr_cov_col] != df_read.iat[1, tr_cov_col]:
+                if df_read.iat[0, tr_cov_col] > 0.8:
+                    tr = df_read.iat[0, transcript_col]
 
-            # Assign gene
+            # Assign gene based on that with the highest mapping quality if it is also
+            # above a threshold. Note this may be inconcruent with transcript above.
             top_gene = df_read.sort_values('genome_mapq').iloc[0]
             if top_gene.genome_mapq > args.min_mapq:
                 gene = top_gene.gene
