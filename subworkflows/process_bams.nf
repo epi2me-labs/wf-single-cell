@@ -146,12 +146,10 @@ process tag_bams {
     script:
     """
     workflow-glue tag_bam \
-        --in_bam align.bam \
-        --tags tags.tsv \
-        --out_bam ${meta.alias}.${chr}.tagged.bam \
-        --chrom ${chr}
+        align.bam "${meta.alias}.${chr}.tagged.bam" tags.tsv "${chr}" \
+        --threads ${task.cpus}
 
-    samtools index -@ ${task.cpus} ${meta.alias}.${chr}.tagged.bam
+    samtools index -@ ${task.cpus} "${meta.alias}.${chr}.tagged.bam"
     """
 }
 
