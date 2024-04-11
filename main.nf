@@ -311,8 +311,8 @@ workflow pipeline {
         process_bams(
             align.out.bam_sort,
             barcodes,
+            stranding.out.high_qual_bc_counts.groupTuple(),
             ref_genes_gtf,
-            bc_longlist_dir,
             ref_genome_fasta,
             ref_genome_idx)
 

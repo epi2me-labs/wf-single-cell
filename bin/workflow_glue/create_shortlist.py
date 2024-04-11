@@ -214,7 +214,8 @@ def aggregate_counts(input_dir):
     counts = Counter()
     for fname in fnames:
         c = pd.read_csv(
-            fname, delimiter="\t", dtype={"barcode": str, "count": int})
+            fname, delimiter="\t",
+            dtype={"barcode": str, "count": int})
         counts.update(dict(zip(c["barcode"], c["count"])))
     return counts
 

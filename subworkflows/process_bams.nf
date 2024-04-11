@@ -34,33 +34,33 @@ process generate_whitelist{
     input:
         tuple val(meta),
               path("barcodes/?_barcode.tsv")
-        path("barcode_longlist_dir")
     output:
         tuple val(meta),
-              path("*whitelist.tsv"), 
+              path("*whitelist.tsv"),
               emit: whitelist
         tuple val(meta),
-              path("*kneeplot.png"), 
+              path("*kneeplot.png"),
               emit: kneeplot
         // Note: This is called "uncorrected", but they're actually counts of
         //       high quality exact matches to longlist. Low frequency barcodes
         //       are assumed to be false positives. The list is further
         //       filtered by the selected method (basically by abundance).
         tuple val(meta),
-              path("${meta.alias}.uncorrected_bc_counts.tsv"), 
+              path("${meta.alias}.high_qual_bc_counts.tsv"),
               emit: uncorrected_bc_counts
     // TODO: change this to take precomputed, filtered counts from extract_barcodes
     """
     workflow-glue create_shortlist \
         barcodes "${meta.alias}.whitelist.tsv" \
-        --long_list "barcode_longlist_dir/${meta['bc_long_list']}" \
+        --counts \
         --method quantile \
         --exp_cells ${meta['expected_cells']} \
         --plot "${meta.alias}.kneeplot.png" \
-        --counts_out "${meta.alias}.uncorrected_bc_counts.tsv" \
+        --counts_out "${meta.alias}.high_qual_bc_counts.tsv" \
         --threads ${task.cpus}
     """
 }
+
 
 
 process assign_barcodes{
@@ -445,8 +445,8 @@ workflow process_bams {
     take:
         bam
         extracted_barcodes
+        high_qual_bc_counts
         gtf
-        bc_longlist_dir
         ref_genome_fasta
         ref_genome_idx
     main:
@@ -467,9 +467,7 @@ workflow process_bams {
             // [meta, chr, chr.gtf]
             .map {chr_gtf, chr_meta -> [chr_meta[1], chr_meta[0], chr_gtf[1]]}
 
-        generate_whitelist(
-            extracted_barcodes.groupTuple(),
-            bc_longlist_dir)
+        generate_whitelist(high_qual_bc_counts)
 
         assign_barcodes(
              generate_whitelist.out.whitelist
