@@ -29,7 +29,7 @@ process get_contigs {
 
 process generate_whitelist{
     label "singlecell"
-    cpus 1
+    cpus 4
     memory "4 GB"
     input:
         tuple val(meta),
@@ -42,17 +42,23 @@ process generate_whitelist{
         tuple val(meta),
               path("*kneeplot.png"), 
               emit: kneeplot
+        // Note: This is called "uncorrected", but they're actually counts of
+        //       high quality exact matches to longlist. Low frequency barcodes
+        //       are assumed to be false positives. The list is further
+        //       filtered by the selected method (basically by abundance).
         tuple val(meta),
               path("${meta.alias}.uncorrected_bc_counts.tsv"), 
               emit: uncorrected_bc_counts
+    // TODO: change this to take precomputed, filtered counts from extract_barcodes
     """
-    workflow-glue knee_plot \
-        --barcodes_dir barcodes/ \
+    workflow-glue create_shortlist \
+        barcodes "${meta.alias}.whitelist.tsv" \
         --long_list "barcode_longlist_dir/${meta['bc_long_list']}" \
+        --method quantile \
         --exp_cells ${meta['expected_cells']} \
-        --output_whitelist "${meta.alias}.whitelist.tsv" \
-        --output_plot "${meta.alias}.kneeplot.png" \
-        --output_uncorrected_barcodes "${meta.alias}.uncorrected_bc_counts.tsv"
+        --plot "${meta.alias}.kneeplot.png" \
+        --counts_out "${meta.alias}.uncorrected_bc_counts.tsv" \
+        --threads ${task.cpus}
     """
 }
 
