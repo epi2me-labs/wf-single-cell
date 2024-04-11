@@ -107,8 +107,7 @@ def test_main(args):
     # For 3prime this will be reverse
     expected_barcode = 'AAACCCAAGAAACACT'
 
-    counts_result = pd.read_csv(
-        counts_file.name, sep='\t', names=['barcode', 'count'])
+    counts_result = pd.read_csv(counts_file.name, sep='\t')
     assert counts_result.shape == (1, 2)
     assert counts_result.iat[0, 0] == expected_barcode
     assert counts_result.iat[0, 1] == 1

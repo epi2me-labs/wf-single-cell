@@ -435,6 +435,7 @@ def align_adapter(args):
         barcode_counts,
         columns=['count'],
         orient='index').sort_values('count', ascending=False)
+    bc_counts.index.name = 'barcode'
     return bc_counts
 
 
@@ -455,4 +456,4 @@ def main(args):
 
     bc_counts = barcode_counts[barcode_counts.index.isin(wl)]
     bc_counts.to_csv(
-        args.output_barcode_counts, index=True, sep='\t', header=False)
+        args.output_barcode_counts, index=True, sep='\t')
