@@ -215,9 +215,9 @@ process prepare_report_data {
               path('config_stats'),
               path('stats_dir'),
               path('white_list'),
-              path('gene_expression'),
-              path('transcript_expression'),
-              path('mitochondrial_expression'),
+              path('gene_mean_expression.tsv'),
+              path('transcript_mean_expression.tsv'),
+              path('mitochondrial_expression.tsv'),
               path(umaps)
     output:
         path 'survival_data.tsv',
@@ -248,9 +248,9 @@ process prepare_report_data {
         echo "Adding umap data to sample directory"
         # Add data required for umap plotting into sample directory
         mv *umap*.tsv \$umd
-        mv ${gene_expression} \$umd
-        mv ${transcript_expression} \$umd
-        mv ${mitochondrial_expression} \$umd
+        mv gene_mean_expression.tsv \$umd
+        mv transcript_mean_expression.tsv \$umd
+        mv mitochondrial_expression.tsv \$umd
     else
         touch "\$umd"/OPTIONAL_FILE
     fi
@@ -321,8 +321,8 @@ workflow pipeline {
             .join(stranding.out.config_stats)
             .join(stats_dir)
             .join(process_bams.out.white_list)
-            .join(process_bams.out.gene_expression)
-            .join(process_bams.out.transcript_expression)
+            .join(process_bams.out.gene_mean_expression)
+            .join(process_bams.out.transcript_mean_expression)
             .join(process_bams.out.mitochondrial_expression)
             .join(process_bams.out.umap_matrices))
 
