@@ -190,3 +190,10 @@ def main(args):
     df_proc.to_csv(
         f'{args.output_prefix}_expression.processed.tsv',
         sep="\t")
+
+    # Get the mean normalised/filtered expression per cell
+    mean_per_cell = pd.DataFrame(
+        df_proc.mean(axis=0), columns=['mean_expression'])
+    mean_per_cell.to_csv(
+        f'{args.output_prefix}_mean_per_cell_expression.tsv',
+        sep='\t')

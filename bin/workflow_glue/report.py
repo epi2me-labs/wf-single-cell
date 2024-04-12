@@ -80,22 +80,21 @@ def umap_plots(umaps_dirs, genes_file):
                 with repl_tabs.add_tab(f'umap #{i}'):
 
                     gene_umap = pd.read_csv(gene_umap_file, sep='\t', index_col=0)
-                    gene_expression_file = sample_dir / 'gene_expression'
-                    gene_expression = pd.read_csv(
-                        gene_expression_file, sep='\t', index_col=0)
-                    gene_mean_expression = pd.DataFrame(
-                        gene_expression.mean(axis=0), columns=['gene mean expression'])
+
+                    gene_mean_expression = pd.read_csv(
+                        sample_dir / 'gene_mean_expression.tsv',
+                        sep='\t', index_col=0,
+                       )
 
                     transcript_umap = pd.read_csv(
                         transcript_umap_file, sep='\t', index_col=0)
-                    transcript_expression_file = sample_dir / 'transcript_expression'
-                    transcript_expression = pd.read_csv(
-                        transcript_expression_file, sep='\t', index_col=0)
-                    transcript_mean_expression = pd.DataFrame(
-                        transcript_expression.mean(axis=0),
-                        columns=['transcript mean expression'])
 
-                    mito_expression_file = sample_dir / "mitochondrial_expression"
+                    transcript_mean_expression = pd.read_csv(
+                        sample_dir / 'transcript_mean_expression.tsv',
+                        sep='\t', index_col=0,
+                     )
+
+                    mito_expression_file = sample_dir / "mitochondrial_expression.tsv"
                     mito_expression = pd.read_csv(
                         mito_expression_file, sep='\t', index_col=0)
 
@@ -106,7 +105,7 @@ def umap_plots(umaps_dirs, genes_file):
                             gene_mean_expression, left_index=True, right_index=True)
                         _plot(
                             gdata, title='Gene UMAP / mean gene expression annotation',
-                            hue='gene mean expression')
+                            hue='mean_expression')
 
                         tdata = transcript_umap.merge(
                             transcript_mean_expression, left_index=True,
@@ -115,7 +114,7 @@ def umap_plots(umaps_dirs, genes_file):
                             tdata,
                             title='Transcript UMAP / '
                                   'mean transcript expression annotation',
-                            hue='transcript mean expression')
+                            hue='mean_expression')
 
                         mdata = gene_umap.merge(
                             mito_expression, left_index=True, right_index=True)
@@ -124,11 +123,11 @@ def umap_plots(umaps_dirs, genes_file):
                             title='Gene UMAP / mean mito. expression '
                                   'annotation', hue='mito_pct')
 
-                        # Plot expresion levels from a single gene over gene UMAP.
+                        # Plot expression levels from a single gene over gene UMAP.
                         for gene in genes:
-                            if gene in gene_expression.index:
+                            if gene in gene_mean_expression.index:
                                 go_data = gene_umap.merge(
-                                    gene_expression.loc[gene],
+                                    gene_mean_expression.loc[gene],
                                     left_index=True, right_index=True)
                                 _plot(
                                     go_data,

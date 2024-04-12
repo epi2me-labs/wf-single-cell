@@ -18,6 +18,10 @@ process construct_expression_matrix {
               path("${meta.alias}.${feature_type}_expression.processed.tsv"),
               emit: matrix_processed_tsv
         tuple val(meta),
+              val(feature_type),
+              path("${meta.alias}.${feature_type}_mean_per_cell_expression.tsv"),
+              emit: mean_per_cell_expression
+        tuple val(meta),
               path("${meta.alias}.${feature_type}_expression.mito.tsv"),
               emit: mito_expression_tsv,
               optional: true  // Only output for 'gene' feature_type

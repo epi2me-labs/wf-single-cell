@@ -588,8 +588,8 @@ workflow process_bams {
         final_read_tags = final_read_tags
         plots = pack_images.out.collect{it -> it[1]}.collect()
         white_list = generate_whitelist.out.whitelist
-        gene_expression = construct_gene_expression.out.matrix_processed_tsv.map {it -> it[0, 2]}
-        transcript_expression = construct_transcript_expression.out.matrix_processed_tsv.map {it -> it[0, 2]}
+        gene_mean_expression = construct_gene_expression.out.mean_per_cell_expression.map {it -> it[0, 2]}
+        transcript_mean_expression = construct_transcript_expression.out.mean_per_cell_expression.map {it -> it[0, 2]}
         mitochondrial_expression = construct_gene_expression.out.mito_expression_tsv
         umap_matrices = umaps
 }
