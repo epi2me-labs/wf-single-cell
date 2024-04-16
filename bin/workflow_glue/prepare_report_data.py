@@ -32,7 +32,7 @@ def argparser():
 
 def _get_sample_summaries(read_tags, white_list):
 
-    total_cells = len(pd.read_csv(white_list, sep='\t'))
+    total_cells = len(pd.read_csv(white_list, sep='\t', header=None))
     # The df contains only reads with a barcode and umi tag
 
     total_tagged = 0

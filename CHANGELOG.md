@@ -6,6 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Fixed
+- Reported cell count off by -1 in report summary table.
 - Issue with TSV concat/splitting during `combine_bam_and_tags` stage.
 - Issue introduced in v1.1.0 that caused a partial BAM file to be output.
 - Corrected example command in README.
