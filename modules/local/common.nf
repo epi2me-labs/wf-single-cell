@@ -25,11 +25,9 @@ process construct_expression_matrix {
               path("${meta.alias}.${feature_type}_expression.mito.tsv"),
               emit: mito_expression_tsv,
               optional: true  // Only output for 'gene' feature_type
+    script:
+    def mito_prefixes = params.mito_prefix.replaceAll(',', ' ')
     """
-    # Split the comma-separated mito prefixes
-    IFS=","
-    read -ra mito_prefixes <<< "${params.mito_prefix}"
-
     workflow-glue expression_matrix \
         read_tags.tsv \
         "${feature_type}" \
@@ -37,7 +35,7 @@ process construct_expression_matrix {
         --min_features $params.matrix_min_genes \
         --min_cells $params.matrix_min_cells \
         --max_mito $params.matrix_max_mito \
-        --mito_prefixes "\${mito_prefixes[@]}" \
+        --mito_prefixes $mito_prefixes \
         --norm_count $params.matrix_norm_count
     """
 }
