@@ -25,8 +25,8 @@ def tags_df():
 
     expected_raw_result = pd.DataFrame({
         'gene': ['g1', 'g2', 'g3'],
+        'AAA': [1, 1, 2],
         'TTT': [1, 0, 0],
-        'AAA': [1, 1, 2]
     })
 
     # With a min cells per gene of two, would exclude g1 and g2
@@ -36,8 +36,8 @@ def tags_df():
     # np.log1p transform, then divide by log(10) to get back to base 10
     expected_processed_result = pd.DataFrame({
         'gene': ['g1'],
+        'AAA': [1.04139],
         'TTT': [1.04139],  # np.log1p((1 * 10) / 1) / np.log(10)
-        'AAA': [0.54407]   # np.log1p((1 * 10) / 4) / np.log(10)
     })
 
     return df, expected_raw_result, expected_processed_result
@@ -50,18 +50,14 @@ def test_main(tags_df):
     :return:
     """
     tags_df, expected_raw_result, expected_processed_result = tags_df
-    # df_file = tempfile.NamedTemporaryFile(
-    #     suffix='.tsv', mode='w', delete=False).name
-    # out_file = tempfile.NamedTemporaryFile(
-    #     suffix='.tsv', mode='w', delete=False).name
     with tempfile.TemporaryDirectory() as fh:
         tmp_test_dir = Path(fh)
-        tags_file = tmp_test_dir / "tsv1.tsv"
-        tags_df.to_csv(tags_file, sep='\t')
         os.chdir(tmp_test_dir)
+        tags_file = "tsv1.tsv"
+        tags_df.to_csv(tags_file, sep='\t')
 
         class Args:
-            read_tags = tags_file
+            read_tags = [tags_file]
             feature_type = 'gene'
             chunk_size = 1
             output_prefix = 'test_gene'
@@ -73,24 +69,18 @@ def test_main(tags_df):
 
         main(Args)
 
-        raw_results_df_file = (
-                tmp_test_dir / f'{Args.output_prefix}_expression.count.tsv'
-        )
+        raw_results_df_file = f'{Args.output_prefix}_expression.count.tsv'
         counts_result_df = pd.read_csv(raw_results_df_file, sep='\t', index_col=None)
         pd.testing.assert_frame_equal(
             expected_raw_result, counts_result_df, check_like=True, check_dtype=False)
 
-        proc_results_df_file = (
-                tmp_test_dir / f'{Args.output_prefix}_expression.processed.tsv'
-        )
+        proc_results_df_file = f'{Args.output_prefix}_expression.processed.tsv'
         procs_result_df = pd.read_csv(proc_results_df_file, sep='\t', index_col=None)
         pd.testing.assert_frame_equal(
             expected_processed_result,
             procs_result_df, check_like=True, check_dtype=False)
 
-        mito_results_df_file = (
-                tmp_test_dir / f'{Args.output_prefix}_expression.mito.tsv'
-        )
+        mito_results_df_file = f'{Args.output_prefix}_expression.mito.tsv'
         mito_results_df = pd.read_csv(mito_results_df_file, sep='\t', index_col=None)
         assert "CB" in mito_results_df.columns
         assert "mito_pct" in mito_results_df.columns
