@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Corrected example command in README.
 - Incorrect reporting of unique gene and transcripts in report table.
 ### Changed
+- Read chunking done in library code.
+- `--process_chunk_size` parameter changed to `--fastq_chunk`
 - Resource declarations in Nextflow processes.
 - Simplified read batching and decoupled from CPU usage parameters.
 - Expression matrix construction code reworked to reduce memory usage.

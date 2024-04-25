@@ -46,19 +46,19 @@ process align_to_ref {
     cpus params.threads
     memory "32 GB"
     input:
-        tuple val(meta),
-              val(chunk_id),
+        tuple val(group_index),
+              val(meta),
               path("reads.fastq")
         path "genome_index.mmi"
         path "ref_genes.bed"
         path "ref_chrom_sizes.tsv"
     output:
         tuple val(meta),
-              path("${meta.alias}_sorted.bam"), 
-              path("${meta.alias}_sorted.bam.bai"), 
+              path("sorted.bam"), 
+              path("sorted.bam.bai"), 
               emit: bam_sort
-        tuple val(meta),
-              val(chunk_id),
+        tuple val(group_index),
+              val(meta),
               path("bam_info.tsv"),
               emit: bam_info
     script:
@@ -71,7 +71,7 @@ process align_to_ref {
         --cap-kalloc 100m --cap-sw-mem 50m \
         genome_index.mmi reads.fastq \
     | samtools view -@ $view_threads -b --no-PG -t ref_chrom_sizes - \
-    | tee >(samtools sort -@ $sort_threads --write-index -o "${meta.alias}_sorted.bam"##idx##"${meta.alias}_sorted.bam.bai" --no-PG  -) \
+    | tee >(samtools sort -@ $sort_threads --write-index -o "sorted.bam"##idx##"sorted.bam.bai" --no-PG  -) \
     | seqkit bam -F - 2> bam_info.tsv
     """
 }
