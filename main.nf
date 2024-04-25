@@ -9,24 +9,7 @@ include { stranding } from './subworkflows/stranding'
 include { align } from './subworkflows/align'
 include { process_bams } from './subworkflows/process_bams'
 
-
-process chunkReads {
-    label "singlecell"
-    cpus 4
-    memory "4 GB"
-    input:
-        tuple val(meta),
-              path(reads)
-    output:
-        tuple val(meta),
-              path("chunks/*"),
-              emit: fastq_chunks
-    script:
-    """
-    seqkit split2 ${reads} --threads ${task.cpus} -s ${params.process_chunk_size} -O chunks -o ${meta.alias} -e .gz
-    """
-}
-
+OPTIONAL_FILE = file("$projectDir/data/OPTIONAL_FILE")
 
 process getVersions {
     label "singlecell"
@@ -73,30 +56,37 @@ process makeReport {
     cpus 1
     memory "32 GB"
     input:
+        val metadata
         path 'versions'
         path 'params.csv'
-        path 'histogram_stats/'
+        path stats, stageAs: "stats_*"
         path 'survival.tsv'
         path 'wf_summary.tsv'
         path umap_dirs
         path images
         path umap_genes
+        val wf_version
 
     output:
         path "wf-single-cell-*.html"
     script:
-        report_name = "wf-single-cell-report.html"
+        String report_name = "wf-single-cell-report.html"
+        String metadata = new JsonBuilder(metadata).toPrettyString()
     """
+    echo '${metadata}' > metadata.json
     workflow-glue report \
-        --histogram_stats histogram_stats \
+        $report_name \
+        --stats $stats \
         --params params.csv \
         --versions versions \
         --survival survival.tsv \
         --wf_summary wf_summary.tsv \
-        --output ${report_name} \
-        --umap_dirs ${umap_dirs} \
-        --images ${images} \
-        --umap_genes ${umap_genes}
+        --umap_dirs $umap_dirs \
+        --images $images \
+        --umap_genes $umap_genes \
+        --metadata metadata.json \
+        --wf_version $wf_version \
+        --metadata metadata.json
     """
 }
 
@@ -112,7 +102,6 @@ process mergeTags {
     memory "2 GB"
     input:
         tuple val(meta),
-              val(chunk_id),
               path('barcodes.tsv'),
               path('bam_info.tsv')
 
@@ -213,7 +202,6 @@ process prepare_report_data {
         tuple val(meta),
               path('read_tags'),
               path('config_stats'),
-              path('stats_dir'),
               path('white_list'),
               path('gene_mean_expression.tsv'),
               path('transcript_mean_expression.tsv'),
@@ -226,8 +214,6 @@ process prepare_report_data {
             emit: summary
         path "${meta.alias}_umap",
             emit: umap_dir
-        path "histogram_stats/*",
-            emit: histogram_stats
 
     script:
         opt_umap = umaps.name != 'OPTIONAL_FILE'
@@ -254,10 +240,6 @@ process prepare_report_data {
     else
         touch "\$umd"/OPTIONAL_FILE
     fi
-
-    # Output the histogram stats
-    mkdir -p $hist_dir
-    cp stats_dir/length.hist stats_dir/quality.hist $hist_dir
     """
 }
 
@@ -265,11 +247,9 @@ process prepare_report_data {
 // workflow module
 workflow pipeline {
     take:
-        meta
+        chunks
         ref_genome_dir
         umap_genes
-        stats_dir
-
     main:
         // throw an exception for deprecated conda users
         if (workflow.profile.contains("conda")) {
@@ -285,28 +265,29 @@ workflow pipeline {
         workflow_params = getParams()
 
         bc_longlist_dir = file("${projectDir}/data", checkIfExists: true)
-        chunkReads(meta)
-
-        // Add chunk id to chunks channel; allows resulting BAM info and tags channels to be combined in mergeTags()
-        fastq_chunks = chunkReads.out.fastq_chunks
-            .transpose()
-            .map {meta, file -> [meta, file.baseName, file]}
 
         stranding(
-            fastq_chunks,
+            chunks.map {meta, chunk, stats ->
+                group_index = meta.group_index
+                def new_meta = meta.clone()
+                new_meta.remove('group_index')
+                [group_index, new_meta, chunk]},
             bc_longlist_dir)
 
         align(
-            // Group by meta 
             stranding.out.stranded_trimmed_fq,
             ref_genome_fasta,
             ref_genome_idx,
             ref_genes_gtf)
 
-        // Combine barcodes and BAM by chunk, then merge the tags
-        barcodes = mergeTags(stranding.out.extracted_barcodes
-            .join(align.out.bam_info, by: [0, 1])
-        )
+        // Combine barcodes and BAM info by group_index.
+        // The group_index is not needed after this step as any further groupings are dione on alias and chromosome
+        barcodes = mergeTags(
+            // First element of tuple is group_index to allow joining on fastq chunk
+            stranding.out.extracted_barcodes
+                .join(align.out.bam_info)
+                .map {group_index, meta, bcs, meta2, bam_info -> [meta, bcs, bam_info]}
+            )
 
         process_bams(
             align.out.bam_sort,
@@ -319,24 +300,39 @@ workflow pipeline {
         prepare_report_data(
             process_bams.out.final_read_tags
             .join(stranding.out.config_stats)
-            .join(stats_dir)
             .join(process_bams.out.white_list)
             .join(process_bams.out.gene_mean_expression)
             .join(process_bams.out.transcript_mean_expression)
             .join(process_bams.out.mitochondrial_expression)
             .join(process_bams.out.umap_matrices))
 
+        // Get the metadata and stats for the report
+        chunks
+            .map{meta, chunk, stats ->
+                def new_meta = meta.clone()
+                new_meta.remove('group_index')
+                [new_meta, chunk, stats]}
+            .groupTuple()
+            .multiMap{ meta, chunk, stats ->
+                meta: meta
+                stats: stats[0]
+            }.set { for_report }
+        metadata = for_report.meta.collect()
+        stats = for_report.stats.collect()
+
         makeReport(
+            metadata,
             software_versions,
             workflow_params,
-            prepare_report_data.out.histogram_stats,
+            stats,
             prepare_report_data.out.survival
                 .collectFile(keepHeader:true),
             prepare_report_data.out.summary
                 .collectFile(keepHeader:true),
             prepare_report_data.out.umap_dir,
             process_bams.out.plots,
-            umap_genes)
+            umap_genes,
+            workflow.manifest.version)
     emit:
         results = process_bams.out.results
         config_stats = stranding.out.config_stats
@@ -369,12 +365,10 @@ workflow {
             "input":params.fastq,
             "sample":params.sample,
             "sample_sheet":params.sample_sheet,
-            "stats": true])
+            "fastq_chunk": params.fastq_chunk,
+            "stats": true,
+            "per_read_stats": false])
 
-    per_read_stats = samples.map { 
-        meta, reads, stats ->
-        [meta, file(stats.resolve('*read*.tsv.gz'))[0]
-        ]}.map {meta, stats -> stats}
 
     if (!params.single_cell_sample_sheet) {
 
@@ -384,26 +378,23 @@ workflow {
         sc_sample_sheet = file(params.single_cell_sample_sheet, checkIfExists: true)
     }
 
-    fastqingress_ids = samples.map{it -> it[0]['alias']}.collectFile(newLine: true)
+    fastqingress_ids = samples.map {meta, file, stats -> meta.alias }.unique().collectFile(newLine: true)
     // Get [sample_id, kit_meta]
     kit_meta = parse_kit_metadata(fastqingress_ids, sc_sample_sheet, kit_configs_file)
         .splitCsv(header:true)
         .map {it -> [it['sample_id'], it]}
     // Merge the kit metadata onto the sample metadata
-    // Put sample_id as first element for join
-    sample_and_kit_meta = samples.map {meta, reads, stats -> [meta.alias, meta, reads, stats]}
-        .join(kit_meta)
-        .map {sample_id, sample_meta, reads, stats, kit_meta -> [sample_meta + kit_meta, reads, stats]}
-
-    // Add the kit meta to the stats directory
-    stats_dir = sample_and_kit_meta.map {meta, reads, stats -> [meta, file(stats)]}
-
+    sample_and_kit_meta = kit_meta
+        .cross(samples
+            // Put sample_id as first element for join
+            .map {meta, chunk, stats -> [meta.alias, meta, chunk, stats]})
+        // Extract the joined sample and kit info from the cross results
+        .map {kit, sample -> [ sample[1] + kit[1], sample[2], sample[3]]}
 
     pipeline(
-        sample_and_kit_meta.map {meta, reads, stats -> [meta, reads]},
+        sample_and_kit_meta,
         ref_genome_dir,
-        umap_genes,
-        stats_dir)
+        umap_genes)
 
     output(pipeline.out.results.flatMap({it ->
         // Convert [meta, file, file, ..]

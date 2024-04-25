@@ -137,10 +137,10 @@
                     "help_text": "The total CPU resource used by the workflow is constrained by the executor configuration.",
                     "default": 8
                 },
-                "process_chunk_size": {
+                "fastq_chunk": {
                     "type": "integer",
-                    "title": "Process chunk size",
-                    "description": "Control the size of chunks for processing of data.",
+                    "title": "Fastq chunk size",
+                    "description": "Sets the maximum number of reads per chunk for the initial processing of reads.",
                     "default": 1000000,
                     "help_text": "Controls batching of reads for processing."
                 },

@@ -1,11 +1,12 @@
 """Make report."""
 import base64
+import json
 from pathlib import Path
 
 from dominate.tags import b, figure, h6, img, li, p, ul
 import ezcharts
+from ezcharts.components import fastcat
 from ezcharts.components.ezchart import EZChart
-from ezcharts.components.fastcat import SeqSummary
 from ezcharts.components.reports.labs import LabsReport
 from ezcharts.components.theme import LAB_head_resources
 from ezcharts.layout.snippets import DataTable, Grid, Tabs
@@ -162,16 +163,28 @@ def diagnostic_plots(img_dirs):
 def main(args):
     """wf-single-cell report generation."""
     logger = get_named_logger("Report")
-
     logger.info('Building report')
 
     # Create report
     report = LabsReport(
-        REPORT_TITLE, WORKFLOW_NAME, args.params, args.versions,
+        'Workflow Single Cell report', 'wf-single-cell',
+        args.params, args.versions, args.wf_version,
         head_resources=[*LAB_head_resources])
 
-    with report.add_section('Read summaries', 'Read summary'):
-        SeqSummary(histogram_stats_dir=args.histogram_stats)
+    with open(args.metadata) as metadata:
+        sample_details = [{
+            'sample': d['alias'],
+            'type': d['type'],
+            'barcode': d['barcode']
+        } for d in json.load(metadata)]
+
+    with report.add_section('Read summary', 'Read summary'):
+        names = tuple(d['sample'] for d in sample_details)
+        stats = tuple(args.stats)
+        if len(stats) == 1:
+            stats = stats[0]
+            names = names[0]
+        fastcat.SeqSummary(stats, sample_names=names)
 
     survival_df = pd.read_csv(args.survival, sep='\t', index_col=0)
     wf_summ_df = pd.read_csv(args.wf_summary, sep='\t', index_col=0)
@@ -339,19 +352,17 @@ def main(args):
     else:
         logger.info('Skipping UMAP plotting')
 
-    report.write(args.output)
+    report.write(args.report)
     logger.info('Report writing finished')
 
 
 def argparser():
     """Argument parser for entrypoint."""
     parser = wf_parser("report")
-
+    parser.add_argument("report", help="Report output file")
     parser.add_argument(
-        "--histogram_stats",
-        help="path to a folder containing subfolders named by sample alias, "
-             "each containing the *.hist files output by fastcat",
-        type=Path)
+        "--stats", nargs='+',
+        help="Fastcat per-read stats, ordered as per entries in --metadata.")
     parser.add_argument(
         "--images", nargs='+',
         help="Sample directories containing various images to put in report")
@@ -366,8 +377,6 @@ def argparser():
     parser.add_argument(
         "--versions", help="Workflow versions file")
     parser.add_argument(
-        "--output", help="Output HTML file")
-    parser.add_argument(
         "--umap_dirs", nargs='+',
         help="Sample directories containing umap and gene expression files")
     parser.add_argument(
@@ -375,4 +384,10 @@ def argparser():
         nargs='+')
     parser.add_argument(
         "--umap_genes", help="File containing list of genes to annnotate UMAPs")
+    parser.add_argument(
+        "--metadata", default='metadata.json', required=True,
+        help="sample metadata")
+    parser.add_argument(
+        "--wf_version", default='unknown',
+        help="version of the executed workflow")
     return parser

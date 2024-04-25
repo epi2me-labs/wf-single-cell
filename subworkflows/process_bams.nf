@@ -16,13 +16,13 @@ process get_contigs {
               path('sample.bam.bai')
 
     output:
-        tuple path("${meta.alias}_contigs"),
+        tuple path("contigs"),
             val(meta),
             emit: contigs
     """
     samtools idxstats sample.bam \
         | gawk '/^[^*]/{print\$1}' \
-        | gawk NF > "${meta.alias}_contigs"
+        | gawk NF > contigs
     """
 }
 
@@ -36,27 +36,27 @@ process generate_whitelist{
               path("barcodes/?_barcode.tsv")
     output:
         tuple val(meta),
-              path("*whitelist.tsv"),
+              path("whitelist.tsv"),
               emit: whitelist
         tuple val(meta),
-              path("*kneeplot.png"),
+              path("kneeplot.png"),
               emit: kneeplot
         // Note: This is called "uncorrected", but they're actually counts of
         //       high quality exact matches to longlist. Low frequency barcodes
         //       are assumed to be false positives. The list is further
         //       filtered by the selected method (basically by abundance).
         tuple val(meta),
-              path("${meta.alias}.high_qual_bc_counts.tsv"),
+              path("high_qual_bc_counts.tsv"),
               emit: uncorrected_bc_counts
     // TODO: change this to take precomputed, filtered counts from extract_barcodes
     """
     workflow-glue create_shortlist \
-        barcodes "${meta.alias}.whitelist.tsv" \
+        barcodes whitelist.tsv \
         --counts \
         --method quantile \
         --exp_cells ${meta['expected_cells']} \
-        --plot "${meta.alias}.kneeplot.png" \
-        --counts_out "${meta.alias}.high_qual_bc_counts.tsv" \
+        --plot "kneeplot.png" \
+        --counts_out "high_qual_bc_counts.tsv" \
         --threads ${task.cpus}
     """
 }
@@ -112,22 +112,22 @@ process cluster_umis {
         tuple val(meta),
               val(chr),
               path("chrom_feature_assigns.tsv"),
-              path(read_tags, stageAs: "read_tags.tsv")
+              path(read_tags, stageAs: "read_tags_in.tsv")
     output:
         tuple val(meta),
               val(chr),
-              path("${meta.alias}_${chr}.read_tags.tsv"),
+              path("read_tags.tsv"),
               emit: read_tags  // For BAM tagging
         tuple val(meta),
-              path("${meta.alias}_${chr}.final_tags.tsv"),
+              path("final_tags.tsv"),
               emit: final_read_tags  // For user output
     """
     workflow-glue cluster_umis \
         --chrom ${chr} \
         --feature_assigns chrom_feature_assigns.tsv \
-        --read_tags read_tags.tsv \
-        --output_read_tags "${meta.alias}_${chr}.read_tags.tsv" \
-        --workflow_output "${meta.alias}_${chr}.final_tags.tsv"
+        --read_tags read_tags_in.tsv \
+        --output_read_tags "read_tags.tsv" \
+        --workflow_output "final_tags.tsv"
     """
 }
 
@@ -144,16 +144,16 @@ process tag_bams {
               path('tags.tsv')
     output:
          tuple val(meta),
-              path("${meta.alias}.${chr}.tagged.bam"),
-              path("${meta.alias}.${chr}.tagged.bam.bai"),
+              path("${chr}.tagged.bam"),
+              path("${chr}.tagged.bam.bai"),
               emit: tagged_bam
     script:
     """
     workflow-glue tag_bam \
-        align.bam "${meta.alias}.${chr}.tagged.bam" tags.tsv "${chr}" \
+        align.bam "${chr}.tagged.bam" tags.tsv "${chr}" \
         --threads ${task.cpus}
 
-    samtools index -@ ${task.cpus} "${meta.alias}.${chr}.tagged.bam"
+    samtools index -@ ${task.cpus} "${chr}.tagged.bam"
     """
 }
 
@@ -171,9 +171,10 @@ process combine_tag_files {
               path("tags*.tsv")
     output:
         tuple val(meta),
-              path("${meta.alias}_read_tags.tsv")
+              path("read_tags.tsv")
     """
-    awk 'FNR>1 || NR==1' *.tsv > "${meta.alias}_read_tags.tsv"
+    awk 'FNR>1 || NR==1' *.tsv > "read_tags.tsv"
+
     """
 }
 
@@ -188,9 +189,9 @@ process combine_final_tag_files {
               path("tags*.tsv")
     output:
         tuple val(meta),
-              path("${meta.alias}.read_tags.tsv")
+              path("read_tags.tsv")
     """
-    awk 'FNR>1 || NR==1' *.tsv > "${meta.alias}.read_tags.tsv"
+    awk 'FNR>1 || NR==1' *.tsv > "read_tags.tsv"
     """
 }
 
@@ -203,7 +204,7 @@ process combine_bams_and_tags {
     input:
         tuple val(meta),
               path('bams/*aln.bam'),
-              path('bams/*.aln.bam.bai'),
+              path('bams/*aln.bam.bai'),
               path('tags/*tags.tsv')
     output:
         tuple val(meta),
@@ -216,7 +217,7 @@ process combine_bams_and_tags {
     """
     samtools cat -b <(find bams -name '*aln.bam') \
     | samtools sort - -@ ${task.cpus} --write-index \
-        -o "${meta.alias}.tagged.sorted.bam##idx##${meta.alias}.tagged.sorted.bam.bai"
+        -o "tagged.sorted.bam##idx##tagged.sorted.bam.bai"
 
     mkdir chr_tags
     # Find the chr column number
@@ -242,12 +243,12 @@ process combine_chrom_bams {
               path('chrom.bam.bai')
     output:
         tuple val(meta),
-              path("*tagged.sorted.bam"),
-              path("*tagged.sorted.bam.bai"),
+              path("tagged.sorted.bam"),
+              path("tagged.sorted.bam.bai"),
               emit: bam_fully_tagged
     """
     samtools merge -@ ${task.cpus - 1} --write-index \
-        -o "${meta.alias}.tagged.sorted.bam##idx##${meta.alias}.tagged.sorted.bam.bai" ${chrom_bams};
+        -o "tagged.sorted.bam##idx##tagged.sorted.bam.bai" ${chrom_bams};
     """
 }
 
@@ -271,9 +272,9 @@ process stringtie {
     output:
         tuple val(meta),
               val(chr),
-              path("${meta.alias}.transcriptome.fa"),
+              path("transcriptome.fa"),
               path("chr.gtf"),
-              path("${meta.alias}.stringtie.gff"),
+              path("stringtie.gff"),
               path("reads.fastq"),
               emit: read_tr_map
     script:
@@ -282,10 +283,10 @@ process stringtie {
     # so we don't get name collisions during file merge later
     samtools view -h align.bam ${chr}  \
          | tee >(stringtie -L ${params.stringtie_opts} -p ${task.cpus} -G chr.gtf -l "${chr}.stringtie" \
-             -o "${meta.alias}.stringtie.gff" - ) \
+             -o "stringtie.gff" - ) \
          | samtools fastq > reads.fastq
     # Get transcriptome sequence
-    gffread -g ref_genome.fa -w "${meta.alias}.transcriptome.fa" "${meta.alias}.stringtie.gff"
+    gffread -g ref_genome.fa -w "transcriptome.fa" "stringtie.gff"
     """
 }
 
@@ -340,7 +341,7 @@ process assign_features {
     output:
         tuple val(meta),
               val(chr),
-              path("${meta.alias}.${chr}.feature_assigns.tsv"),
+              path("feature_assigns.tsv"),
               emit: feature_assigns
         tuple val(meta),
               path("gffcompare.annotated.gtf"),
@@ -354,7 +355,7 @@ process assign_features {
         --gffcompare_tmap gffcompare.stringtie.gff.tmap \
         --gtf chr.gtf \
         --tags tags.tsv \
-        --output "${meta.alias}.${chr}.feature_assigns.tsv" \
+        --output "feature_assigns.tsv" \
         --min_mapq ${params.gene_assigns_minqv}
     """
 }
@@ -374,7 +375,7 @@ process umi_gene_saturation {
     export POLARS_MAX_THREADS=$task.cpus
 
     workflow-glue calc_saturation \
-        --output "${meta.alias}.saturation_curves.png" \
+        --output "saturation_curves.png" \
         --read_tags read_tags.tsv
     """
 }
@@ -414,13 +415,13 @@ process merge_transcriptome {
             path('gffs/?.gff')
     output:
         tuple val(meta),
-            path("${meta.alias}.transcriptome.gff.gz"),
-            path("${meta.alias}.transcriptome.fa.gz"),
+            path("transcriptome.gff.gz"),
+            path("transcriptome.fa.gz"),
             emit: merged_annotation
     """
     # Concatenate transcriptome files, remove comments (from gff) and compress
-    find fasta/ -name '*.fa' -exec cat {} + | gzip > "${meta.alias}.transcriptome.fa.gz"
-    find gffs/ -name '*.gff' -exec cat {} + |grep -v '^#' | gzip > "${meta.alias}.transcriptome.gff.gz"
+    find fasta/ -name '*.fa' -exec cat {} + | gzip > "transcriptome.fa.gz"
+    find gffs/ -name '*.gff' -exec cat {} + |grep -v '^#' | gzip > "transcriptome.gff.gz"
     """
 }
 
@@ -499,12 +500,12 @@ workflow process_bams {
 
         assign_features(
             align_to_transcriptome.out.read_tr_map
-            .join(chr_tags, by: [0, 1]))
+                .join(chr_tags, by: [0, 1]))
 
         cluster_umis(
             assign_features.out.feature_assigns
-            // Join on [sample meta,chr]
-            .join(chr_tags, by: [0, 1]))
+                // Join on [sample meta,chr]
+                .join(chr_tags, by: [0, 1]))
 
         tag_bams(combine_bams_and_tags.out.merged_bam
              // cross by sample_id on the output of cluster_umis to return
@@ -514,7 +515,7 @@ workflow process_bams {
 
         read_tags = combine_tag_files(
             cluster_umis.out.read_tags
-             .map {it -> it[0, 2]}.groupTuple())
+                .map {it -> it[0, 2]}.groupTuple())
 
         final_read_tags = combine_final_tag_files(
             cluster_umis.out.final_read_tags.groupTuple())
@@ -545,15 +546,15 @@ workflow process_bams {
             tagged_bams = combine_chrom_bams.out.bam_fully_tagged
         }else{
             tagged_bams = tag_bams.out.tagged_bam
-            // [sample_id, bam, bai]
-            .map {it -> it[0, 1, 2]}
-            .groupTuple()
+                // [sample_id, bam, bai]
+                .map {it -> it[0, 1, 2]}
+                .groupTuple()
         }
 
     pack_images(
         generate_whitelist.out.kneeplot
-       .concat(umi_gene_saturation.out.saturation_curve)
-       .groupTuple())
+            .concat(umi_gene_saturation.out.saturation_curve)
+            .groupTuple())
 
     merge_transcriptome(
         assign_features.out.annotation.groupTuple()
