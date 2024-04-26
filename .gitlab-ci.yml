@@ -59,4 +59,4 @@ integration_test:
     - ls wf-single-cell
     - SHA=$(./nextflow config -properties|grep ${PYTEST_CONTAINER_CONFIG_KEY}|awk -F= '{print $2}')
     - IMAGE="${DOCKERHUB_NAMESPACE}/${CI_PROJECT_NAME}:${SHA}"
-    - docker run -v ${PWD}:/host $IMAGE pytest /host/test/workflow_integration.py;
+    - docker run -u $(id -u) -v ${PWD}:/host $IMAGE pytest /host/test/workflow_integration.py;

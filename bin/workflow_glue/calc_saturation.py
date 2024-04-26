@@ -130,12 +130,12 @@ def run_jobs(args):
     df = pl.read_csv(
         args.read_tags,
         separator='\t',
-        columns=['CB', 'UB', 'gene'],
+        columns=['corrected_barcode', 'corrected_umi', 'gene'],
         new_columns=['barcode', 'umi', 'gene'],
         low_memory=True,
         dtypes={
-            'CB': pl.Categorical,
-            'UB': pl.Categorical,
+            'corrected_barcode': pl.Categorical,
+            'corrected_umi': pl.Categorical,
             'gene': str}
     )
 

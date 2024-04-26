@@ -1,7 +1,7 @@
 """Test assign_barcodes."""
 import pandas as pd
 import pytest
-from workflow_glue.cluster_umis import process_records
+from workflow_glue.create_matrix import cluster_dataframe
 
 
 @pytest.fixture()
@@ -32,7 +32,6 @@ def umi_gene_df():
 
     ]
 
-    # Create input for process_records().
     # The actual dataframes used in the workflow will contain more columns,
     # but they are not used in the clustering process so are omitted for clarity.
     # CB is required, but can be any non '-' string
@@ -54,9 +53,7 @@ def umi_gene_df():
 
 def test_process_records(umi_gene_df):
     """Check that process_records is clustering and correcting UMIs appropriately."""
-    class Args:
-        ref_interval = 1000
-    process_records(umi_gene_df, Args)
+    cluster_dataframe(umi_gene_df, 1000)
 
     assert 'UB' in umi_gene_df
     # Check for the correct number of clusters

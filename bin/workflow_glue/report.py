@@ -71,8 +71,8 @@ def umap_plots(umaps_dirs, genes_file):
 
             repl_tabs = Tabs()
 
-            gene_umap_files = sample_dir.glob('*gene_umap*')
-            transcript_umap_files = sample_dir.glob('*transcript_umap*')
+            gene_umap_files = sample_dir.glob('gene.expression.umap*.tsv')
+            transcript_umap_files = sample_dir.glob('transcript.expression.umap*.tsv')
 
             for i, (
                 gene_umap_file, transcript_umap_file
@@ -379,9 +379,6 @@ def argparser():
     parser.add_argument(
         "--umap_dirs", nargs='+',
         help="Sample directories containing umap and gene expression files")
-    parser.add_argument(
-        "--gene_expression", help="Paths to UMAP TSVs",
-        nargs='+')
     parser.add_argument(
         "--umap_genes", help="File containing list of genes to annnotate UMAPs")
     parser.add_argument(

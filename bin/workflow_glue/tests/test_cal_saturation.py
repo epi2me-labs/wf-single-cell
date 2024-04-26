@@ -24,7 +24,7 @@ def test_run_jobs():
 
     # Create df with 1000 rows of fake data.
     with open(args.read_tags, 'w') as fh:
-        fh.write('read_id\tCB\tUB\tgene\n')
+        fh.write('read_id\tcorrected_barcode\tcorrected_umi\tgene\n')
         row = 'id\tagtcgatcgatcgta\tatcgtacaatct\tYFG'
         for i in range(1000):
             fh.write(f'{row}\n')
