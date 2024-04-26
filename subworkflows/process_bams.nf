@@ -273,7 +273,7 @@ process process_matrix {
     cpus  1
     memory "16 GB"
     input:
-        tuple val(meta), val(feature), path("inputs/*.hdf")
+        tuple val(meta), val(feature), path('inputs/matrix*.hdf')
     output:
         tuple val(meta), val(feature), path("${feature}_raw_feature_bc_matrix"), emit: raw
         tuple val(meta), val(feature), path("${feature}_processed_feature_bc_matrix"), emit: processed
@@ -287,7 +287,7 @@ process process_matrix {
     """
     export NUMBA_NUM_THREADS=${task.cpus}
     workflow-glue process_matrix \
-        inputs/*.hdf \
+        inputs/matrix*.hdf \
         --feature ${feature} \
         --raw ${feature}_raw_feature_bc_matrix \
         --processed ${feature}_processed_feature_bc_matrix \
@@ -503,11 +503,12 @@ workflow process_bams {
                 .join(chr_tags, by: [0, 1]))
 
         // aggregate per-chrom expression matrices to create MEX and UMAP TSVs
-        process_matrix(
+        for_processing = 
             create_matrix.out.gene.groupTuple(by: [0, 2])
             .mix(
                 create_matrix.out.transcript.groupTuple(by: [0, 2]))
-            .map {meta, chroms, feature, hdfs -> [meta, feature, hdfs]})
+            .map {meta, chroms, feature, hdfs -> [meta, feature, hdfs]}
+        process_matrix(for_processing)
 
         // construct per-read summary tables for end user
         final_read_tags = combine_final_tag_files(
