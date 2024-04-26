@@ -1,7 +1,6 @@
 """Expression counts matrix construction."""
 import gzip
 import os
-from pathlib import Path
 
 import h5py
 import numpy as np
@@ -9,8 +8,6 @@ import pandas as pd
 import polars as pl
 import scipy.io
 import scipy.sparse
-
-from .util import get_named_logger, wf_parser  # noqa: ABS101
 
 
 class ExpressionMatrix:
@@ -53,14 +50,15 @@ class ExpressionMatrix:
             df = pd.read_csv(
                 df,
                 index_col=None,
-                usecols=['CB', 'UB', feature],
+                usecols=['corrected_barcode', 'corrected_umi', feature],
                 sep='\t',
                 dtype='category')
         df.drop(df.index[df[feature] == '-'], inplace=True)
         df = (
-            df.groupby([feature, 'CB'], observed=True).nunique()['UB']
+            df.groupby([feature, 'corrected_barcode'], observed=True)
+            .nunique()['corrected_umi']
             .reset_index()  # Get feature back to a column
-            .pivot(index=feature, columns='CB', values='UB')
+            .pivot(index=feature, columns='corrected_barcode', values='corrected_umi')
         )
         df.fillna(0, inplace=True)
         return cls(
@@ -114,10 +112,7 @@ class ExpressionMatrix:
                 fh.write(bc)
                 fh.write("-1\n".encode())
         # features, convert to str, write as text
-        try:
-            features = [x.decode() for x in self.features]
-        except AttributeError:
-            features = self.features
+        features = self.tfeatures
         if feature_ids is None:
             feature_ids = {x: f"unknown_{i:05d}" for i, x in enumerate(features)}
         with gzip.open(os.path.join(fname, "features.tsv.gz"), 'wt') as fh:
@@ -134,10 +129,10 @@ class ExpressionMatrix:
                     '"format_version": 2}'))
 
     # TODO: could store feature type in class
-    def to_tsv(self, fname, row_name):
+    def to_tsv(self, fname, index_name):
         """Write matrix to tab-delimiter file."""
         self.write_matrix(
-            fname, self.matrix, self.features, self.cells, row_name=row_name)
+            fname, self.matrix, self.tfeatures, self.tcells, index_name=index_name)
 
     @property
     def features(self):
@@ -164,6 +159,18 @@ class ExpressionMatrix:
             return cells
         else:
             raise RuntimeError("Matrix not initialized.")
+
+    @property
+    def tcells(self):
+        """A copy of the cell names as a text array."""
+        return np.array(
+            [x.decode() for x in self.cells], dtype=str)
+
+    @property
+    def tfeatures(self):
+        """A copy of the feature names as a text array."""
+        return np.array(
+            [x.decode() for x in self.features], dtype=str)
 
     @property
     def matrix(self):
@@ -234,7 +241,7 @@ class ExpressionMatrix:
         mask = sel_total <= threshold
         if fname is not None:
             self.write_matrix(
-                fname, 100 * sel_total, self.cells, [label], row_name="CB")
+                fname, 100 * sel_total, self.tcells, [label], index_name="CB")
         self._matrix = self.matrix[:, mask]
         self._cells = self.cells[mask]
         return self
@@ -242,7 +249,7 @@ class ExpressionMatrix:
     def find_features(self, prefixes, inverse=False):
         """Find features by name prefix."""
         sel = np.array([], dtype=int)
-        feat = np.array([x.decode() for x in self.features], dtype=str)
+        feat = self.tcells
         for pre in prefixes:
             sel = np.union1d(sel, np.argwhere(np.char.find(feat, pre) > -1))
         if inverse:
@@ -262,21 +269,20 @@ class ExpressionMatrix:
         return self
 
     @staticmethod
-    def write_matrix(fname, matrix, features, cells, row_name="feature"):
-        """Write a matrix (or vector) to TSV."""
-        try:
-            features = [x.decode() for x in features]
-        except AttributeError:
-            pass
-        try:
-            cells = [x.decode() for x in cells]
-        except AttributeError:
-            pass
+    def write_matrix(fname, matrix, index, col_names, index_name="feature"):
+        """Write a matrix (or vector) to TSV.
+
+        :param fname: filename.
+        :param matrix: matrix to write.
+        :param index: index column.
+        :param col_names: names for matrix columns.
+        :param index_name: name for index column.
+        """
         # ok, this is kinda horrible, but its fast
         # I don't think this is actually zero-copy because data is
         # C-contiguous not F-contiguous.
-        df = pd.DataFrame(matrix, copy=False, columns=cells, index=features)
-        df.index.rename(row_name, inplace=True)
+        df = pd.DataFrame(matrix, copy=False, columns=col_names, index=index)
+        df.index.rename(index_name, inplace=True)
         df = pl.from_pandas(df, include_index=True)
         df.write_csv(fname, separator="\t")
 
@@ -289,85 +295,3 @@ class ExpressionMatrix:
         self.matrix[
             np.repeat(cols, len(rows)),
             np.tile(rows, len(cols))] += other.matrix.flatten()
-
-
-def argparser():
-    """Create argument parser."""
-    parser = wf_parser("exp_mat")
-
-    parser.add_argument(
-        "read_tags", type=Path, nargs='+',
-        help="TSV with read_id and associated tags.")
-
-    parser.add_argument(
-        "feature_type", choices=('gene', 'transcript'),
-        help="Feature to process.")
-
-    parser.add_argument(
-        "output_prefix",
-        help="Output file prefix")
-
-    parser.add_argument(
-        "--min_features", type=int, default=100,
-        help="Filter out cells that contain fewer features than this.")
-
-    parser.add_argument(
-        "--min_cells", type=int, default=3,
-        help="Filter out features that are observed in fewer than this "
-             "number of cells")
-
-    parser.add_argument(
-        "--max_mito", type=int, default=5,
-        help="Filter out cells where more than this percentage of counts "
-             "belong to mitochondrial features.")
-
-    parser.add_argument(
-        "--mito_prefixes", default=["MT-"], nargs='*',
-        help="prefixes to identify mitochondrial features.")
-
-    parser.add_argument(
-        "--norm_count", type=int, default=10000,
-        help="Normalize to this number of counts per cell as "
-             "is performed in CellRanger.")
-
-    return parser
-
-
-def main(args):
-    """Make feature x cell, UMI-deduplicated, counts matrix."""
-    logger = get_named_logger('FeatExpr')
-    logger.info('Constructing count matrices')
-
-    try:
-        matrix = ExpressionMatrix.aggregate_tags(args.read_tags)
-    except UnicodeDecodeError:
-        matrix = ExpressionMatrix.aggregate_hdfs(args.read_tags)
-    matrix.remove_unknown()
-
-    logger.info("Writing raw counts to file.")
-    matrix.to_tsv(
-        f'{args.output_prefix}_expression.count.tsv', row_name=args.feature_type)
-    matrix.to_mex("raw_feature_bc_matrix")
-
-    logger.info("Filtering matrix.")
-    matrix = (
-        matrix
-        .remove_cells_and_features(args.min_features, args.min_cells)
-        .remove_skewed_cells(
-            args.max_mito / 100, args.mito_prefixes,
-            fname=f"{args.output_prefix}_expression.mito.tsv", label="mito_pct")
-        .normalize(args.norm_count)
-        .log_transform()
-    )
-
-    logger.info("Writing mean expression levels.")
-    ExpressionMatrix.write_matrix(
-        f'{args.output_prefix}_mean_per_cell_expression.tsv',
-        matrix.mean_expression, matrix.cells, ['mean_expression'], row_name='CB')
-
-    logger.info("Writing filtered matrix.")
-    matrix.to_tsv(
-        f'{args.output_prefix}_expression.processed.tsv', row_name=args.feature_type)
-    matrix.to_mex("filtered_feature_bc_matrix")
-
-    logger.info("Done.")

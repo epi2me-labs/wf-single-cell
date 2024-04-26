@@ -5,7 +5,7 @@ import tempfile
 
 import pandas as pd
 import pytest
-from workflow_glue.expression_matrix import main
+from workflow_glue.process_matrix import argparser, main
 
 
 @pytest.fixture()
@@ -19,8 +19,8 @@ def tags_df():
     #   g3 has two UMIS (CCC, GGG)
     df = pd.DataFrame({
         'gene': ['g1', 'g2', 'g3', 'g1', 'g2', 'g3'],
-        'CB': ['TTT', 'AAA', 'AAA', 'AAA', 'AAA', 'AAA'],
-        'UB': ['CAT', 'AAA', 'CCC', 'TTT', 'AAA', 'GGG']
+        'corrected_barcode': ['TTT', 'AAA', 'AAA', 'AAA', 'AAA', 'AAA'],
+        'corrected_umi': ['CAT', 'AAA', 'CCC', 'TTT', 'AAA', 'GGG']
     })
 
     expected_raw_result = pd.DataFrame({
@@ -56,31 +56,22 @@ def test_main(tags_df):
         tags_file = "tsv1.tsv"
         tags_df.to_csv(tags_file, sep='\t')
 
-        class Args:
-            read_tags = [tags_file]
-            feature_type = 'gene'
-            chunk_size = 1
-            output_prefix = 'test_gene'
-            min_features = 1
-            min_cells = 2
-            max_mito = 5
-            mito_prefixes = ['MT-']
-            norm_count = 10
+        parser = argparser()
+        args = parser.parse_args(
+            f"{tags_file} --feature gene --min_features 1 --min_cells 2 "
+            "--max_mito 5 --mito_prefixes 'MT-' --norm_count 10 "
+            "--enable_filtering --text".split())
+        main(args)
 
-        main(Args)
-
-        raw_results_df_file = f'{Args.output_prefix}_expression.count.tsv'
-        counts_result_df = pd.read_csv(raw_results_df_file, sep='\t', index_col=None)
+        counts_result_df = pd.read_csv(args.raw, sep='\t', index_col=None)
         pd.testing.assert_frame_equal(
             expected_raw_result, counts_result_df, check_like=True, check_dtype=False)
 
-        proc_results_df_file = f'{Args.output_prefix}_expression.processed.tsv'
-        procs_result_df = pd.read_csv(proc_results_df_file, sep='\t', index_col=None)
+        procs_result_df = pd.read_csv(args.processed, sep='\t', index_col=None)
         pd.testing.assert_frame_equal(
             expected_processed_result,
             procs_result_df, check_like=True, check_dtype=False)
 
-        mito_results_df_file = f'{Args.output_prefix}_expression.mito.tsv'
-        mito_results_df = pd.read_csv(mito_results_df_file, sep='\t', index_col=None)
+        mito_results_df = pd.read_csv(args.per_cell_mito, sep='\t', index_col=None)
         assert "CB" in mito_results_df.columns
         assert "mito_pct" in mito_results_df.columns

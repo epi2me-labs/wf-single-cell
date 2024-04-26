@@ -268,10 +268,9 @@ workflow pipeline {
 
         stranding(
             chunks.map {meta, chunk, stats ->
-                group_index = meta.group_index
                 def new_meta = meta.clone()
                 new_meta.remove('group_index')
-                [group_index, new_meta, chunk]},
+                [meta['group_index'], new_meta, chunk]},
             bc_longlist_dir)
 
         align(
@@ -329,7 +328,7 @@ workflow pipeline {
                 .collectFile(keepHeader:true),
             prepare_report_data.out.summary
                 .collectFile(keepHeader:true),
-            prepare_report_data.out.umap_dir,
+            prepare_report_data.out.umap_dir.collect(),
             process_bams.out.plots,
             umap_genes,
             workflow.manifest.version)

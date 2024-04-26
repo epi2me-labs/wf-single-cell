@@ -63,7 +63,8 @@ def tags_file():
 
     )
     tags_df = pd.DataFrame(
-        tags_rows, columns=tags_header).set_index('read_id', drop=True)
+        tags_rows, columns=tags_header).set_index('read_id', drop=True).rename(
+                columns={v: k for k, v in tag_bam.BAM_TAGS.items()})
     tags = tempfile.NamedTemporaryFile(mode='w', suffix='.tsv', delete=False)
     tags_df.to_csv(tags.name, sep='\t')
 

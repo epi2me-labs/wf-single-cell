@@ -9,6 +9,18 @@ from .util import get_named_logger, wf_parser  # noqa: ABS101
 logger = get_named_logger("TagBAMs")
 
 
+BAM_TAGS = {
+    "corrected_barcode": "CB",
+    "uncorrected_barcode": "CR",
+    "quality_barcode": "CY",
+    "corrected_umi": "UB",
+    "uncorrected_umi": "UR",
+    "quality_umi": "UY",
+    "gene": "GN",
+    "transcript": "TR"
+}
+
+
 def argparser():
     """Create argument parser."""
     parser = wf_parser("tag_bams")
@@ -41,8 +53,8 @@ def add_tags(tags_file, in_bam, out_bam, chrom, threads):
 
     # read everything as str since we need to serialse to string anyway
     tags = pd.read_csv(
-        tags_file, sep='\t', dtype=str, index_col="read_id").rename(
-            columns={"gene": "GN", "transcript": "TR"}, copy=False)
+        tags_file, sep='\t', dtype=str, index_col="read_id")
+    tags.rename(columns=BAM_TAGS, copy=False, inplace=True)
     logger.info("Indexing tag data by read_id")
     tags = tags.to_dict(orient="index")
 

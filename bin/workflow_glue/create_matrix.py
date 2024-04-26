@@ -8,7 +8,9 @@ import numpy as np
 import pandas as pd
 from umi_tools import UMIClusterer
 
-from .util import wf_parser  # noqa: ABS101
+from .expression_matrix import ExpressionMatrix  # noqa: ABS101
+from .tag_bam import BAM_TAGS  # noqa: ABS101
+from .util import get_named_logger, wf_parser  # noqa: ABS101
 
 
 def argparser():
@@ -16,42 +18,26 @@ def argparser():
     parser = wf_parser("cluster_umis")
 
     parser.add_argument(
-        "--chrom",
-        help="Chromosome name"
-    )
-
+        "chrom",
+        help="Chromosome name")
     parser.add_argument(
-        "--read_tags",
-        help="Read tags TSV file.",
-        type=Path
-    ),
-
+        "barcode_tags", type=Path,
+        help="Read tags TSV file.")
     parser.add_argument(
-        "--output_read_tags",
-        help="Output file for read tags TSV. USed for tagging BAM files.",
-        type=Path
-    )
-
+        "features", type=Path,
+        help="TSV read gene/transcript assignments file.")
+    grp = parser.add_argument_group("Output")
+    grp.add_argument(
+        "--tsv_out", type=Path,
+        help="Output TSV containing a subset of read-tags in human-readable form")
+    grp.add_argument(
+        "--hdf_out", type=Path,
+        help="Output filename fo HDF matrix output. \
+            Two files will be produced as filename.{gene, transcript}.ext")
     parser.add_argument(
-        "-i",
-        "--ref_interval",
+        "--ref_interval", type=int, default=1000,
         help="Size of genomic window (bp) to assign as gene name if no gene \
-          assigned by featureCounts [1000]",
-        type=int,
-        default=1000,
-    )
-
-    parser.add_argument(
-        "--workflow_output",
-        help="Output file TSV containing a subset of read-tags in human-readable form",
-        type=Path
-    )
-
-    parser.add_argument(
-        "--feature_assigns",
-        help="TSV read gene/transcript assignments file.",
-        type=Path
-    )
+            assigned by featureCounts.")
 
     return parser
 
@@ -101,39 +87,8 @@ def umi_clusterer_call(self, umis, threshold):
     return final_umis
 
 
-def create_region_name(row, ref_interval):
-    """
-    Create region name.
-
-    Create a 'gene name' based on the aligned chromosome and coordinates.
-    The midpoint of the alignment determines which genomic interval to use
-    for the 'gene name'.
-
-    :param read: read tags and location
-    :type read: tuple
-    :param args: object containing all supplied arguments
-    :type args: class 'argparse.Namespace'
-    :return: Newly created 'gene name' based on aligned chromosome and coords
-    :rtype: str
-    """
-    chrom = row.chr
-    start_pos = row.start
-    end_pos = row.end
-
-    # Find the midpoint of the alignment
-    midpoint = int((start_pos + end_pos) / 2)
-
-    # Pick the genomic interval based on this alignment midpoint
-    interval_start = np.floor(midpoint / ref_interval) * ref_interval
-    interval_end = np.ceil(midpoint / ref_interval) * ref_interval
-
-    # New 'gene name' will be <chr>_<interval_start>_<interval_end>
-    gene = f"{chrom}_{int(interval_start)}_{int(interval_end)}"
-    return gene
-
-
 def cluster(df):
-    """Clsuter UMIs.
+    """Cluster UMIs.
 
     Search for UMI clusters within subsets of reads sharing the same corrected barcode
     and gene. In this way the search space is dramatically reduced.
@@ -143,9 +98,6 @@ def cluster(df):
     based on edit distance threshold and whether node A counts >= (2* node B counts).
     https://umi-tools.readthedocs.io/en/latest/the_methods.html
 
-    :param df: DataFrame
-        Index: gene_cell
-        columns: UR (uncorrected UMI), read_id
     :return:
         DataFrame: The same as df with and additional UB (corrected barcode) column.
     """
@@ -177,41 +129,52 @@ def cluster(df):
     df["UB"] = df.groupby(
         ["gene_cell"])["UR"].transform(umi_tools_cluster)
     df.set_index('read_id', drop=True, inplace=True)
+    return df
 
 
-def process_records(df, args):
-    """Process records from tags file.
+def create_region_name(row, ref_interval):
+    """Create a fake gene name from alignment coordinates."""
+    # The idea here is to slice the reference into a grid and label reads
+    # with the chunk that they overlap. Reads intersecting the same chunk
+    # are then grouped together.
+    midpoint = int((row.start + row.end) / 2)
+    interval_start = int(np.floor(midpoint / ref_interval) * ref_interval)
+    interval_end = int(np.ceil(midpoint / ref_interval) * ref_interval)
+    gene = f"{row.chr}_{interval_start}_{interval_end}"
+    return gene
 
-    For each read, get the gene, barcode and unorrecdted UMI.
-    Use that to cluster UMIs to correct errors.
-    Write a TSV file including the input column + a corrected UMI tag (UB) column.
 
-    :param df: DataFrame with columns: read_id, UR, gene
-    :type df: pd.DataFrame
-    """
-    df_no_gene = df.loc[df.gene == '-']
+def cluster_dataframe(df, ref_interval):
+    """Process records from tags file."""
     # Create column to keep track of non-assigned genes
     df['no_gene'] = False
+    df_no_gene = df.loc[df.gene == '-']
     if len(df_no_gene) > 0:
-        # For reads with no asssignment, create a temporary gene name
-        # based on chr and location. Use that for clustering and reset back to '-' later
+        # Create a temporary gene name based on chr and location.
         regions = df_no_gene.apply(
-            create_region_name, axis=1, args=(args.ref_interval,))
+            create_region_name, axis=1, args=(ref_interval,))
         df.loc[regions.index, 'gene'] = regions
         df.loc[df.index.isin(regions.index), 'no_gene'] = True
     # Create gene/cell index for subsetting reads prior to clustering.
     df["gene_cell"] = df["gene"] + ":" + df["CB"]
     df['read_id'] = df.index
     df.set_index('gene_cell', inplace=True, drop=True)
-    cluster(df)
+    df = cluster(df)
     # Reset unassigned genes to '-'
     df.loc[df.no_gene, 'gene'] = '-'
     df.drop(columns='no_gene', inplace=True)
+    return df
 
 
 def main(args):
     """Run entry point."""
-    df_tags = pd.read_csv(args.read_tags, sep='\t', index_col='read_id')
+    logger = get_named_logger('CrteMatrix')
+
+    if args.tsv_out is None and args.hdf_out is None:
+        raise ValueError("Please supply at least one of `--tsv_out` or `--hdf_out`.")
+
+    logger.info("Reading barcode tag information.")
+    df_tags = pd.read_csv(args.barcode_tags, sep='\t', index_col='read_id')
 
     dups = df_tags[df_tags.index.duplicated(keep='first')]
     if not dups.empty:
@@ -219,46 +182,41 @@ def main(args):
             f"One or more input reads are duplicated, please rectify.\n"
             f"Duplicated reads: {list(set(dups.index))[:20]}")
 
+    logger.info("Reading feature information.")
     df_features = pd.read_csv(
-        args.feature_assigns, sep='\t', index_col=0)
-    # Merge genes and transcripts onto tags.
+        args.features, sep='\t', index_col=0)
+
+    logger.info("Merging barcode and feature information.")
     df_tag_feature = df_tags.merge(
         df_features, how='left', left_index=True, right_index=True).fillna('-')
 
-    # Only process reads with a corrected barcode and uncorrected UMI
+    logger.info("Filtering reads.")
     df_tag_feature = df_tag_feature.loc[
         (df_tag_feature.CB != '-') & (df_tag_feature.UR != '-')]
 
-    # Process the tag and feature df by adding UB tags inplace.
-    process_records(df_tag_feature, args)
+    logger.info("Clustering UMIs.")
+    df_tag_feature = cluster_dataframe(df_tag_feature, args.ref_interval)
 
+    logger.info("Preparing output.")
+    cols = ['CR', 'CB', 'CY', 'UR', 'UB', 'UY', 'gene', 'transcript', 'start', 'end']
     if len(df_tag_feature) > 0:
-        # Write a CSV used for tagging BAMs
-        df_tags_out = df_tag_feature[
-            ['CR', 'CB', 'CY', 'UR', 'UB', 'UY', 'gene', 'transcript']
-        ].assign(chr=args.chrom)
-
-        # Write a subset of columns with human-readable names for the final output.
-        df_workflow_out = df_tag_feature[
-            ['gene', 'transcript', 'CB', 'UB', 'chr', 'start', 'end']]
-        df_workflow_out = df_workflow_out.rename(
-            columns={
-                'CB': 'corrected_barcode',
-                'UB': 'corrected_umi'
-            }
-        )
-
+        df_tags_out = df_tag_feature[cols].assign(chr=args.chrom)
     else:
-        df_tags_out = pd.DataFrame(
-            columns=[
-                'read_id', 'CR', 'CB', 'CY',
-                'UR', 'UB', 'UY', 'gene', 'transcript', 'chr'
-             ]
-        ).set_index('read_id', drop=True)
+        # TODO: comes back to this, it smells janky
+        df_tags_out = (
+            pd.DataFrame(columns=['read_id'] + cols + ['chr'])
+            .set_index('read_id', drop=True)
+        )
+    df_tags_out.rename(
+        columns={v: k for k, v in BAM_TAGS.items()}, copy=False, inplace=True)
 
-        df_workflow_out = pd.DataFrame(
-            columns=['read_id', 'gene', 'transcript', 'CB', 'UB', 'chr', 'start', 'end']
-        ).set_index('read_id', drop=True)
+    if args.tsv_out:
+        logger.info("Writing text output.")
+        df_tags_out.to_csv(args.tsv_out, sep='\t')
 
-    df_tags_out.to_csv(args.output_read_tags, sep='\t', index=True)
-    df_workflow_out.to_csv(args.workflow_output, sep='\t')
+    if args.hdf_out:
+        for feature in ("gene", "transcript"):
+            logger.info(f"Creating {feature} expression matrix.")
+            matrix = ExpressionMatrix.from_tags(df_tags_out, feature)
+            fname = args.hdf_out.with_suffix(f".{feature}{args.hdf_out.suffix}")
+            matrix.to_hdf(fname)
