@@ -95,17 +95,19 @@ def main(args):
     logger = get_named_logger('AggreMatrix')
     logger.info('Constructing count matrices')
 
+    # converting to float on fly means we can save a copy when normalizing
     try:
-        matrix = ExpressionMatrix.aggregate_tags(args.input, args.feature)
+        matrix = ExpressionMatrix.aggregate_tags(args.input, args.feature, dtype=float)
     except UnicodeDecodeError:
-        matrix = ExpressionMatrix.aggregate_hdfs(args.input)
+        matrix = ExpressionMatrix.aggregate_hdfs(args.input, dtype=float)
+    logger.info("Removing unknown features.")
     matrix.remove_unknown()
 
     logger.info("Writing raw counts to file.")
     if args.text:
         matrix.to_tsv(args.raw, args.feature)
     else:
-        matrix.to_mex(args.raw)
+        matrix.to_mex(args.raw, dtype=int)
 
     if args.enable_filtering:
         logger.info("Filtering, normalizing and log-transforming matrix.")

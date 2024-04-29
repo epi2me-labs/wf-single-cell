@@ -13,7 +13,9 @@ import scipy.sparse
 class ExpressionMatrix:
     """Representation of expression matrices."""
 
-    def __init__(self, matrix=None, features=None, cells=None, fname=None, cache=False):
+    def __init__(
+            self, matrix=None, features=None, cells=None,
+            fname=None, cache=False, dtype=int):
         """Create a matrix.
 
         Do not use the constructor directly.
@@ -24,9 +26,10 @@ class ExpressionMatrix:
         if fname is not None:
             self._fh = h5py.File(fname, 'r')
         self._cache = cache
+        self._dtype = dtype
 
         if features is not None and cells is not None and matrix is None:
-            self._matrix = np.zeros((len(features), len(cells)), dtype=int)
+            self._matrix = np.zeros((len(features), len(cells)), dtype=self._dtype)
 
         if features is not None:
             self._s_features = np.argsort(features)
@@ -39,9 +42,9 @@ class ExpressionMatrix:
             self._fh.close()
 
     @classmethod
-    def from_hdf(cls, name, cache=True):
+    def from_hdf(cls, name, cache=True, dtype=int):
         """Load a matrix from HDF file."""
-        return cls(fname=name, cache=cache)
+        return cls(fname=name, cache=cache, dtype=dtype)
 
     @classmethod
     def from_tags(cls, df, feature='gene'):
@@ -64,13 +67,14 @@ class ExpressionMatrix:
         return cls(
             df.to_numpy(dtype=int),
             df.index.to_numpy(dtype=bytes),
-            df.columns.to_numpy(dtype=bytes))
+            df.columns.to_numpy(dtype=bytes),
+            dtype=int)
 
     @classmethod
-    def aggregate_hdfs(cls, fnames):
+    def aggregate_hdfs(cls, fnames, dtype=int):
         """Aggregate a set of matrices stored in HDF."""
         if len(fnames) == 1:
-            return cls.from_hdf(fnames[0])
+            return cls.from_hdf(fnames[0], dtype=dtype)
         features = set()
         cells = set()
         for fname in fnames:
@@ -78,15 +82,17 @@ class ExpressionMatrix:
             features.update(ma.features)
             cells.update(ma.cells)
 
+        # sort by names, just to be nice, doesn't guarantee matrices can be compared
         full_matrix = cls(
-            features=np.array(list(features)), cells=np.array(list(cells)))
+            features=np.array(
+                sorted(features)), cells=np.array(sorted(cells)), dtype=dtype)
         for fname in fnames:
-            ma = cls.from_hdf(fname)
+            ma = cls.from_hdf(fname, dtype=dtype)
             full_matrix + ma
         return full_matrix
 
     @classmethod
-    def aggregate_tags(cls, fnames, feature='gene'):
+    def aggregate_tags(cls, fnames, feature='gene', dtype=int):
         """Aggregate a set of tags files."""
         if len(fnames) == 1:
             return cls.from_tags(fnames[0])
@@ -94,7 +100,7 @@ class ExpressionMatrix:
             ma = ExpressionMatrix.from_tags(fname, feature=feature)
             ma.to_hdf(f"{fname}.hdf")
         hdfs = [f"{fname}.hdf" for fname in fnames]
-        return cls.aggregate_hdfs(hdfs)
+        return cls.aggregate_hdfs(hdfs, dtype=dtype)
 
     def to_hdf(self, fname):
         """Save matrix to HDF."""
@@ -103,7 +109,8 @@ class ExpressionMatrix:
             fh['features'] = self.features
             fh['matrix'] = self.matrix
 
-    def to_mex(self, fname, feature_type="Gene Expression", feature_ids=None):
+    def to_mex(
+            self, fname, feature_type="Gene Expression", feature_ids=None, dtype=None):
         """Export to MEX folder."""
         os.mkdir(fname)
         # barcodes, write bytes directly
@@ -120,7 +127,7 @@ class ExpressionMatrix:
                 fh.write(f"{feature_ids[feat]}\t{feat}\t{feature_type}\n")
         # matrix as bytes
         with gzip.open(os.path.join(fname, "matrix.mtx.gz"), 'wb') as fh:
-            coo = scipy.sparse.coo_matrix(self.matrix)
+            coo = scipy.sparse.coo_matrix(self.matrix, dtype=dtype)
             scipy.io.mmwrite(
                 fh, coo,
                 comment=(
@@ -178,7 +185,7 @@ class ExpressionMatrix:
         if self._matrix is not None:
             return self._matrix
         elif self._fh is not None:
-            matrix = self._fh['matrix'][()]
+            matrix = self._fh['matrix'].astype(self._dtype)[()]
             if self._cache:
                 self._matrix = matrix
             return matrix
@@ -193,25 +200,26 @@ class ExpressionMatrix:
     def normalize(self, norm_count):
         """Normalize total cell weight to fixed cell count."""
         # cell_count / cell_total = X / <norm_count>
-        total_per_cell = np.sum(self.matrix, axis=0)
+        total_per_cell = np.sum(self.matrix, axis=0, dtype=float)
         scaling = norm_count / total_per_cell
-        self._matrix = np.multiply(self.matrix, scaling, dtype=float)
-        return self
-
-    def remove_features(self, threshold):
-        """Remove features that are present in few cells."""
-        n_cells = np.count_nonzero(self.matrix, axis=1)
-        mask = n_cells >= threshold
-        self._matrix = self.matrix[mask]
-        self._features = self.features[mask]
+        if np.issubdtype(self._dtype, float):
+            self._matrix *= scaling
+        else:
+            self._matrix = np.multiply(self.matrix, scaling, dtype=float)
         return self
 
     def remove_cells(self, threshold):
         """Remove cells with few features present."""
         n_features = np.count_nonzero(self.matrix, axis=0)
         mask = n_features >= threshold
-        self._matrix = self.matrix[:, mask]
-        self._cells = self.cells[mask]
+        self._remove_elements(cell_mask=mask)
+        return self
+
+    def remove_features(self, threshold):
+        """Remove features that are present in few cells."""
+        n_cells = np.count_nonzero(self.matrix, axis=1)
+        mask = n_cells >= threshold
+        self._remove_elements(feat_mask=mask)
         return self
 
     def remove_cells_and_features(self, cell_thresh, feature_thresh):
@@ -223,13 +231,12 @@ class ExpressionMatrix:
         """
         n_features = np.count_nonzero(self.matrix, axis=0)
         cell_mask = n_features >= cell_thresh
-        self._cells = self.cells[cell_mask]
 
         n_cells = np.count_nonzero(self.matrix, axis=1)
         feat_mask = n_cells >= feature_thresh
-        self._features = self.features[feat_mask]
 
-        self._matrix = self.matrix[feat_mask][:, cell_mask]
+        self._remove_elements(feat_mask=feat_mask, cell_mask=cell_mask)
+
         return self
 
     def remove_skewed_cells(self, threshold, prefixes, fname=None, label=None):
@@ -242,9 +249,14 @@ class ExpressionMatrix:
         if fname is not None:
             self.write_matrix(
                 fname, 100 * sel_total, self.tcells, [label], index_name="CB")
-        self._matrix = self.matrix[:, mask]
-        self._cells = self.cells[mask]
+        self._remove_elements(cell_mask=mask)
+
         return self
+
+    def remove_unknown(self, key="-"):
+        """Remove the "unknown" feature."""
+        mask = self.features == "-".encode()
+        self._remove_elements(feat_mask=~mask)
 
     def find_features(self, prefixes, inverse=False):
         """Find features by name prefix."""
@@ -255,12 +267,6 @@ class ExpressionMatrix:
         if inverse:
             sel = np.setdiff1d(np.arange(len(self.features)), sel)
         return sel
-
-    def remove_unknown(self, key="-"):
-        """Remove the "unknown" feature."""
-        mask = self.features == "-".encode()
-        self._matrix = self.matrix[~mask]
-        self._features = self.features[~mask]
 
     def log_transform(self):
         """Transform expression matrix to log scale."""
@@ -295,3 +301,21 @@ class ExpressionMatrix:
         self.matrix[
             np.repeat(cols, len(rows)),
             np.tile(rows, len(cols))] += other.matrix.flatten()
+
+    def _remove_elements(self, feat_mask=None, cell_mask=None):
+        """Remove matrix elements using masks and inplace copies."""
+        # shuffle the rows (columns) we want to the front, then take a view.
+        # Don't bother doing anything if the mask is everything
+        if feat_mask is not None and sum(feat_mask) != len(self.features):
+            for i, x in enumerate(np.argwhere(feat_mask)):
+                self._matrix[i, :] = self._matrix[x, :]
+            self._matrix = self._matrix[:i+1]
+            self._features = self._features[feat_mask]
+
+        if cell_mask is not None and sum(cell_mask) != len(self.cells):
+            for j, x in enumerate(np.argwhere(cell_mask)):
+                self._matrix[:, j] = self.matrix[:, x].squeeze()
+            self._matrix = self._matrix[:, :j+1]
+            self._cells = self._cells[cell_mask]
+
+        return self._matrix
