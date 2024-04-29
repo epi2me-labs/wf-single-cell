@@ -250,7 +250,7 @@ process create_matrix {
 process process_matrix {
     label "singlecell"
     cpus  1
-    memory "16 GB"
+    memory "32 GB"  // TODO: check program its using up to 24GB, could be lower
     input:
         tuple val(meta), val(feature), path('inputs/matrix*.hdf')
     output:
@@ -281,6 +281,32 @@ process process_matrix {
         --norm_count $params.matrix_norm_count \
         --enable_umap \
         --replicates 3 
+    """
+}
+
+
+// Merge annotated GFFs and transcriptome sequence files
+process merge_transcriptome {
+    label "singlecell"
+    cpus 2
+    memory "2GB"
+    input:
+        tuple val(meta),
+            path('fasta/?.fa'),
+            path('gffs/?.gff')
+    output:
+        tuple val(meta),
+            path("transcriptome.gff.gz"),
+            path("transcriptome.fa.gz"),
+            emit: merged_annotation
+    """
+    find fasta/ -name '*.fa' -exec cat {} + \
+        | bgzip --threads ${task.cpus} -c  \
+        > "transcriptome.fa.gz"
+    find gffs/ -name '*.gff' -exec cat {} + \
+        | grep -v '^#' \
+        | bgzip --threads ${task.cpus} -c  \
+        > "transcriptome.gff.gz"
     """
 }
 
@@ -319,6 +345,22 @@ process umi_gene_saturation {
     workflow-glue calc_saturation \
         --output "saturation_curves.png" \
         --read_tags read_tags.tsv
+    """
+}
+
+
+process pack_images {
+    label "singlecell"
+    cpus 1
+    memory "1 GB"
+    input:
+        tuple val(meta),
+              path("images_${meta.alias}/*")
+    output:
+         tuple val(meta),
+              path("images_${meta.alias}")
+    """
+    echo packing images
     """
 }
 
@@ -370,44 +412,6 @@ process combine_chrom_bams {
 }
 
 
-process pack_images {
-    label "singlecell"
-    cpus 1
-    memory "1 GB"
-    input:
-        tuple val(meta),
-              path("images_${meta.alias}/*")
-    output:
-         tuple val(meta),
-              path("images_${meta.alias}")
-    """
-    echo packing images
-    """
-}
-
-
-process merge_transcriptome {
-    // Merge the annotated GFFs and transcriptome sequence files
-    label "singlecell"
-    cpus 1
-    memory "2GB"
-    input:
-        tuple val(meta),
-            path('fasta/?.fa'),
-            path('gffs/?.gff')
-    output:
-        tuple val(meta),
-            path("transcriptome.gff.gz"),
-            path("transcriptome.fa.gz"),
-            emit: merged_annotation
-    """
-    # Concatenate transcriptome files, remove comments (from gff) and compress
-    find fasta/ -name '*.fa' -exec cat {} + | gzip > "transcriptome.fa.gz"
-    find gffs/ -name '*.gff' -exec cat {} + |grep -v '^#' | gzip > "transcriptome.gff.gz"
-    """
-}
-
-
 workflow process_bams {
     take:
         bam
@@ -417,14 +421,17 @@ workflow process_bams {
         ref_genome_fasta
         ref_genome_idx
     main:
+        // Split the GTF by chromosome
         chr_gtf = split_gtf_by_chroms(gtf)
             .flatten()
-            .map {file -> 
-                // create [chr, gtf]
-                tuple(file.baseName, file)}
+            .map {fname -> tuple(fname.baseName, fname)}  // [chr, gtf]
 
         generate_whitelist(high_qual_bc_counts)
 
+        // TODO: this process really has no business being here. It should be
+        //       moved into main.nf as an aggregation across all the chunks
+        //       in extracted_barcodes. It takes a long time per-chunk so should
+        //       be left as parallel across chunks.
         assign_barcodes(
             generate_whitelist.out.whitelist
             .cross(extracted_barcodes)
@@ -436,10 +443,12 @@ workflow process_bams {
 
         // Combine the BAM chunks and tags chunks
         // TODO: this process 
-        //       i) combines BAMs into a single BAM
+        //       i) combines BAM chunks into a single who genome BAM
         //       ii) combines TAGs from chunks above and re-splits into separate per-chrom files
         //       It should be split into distinct cat_bams and cat_tags processes
-        // The BAM output here is for the whole genome?
+        //       If we change to bambu and can have it read multiple BAMs at once
+        //       we can potentially delay the BAM merging step until after
+        //       all the tag data has been prepared.
         combine_bams_and_tags(
             bam.groupTuple()
                 .join(assign_barcodes.out.tags.groupTuple()))
@@ -459,6 +468,13 @@ workflow process_bams {
             combine_bams_and_tags.out.merged_bam
                 .combine(chr_gtf))
 
+        // TODO: We're likely to change this to use bambu and avoid using
+        //       stringtie altogether. However note that the next three steps
+        //       are a strict linear pipeline and should be combined into one
+        //       process to avoid staging of files between processes. Note further
+        //       that it would be trivial to combine the assign_features and
+        //       and create_matrix steps into a single program to avoid writing
+        //       any intermediate files whatsoever.
         align_to_transcriptome(stringtie.out.read_tr_map)
 
         assign_features(
@@ -471,12 +487,20 @@ workflow process_bams {
                 .join(chr_tags, by: [0, 1]))
 
         // aggregate per-chrom expression matrices to create MEX and UMAP TSVs
-        for_processing = 
+        process_matrix(
             create_matrix.out.gene.groupTuple(by: [0, 2])
             .mix(
                 create_matrix.out.transcript.groupTuple(by: [0, 2]))
-            .map {meta, chroms, feature, hdfs -> [meta, feature, hdfs]}
-        process_matrix(for_processing)
+            .map {meta, chroms, feature, hdfs -> [meta, feature, hdfs]})
+
+        // TODO: merging the gffs and merging the fasta files is two independent
+        //       tasks, they can be done in parallel in two distinct processes.
+        merge_transcriptome(
+            assign_features.out.annotation.groupTuple()
+                .join(stringtie.out.read_tr_map.groupTuple())
+                .map{
+                    meta, ann_tr_gff, chr, tr_fa, ref_gtf, str_gff, fastq ->
+                    [meta, tr_fa, ann_tr_gff]})
 
         // construct per-read summary tables for end user
         final_read_tags = combine_final_tag_files(
@@ -488,12 +512,22 @@ workflow process_bams {
         // TODO: this save figures with matplotlib -- just output
         //       data and plot in report with bokeh
         umi_gene_saturation(final_read_tags)
+        
+        // TODO: see above:
+        //       i) we shouldn't be making ugly static images
+        //       ii) this process simply stages images under a common folder
+        //           that could just be done in output directly
+        pack_images(
+            generate_whitelist.out.kneeplot
+                .concat(umi_gene_saturation.out.saturation_curve)
+                .groupTuple())
 
         // tag BAMs and merge per-chrom BAMs into one big one?
-        // TODO: these steps should be combined to avoid writing the BAMs twice.
-        //       Theres no good reason to output per-chrom BAMs. Just take the
-        //       per-chrom tags and per-chrom bams and iterate through to
-        //       produce one BAM directly
+        // TODO: Theres no good reason to output per-chrom BAMs. We should instead
+        //       create just a whole genome BAM. We can optionally include the tags
+        //       in the BAM file as well. This whole genome BAM is currently created
+        //       above already to give to stringtie. As an interim (before switching
+        //       to bambu) we can just tag this BAM and output it as the final BAM.
         tag_bam(combine_bams_and_tags.out.merged_bam
              // cross by sample_id on the output of create_matrix to return
              // [sample_id, chr, kit_name, bam, bai, tags.tsv]
@@ -510,22 +544,6 @@ workflow process_bams {
                 .map {it -> it[0, 1, 2]}
                 .groupTuple()
         }
-
-        // TODO: see above:
-        //       i) we shouldn't be making ugly static images
-        //       ii) this process simply stages images under a common folder
-        //           that could just be done in output directly
-        pack_images(
-            generate_whitelist.out.kneeplot
-                .concat(umi_gene_saturation.out.saturation_curve)
-                .groupTuple())
-
-        merge_transcriptome(
-            assign_features.out.annotation.groupTuple()
-                .join(stringtie.out.read_tr_map.groupTuple())
-                .map{
-                    meta, ann_tr_gff, chr, tr_fa, ref_gtf, str_gff, fastq ->
-                    [meta, tr_fa, ann_tr_gff]})
 
     emit:
         results = umi_gene_saturation.out.saturation_curve

@@ -2,6 +2,7 @@
 import collections
 from enum import Enum
 from pathlib import Path
+import sys
 
 import editdistance as ed
 import pandas as pd
@@ -27,18 +28,14 @@ def argparser():
     :return: object containing all supplied arguments
     :rtype: class argparse.Namespace
     """
-    # Create argument parser
     parser = wf_parser("extract_barcode")
 
-    # Positional mandatory arguments
     parser.add_argument(
-        "fastq",
-        help="fastq_input",
-        type=Path,
-    )
+        "fastq", type=Path,
+        help="Read input file.")
 
     parser.add_argument(
-        "superlist",
+        "superlist", type=Path,
         help="Comprehensive whitelist of all possible cell barcodes.\
         These vary depending on which 10X kit was used. \
         For 3' v3 single cell gene expression \
@@ -48,126 +45,73 @@ def argparser():
         For 5' single cell gene expression \
         kit: data/737K-august-2016.txt.gz. \
         For single cell multiome (ATAC + GEX) \
-        kit: data/737K-arc-v1.txt.gz",
-        type=Path,
-        default=None,
-    )
+        kit: data/737K-arc-v1.txt.gz.")
 
-    # Optional arguments
     parser.add_argument(
-        "-k",
-        "--kit",
+        "--kit", type=KitName, default=KitName.prime3,
         help="Specify either the 10X 3' gene expression kit (3prime), the 5' \
         gene expression kit (5prime), or the multiome kit (multiome) This \
-        determines which adapter sequences to search for in the reads \
-        [3prime]",
-        type=KitName,
-        default=KitName.prime3
-    )
+        determines which adapter sequences to search for in the reads.")
 
     parser.add_argument(
-        "--min_barcode_qv",
+        "--min_barcode_qv", type=int, default=15,
         help="Minimum quality score in a barcode for it to be considered \
-        a high-quality barcode to be used in whitelist creation [15].",
-        default=15,
-        type=int,
-    )
+        a high-quality barcode to be used in whitelist creation.")
 
     parser.add_argument(
-        "--adapter1_suff_length",
+        "--adapter1_suff_length", type=int, default=10,
         help="Use this many suffix bases from adapter1 sequence \
             in the alignment query. For example, specifying 12 \
             would mean that the last 12 bases of the specified \
-            read1 sequence will be included in the probe sequence \
-            [10]",
-        default=10,
-        type=int,
-    )
+            read1 sequence will be included in the probe sequence.")
 
     parser.add_argument(
-        "-T",
-        "--polyt_length",
+        "--polyt_length", type=int, default=10,
         help="Length of polyT sequence to use in the \
-        alignment query (ignored with --kit=5prime) [10]",
-        type=int,
-        default=10,
-    )
+            alignment query (ignored with --kit=5prime).")
 
     parser.add_argument(
-        "-t",
-        "--threads",
-        help="Threads to use [4]",
-        type=int,
-        default=4,
-    )
+        "--barcode_length", type=int, default=16,
+        help="Cell barcode length")
 
     parser.add_argument(
-        "--barcode_length",
-        help="Cell barcode length [16]",
-        type=int,
-        default=16,
-    )
+        "--umi_length", type=int, default=12,
+        help="UMI length.")
 
     parser.add_argument(
-        "--umi_length",
-        help="UMI length [12]",
-        type=int,
-        default=12,
-    )
+        "--gap_open", type=int, default=2,
+        help="Gap open penalty.")
 
     parser.add_argument(
-        "-o", "--gap_open", help="Gap open penalty [2]", type=int, default=2
-    )
+        "--gap_extend", type=int, default=4,
+        help="Gap extend penalty.")
 
     parser.add_argument(
-        "-e",
-        "--gap_extend",
-        help="Gap extend penalty [4]",
-        type=int,
-        default=4)
+        "--match", type=int, default=5,
+        help="Match score.")
 
     parser.add_argument(
-        "-m",
-        "--match",
-        help="Match score [5]",
-        type=int,
-        default=5)
+        "--mismatch", type=int, default=-1,
+        help="Mismatch score")
 
     parser.add_argument(
-        "-x", "--mismatch", help="Mismatch score [-1]", type=int, default=-1
-    )
+        "--acg_to_n_match", type=int, default=1,
+        help="Score for A/C/G<-->N match.")
 
     parser.add_argument(
-        "-n",
-        "--acg_to_n_match",
-        help="Score for A/C/G<-->N match [1]",
-        type=int,
-        default=1,
-    )
+        "--t_to_n_match", type=int, default=1,
+        help="Score for T<-->N match.")
 
     parser.add_argument(
-        "-s",
-        "--t_to_n_match",
-        help="Score for T<-->N match [1]",
-        type=int,
-        default=1)
+        "--window", type=int, default=100,
+        help="Number of bases to query at start of read.")
 
     parser.add_argument(
-        "-w",
-        "--window",
-        help="Number of bases to query at start of read [100]",
-        type=int,
-        default=100,
-    )
-
-    parser.add_argument(
-        "--max_adapter1_ed",
+        "--max_adapter1_ed", type=int, default=3,
         help="Max edit distance with the adapter1 sequence (upstream of cell \
-        barcode) [3]",
-        type=int,
-        default=3,
-    )
+        barcode).")
 
+    # TODO: are these really required arguments?
     parser.add_argument(
         "--output_read_tags",
         help="Output TSV file with read_ids and associated tags"
@@ -178,17 +122,11 @@ def argparser():
         help="Output TSV file containing high-quality barcode counts"
     )
 
-    parser.add_argument(
-        "--output_trimmed_fastq",
-        help="Output path for trimmed fastq"
-    )
-
     return parser
 
 
 def update_matrix(match, mismatch, acg_to_n_match, t_to_n_match):
-    """
-    Update matrix.
+    """Update matrix.
 
     Create new parasail scoring matrix. 'N' is used as wildcard character
     for barcodes and has its own match parameter (0 per default).
@@ -297,27 +235,6 @@ def parse_probe_alignment(
     )
 
 
-def write_trimmed_fastq(read, trim_pos, trim_side, fout):
-    """Trim and write fastq.
-
-    Now that the barcodes, UMIs and have been extracted, they can be trimmed away
-    along with adapter1.
-
-    :param read: The pysam.Fastx read to write
-    :param trim_pos: The left index position to trim up to.
-    :param fout: The output file handle
-    """
-    if trim_side == 'right':
-        read.sequence = read.sequence[:-trim_pos]
-        read.quality = read.quality[:-trim_pos]
-    else:
-        read.sequence = read.sequence[trim_pos:]
-        read.quality = read.quality[trim_pos:]
-    # If there is some sequence remaining after trimming, write it out.
-    if read.sequence:
-        fout.write(str(read) + '\n')
-
-
 def align_adapter(args):
     """
     Align a single adapter template to read and compute identity.
@@ -361,8 +278,7 @@ def align_adapter(args):
 
     with FastxFile(
             str(args.fastq), "rb") as fastq_fh, \
-            open(args.output_read_tags, 'w') as tags_fh, \
-            open(args.output_trimmed_fastq, 'w') as fq_fh:
+            open(args.output_read_tags, 'w') as tags_fh:
 
         # Write the header
         tags_fh.write("read_id\tCR\tCY\tUR\tUY\n")
@@ -425,11 +341,15 @@ def align_adapter(args):
                     trim_side = 'left'
                     trim_pos = p_alignment.end_query
 
-                write_trimmed_fastq(
-                    read,
-                    trim_pos,
-                    trim_side,
-                    fq_fh)
+                # trim and write the read
+                if trim_side == 'right':
+                    read.sequence = read.sequence[:-trim_pos]
+                    read.quality = read.quality[:-trim_pos]
+                else:
+                    read.sequence = read.sequence[trim_pos:]
+                    read.quality = read.quality[trim_pos:]
+                if read.sequence:
+                    sys.stdout.write(str(read) + '\n')
 
     bc_counts = pd.DataFrame.from_dict(
         barcode_counts,
@@ -443,17 +363,18 @@ def main(args):
     """Run entry point."""
     logger = get_named_logger('ExtractBC')
     args.adapter1_seq = kit_adapters[args.kit]['adapter1']
+
+    logger.info(f"Loading barcode whitelist from {args.superlist}")
     wl = pd.read_csv(args.superlist, header=None).iloc[:, 0].values
 
     logger.info(f"Extracting uncorrected barcodes from {args.fastq}")
-
     barcode_counts = align_adapter(args)
 
-    # Filter barcode counts against barcode superlist
     logger.info(
         f"Writing superlist-filtered barcode counts to "
         f"{args.output_barcode_counts}")
-
     bc_counts = barcode_counts[barcode_counts.index.isin(wl)]
     bc_counts.to_csv(
         args.output_barcode_counts, index=True, sep='\t')
+
+    logger.info("Finished.")

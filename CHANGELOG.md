@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Feature assignment now 4.5x faster.
 - UMAP creation memory use reduced 6-fold and up-to 30x faster.
 - Final read tagging step is 3x faster.
+- Combined various preprocessing steps into a single process to avoid
+  unnecessary file writes.
+- Updated stringtie2 to v2.2.2.
 ### Removed
 - Several workflow parameters as part of resource management simplification.
 
