@@ -153,7 +153,6 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
 | out_dir | string | Directory for output of all workflow results. |  | output |
-| plot_umaps | boolean | Optionally generate UMAP plots. | If set to false (the default), UMAP projection and plotting will be skipped, which will speed up the workflow. | False |
 
 
 ### Advanced options
