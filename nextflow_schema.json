@@ -106,13 +106,6 @@
                     "default": "output",
                     "format": "directory-path",
                     "description": "Directory for output of all workflow results."
-                },
-                "plot_umaps": {
-                    "type": "boolean",
-                    "default": false,
-                    "title": "Plot UMAPs",
-                    "description": "Optionally generate UMAP plots.",
-                    "help_text": "If set to false (the default), UMAP projection and plotting will be skipped, which will speed up the workflow."
                 }
             }
         },
