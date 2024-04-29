@@ -403,5 +403,7 @@ def main(args):
     for read in read_data:
         sys.stdout.write(read)
 
-    logger.debug(f"Writing output table to {args.output_tsv}")
+    logger.info(f"Writing output table to {args.output_tsv}")
     write_table(read_info, args.output_tsv)
+
+    logger.info("Finished.")

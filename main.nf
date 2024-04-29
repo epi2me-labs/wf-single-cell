@@ -5,8 +5,7 @@ import nextflow.util.BlankSeparatedList;
 nextflow.enable.dsl = 2
 
 include { fastq_ingress } from './lib/ingress'
-include { stranding } from './subworkflows/stranding'
-include { align } from './subworkflows/align'
+include { preprocess } from './subworkflows/preprocess'
 include { process_bams } from './subworkflows/process_bams'
 
 OPTIONAL_FILE = file("$projectDir/data/OPTIONAL_FILE")
@@ -87,32 +86,6 @@ process makeReport {
         --metadata metadata.json \
         --wf_version $wf_version \
         --metadata metadata.json
-    """
-}
-
-
-process mergeTags {
-    /*
-    Merge a subset of columns from the bam info and extracted barcode TSVs
-    To give a TSV with the following columns
-        [read_id, CR, CY, UR, UY, start, end, chr, mapq]
-    */
-    label "wf_common"
-    cpus 1
-    memory "2 GB"
-    input:
-        tuple val(meta),
-              path('barcodes.tsv'),
-              path('bam_info.tsv')
-
-    output:
-        tuple val(meta),
-              path("merged_tags.tsv")
-    """
-    csvtk cut -tlf Read,Pos,EndPos,Ref,MapQual bam_info.tsv > bam_info_cut.tsv
-    # Left join of barcode
-    csvtk join -tlf 1 bam_info_cut.tsv barcodes.tsv --left-join \
-        | csvtk rename -tl -f Read,Pos,EndPos,Ref,MapQual -n read_id,start,end,chr,mapq -o merged_tags.tsv
     """
 }
 
@@ -266,39 +239,24 @@ workflow pipeline {
 
         bc_longlist_dir = file("${projectDir}/data", checkIfExists: true)
 
-        stranding(
-            chunks.map {meta, chunk, stats ->
-                def new_meta = meta.clone()
-                new_meta.remove('group_index')
-                [meta['group_index'], new_meta, chunk]},
-            bc_longlist_dir)
-
-        align(
-            stranding.out.stranded_trimmed_fq,
+        preprocess(
+            chunks.map{meta, fastq, stats -> [meta, fastq]},
+            bc_longlist_dir,
             ref_genome_fasta,
             ref_genome_idx,
             ref_genes_gtf)
 
-        // Combine barcodes and BAM info by group_index.
-        // The group_index is not needed after this step as any further groupings are dione on alias and chromosome
-        barcodes = mergeTags(
-            // First element of tuple is group_index to allow joining on fastq chunk
-            stranding.out.extracted_barcodes
-                .join(align.out.bam_info)
-                .map {group_index, meta, bcs, meta2, bam_info -> [meta, bcs, bam_info]}
-            )
-
         process_bams(
-            align.out.bam_sort,
-            barcodes,
-            stranding.out.high_qual_bc_counts.groupTuple(),
+            preprocess.out.bam_sort,
+            preprocess.out.read_tags,
+            preprocess.out.high_qual_bc_counts.groupTuple(),
             ref_genes_gtf,
             ref_genome_fasta,
             ref_genome_idx)
 
         prepare_report_data(
             process_bams.out.final_read_tags
-            .join(stranding.out.config_stats)
+            .join(preprocess.out.config_stats)
             .join(process_bams.out.white_list)
             .join(process_bams.out.gene_mean_expression)
             .join(process_bams.out.transcript_mean_expression)
@@ -307,10 +265,6 @@ workflow pipeline {
 
         // Get the metadata and stats for the report
         chunks
-            .map{meta, chunk, stats ->
-                def new_meta = meta.clone()
-                new_meta.remove('group_index')
-                [new_meta, chunk, stats]}
             .groupTuple()
             .multiMap{ meta, chunk, stats ->
                 meta: meta
@@ -334,7 +288,7 @@ workflow pipeline {
             workflow.manifest.version)
     emit:
         results = process_bams.out.results
-        config_stats = stranding.out.config_stats
+        config_stats = preprocess.out.config_stats
         report = makeReport.out
 }
 
@@ -389,6 +343,11 @@ workflow {
             .map {meta, chunk, stats -> [meta.alias, meta, chunk, stats]})
         // Extract the joined sample and kit info from the cross results
         .map {kit, sample -> [ sample[1] + kit[1], sample[2], sample[3]]}
+        // we never need the chunk index for merging items so discard it
+        .map {meta, chunk, stats ->
+            def new_meta = meta.clone()
+            new_meta.remove('group_index')
+            [new_meta, chunk, stats]}
 
     pipeline(
         sample_and_kit_meta,
