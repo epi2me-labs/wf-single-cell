@@ -15,27 +15,6 @@ process split_gtf_by_chroms {
 }   
 
 
-process get_contigs {
-    label "singlecell"
-    cpus 1
-    memory "2 GB"
-    input:
-        tuple val(meta),
-              path('sample.bam'),
-              path('sample.bam.bai')
-
-    output:
-        tuple path("contigs"),
-            val(meta),
-            emit: contigs
-    """
-    samtools idxstats sample.bam \
-        | gawk '/^[^*]/{print\$1}' \
-        | gawk NF > contigs
-    """
-}
-
-
 process generate_whitelist{
     label "singlecell"
     cpus 4
@@ -443,17 +422,6 @@ workflow process_bams {
             .map {file -> 
                 // create [chr, gtf]
                 tuple(file.baseName, file)}
-
-        get_contigs(bam)
-
-        contigs = get_contigs.out.contigs
-            .splitCsv().map{it -> [it[0][0], it[1]]}
-
-        // Keep only the contigs that are referenced in the gtf
-        contigs = chr_gtf
-            .cross(contigs) // -> [[ chr, chr.gtf], [chr, meta]]
-            // [meta, chr, chr.gtf]
-            .map {chr_gtf, chr_meta -> [chr_meta[1], chr_meta[0], chr_gtf[1]]}
 
         generate_whitelist(high_qual_bc_counts)
 
