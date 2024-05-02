@@ -165,7 +165,6 @@ def main(args):
     logger = get_named_logger("Report")
     logger.info('Building report')
 
-    # Create report
     report = LabsReport(
         'Workflow Single Cell report', 'wf-single-cell',
         args.params, args.versions, args.wf_version,
@@ -186,8 +185,9 @@ def main(args):
             names = names[0]
         fastcat.SeqSummary(stats, sample_names=names)
 
-    survival_df = pd.read_csv(args.survival, sep='\t', index_col=0)
-    wf_summ_df = pd.read_csv(args.wf_summary, sep='\t', index_col=0)
+    # set statistic as index column to allow for easy selection in building table.
+    # For barplots we'll pull it back into a column
+    survival_df = pd.read_csv(args.survival, sep='\t').set_index("statistic")
 
     with report.add_section('Single cell sample summary', 'sc-seq summary'):
         p(
@@ -196,18 +196,16 @@ def main(args):
              each sample."""
         )
         table = DataTable(
-            headers=['sample ID',
-                     'reads',
-                     'cells',
-                     'genes',
-                     'transcripts',
-                     ])
-        for row in wf_summ_df.itertuples():
+            headers=[
+                'sample ID', 'reads', 'cells', 'genes', 'transcripts'])
+        for name, grp in survival_df.groupby('sample_id'):
             table.add_row(
-                title=row.sample_id,
+                title=name,
                 columns=[
-                    row.n_reads, row.total_cells, row.total_genes,
-                    row.total_transcripts])
+                    grp.loc['reads', 'count'],
+                    grp.loc['cells', 'count'],
+                    grp.loc['genes', 'count'],
+                    grp.loc['transcripts', 'count']])
 
     with report.add_section('Read survival by stage', 'Attrition'):
         p(
@@ -225,19 +223,17 @@ def main(args):
             transcript.""")
         )
 
+        # pull statistic column into column, rename, and build barplot
         x_name = 'Workflow stage'
         y_name = 'Proportion of reads [%]'
-
         order = [
-            'full_length', 'total_tagged', 'gene_tagged',
-            'transcript_tagged']
-        data = survival_df.rename(
-            columns={'class': x_name})
+            'full_length', 'tagged', 'gene_tagged', 'transcript_tagged']
+        data = survival_df.reset_index(names=x_name)
         data = data[data[x_name].isin(order)]
 
         EZChart(
             ezcharts.barplot(
-                data=data, x=x_name, y=y_name, hue='sample', order=order),
+                data=data, x=x_name, y=y_name, hue='sample_id', order=order),
             theme='epi2melabs')
 
     with report.add_section('Primer configuration', 'Primers'):
@@ -276,22 +272,20 @@ def main(args):
             li("Adapter2: Non-Poly(dT) RT primer")
         )
 
+        # pull statistic column into column, rename and build barplot
         order = [
             'full_length',
-            'double_adapter2',
-            'single_adapter2',
-            'single_adapter1',
-            'double_adapter1',
-            'no_adapters',
-            'other']
+            'single_adapter1', 'double_adapter1',
+            'single_adapter2', 'double_adapter2',
+            'no_adapters', 'other']
         x_name = 'Primer configuration'
         y_name = 'Proportion of reads [%]'
-        data = survival_df.rename(columns={'class': x_name})
+        data = survival_df.reset_index(names=x_name)
         data = data[data[x_name].isin(order)]
 
         EZChart(
             ezcharts.barplot(
-                data=data, x=x_name, y=y_name, hue='sample', order=order),
+                data=data, x=x_name, y=y_name, hue='sample_id', order=order),
             theme='epi2melabs')
 
     with report.add_section('Diagnostic plots', 'Diagnostic plots'):
@@ -369,9 +363,6 @@ def argparser():
     parser.add_argument(
         "--survival",
         help="Read survival data in TSV format")
-    parser.add_argument(
-        "--wf_summary",
-        help="Workflow summary statistics")
     parser.add_argument(
         "--params", help="Workflow params json file")
     parser.add_argument(

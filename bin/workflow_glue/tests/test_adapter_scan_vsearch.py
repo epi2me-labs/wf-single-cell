@@ -95,9 +95,9 @@ def test_call_vsearch(adapters, expected_results, segment):
 
         # Each result can contain 0 or more subreads -
         #  segments with consecutive pairs of compatible adapters.
-        for i, exp_result in enumerate(expected_results):
-            subread_id = f'{id_}_{i}'
-            subread_result = parsed_results[id_][subread_id]
+        parsed_results = iter(parsed_results[id_])
+        for exp_result in expected_results:
+            subread_result = next(parsed_results)
 
             assert subread_result['adapter_config'] == exp_result[0]
             assert subread_result['lab'] == exp_result[1]
@@ -116,11 +116,10 @@ def test_write_stranded_fastq():
         "+\n"
         f"{'<' * len(seq)}")
 
-    # The config defines the location and orientation of the subreads within the read
     # This config defines one read containing two subreads.
     config = {
-        'read_1': {
-            'read_1_0': {
+        'read_1': [
+            {
                 'readlen': 100, 'read_id': 'read_1_0', 'start': 10,
                 'end': 110,
                 'fl': True, 'stranded': True, 'orig_strand': '+',
@@ -128,7 +127,7 @@ def test_write_stranded_fastq():
                     'adapter1_f-adapter2_f-adapter2_r-adapter1_r',
                 'adapter_config': 'adapter1_f-adapter2_f',
                 'lab': 'full_len'},
-            'read_1_1': {
+            {
                 'readlen': 200, 'read_id': 'read_1_1', 'start': 120,
                 'end': 320,
                 'fl': True, 'stranded': True, 'orig_strand': '-',
@@ -136,7 +135,7 @@ def test_write_stranded_fastq():
                     'adapter1_f-adapter2_f-adapter2_r-adapter1_r',
                 'adapter_config': 'adapter1_f-adapter2_f',
                 'lab': 'full_len'}
-        }
+            ]
     }
 
     temp_fq = tempfile.NamedTemporaryFile(suffix='.fq')

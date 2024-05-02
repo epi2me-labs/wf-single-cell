@@ -1,4 +1,5 @@
 """Adapter scan vsearch."""
+import collections
 from pathlib import Path
 import subprocess
 import sys
@@ -6,8 +7,8 @@ import sys
 import pandas as pd
 import polars as pl
 import pysam
-from workflow_glue.sc_util import kit_adapters
 
+from .sc_util import kit_adapters, StatsSummary  # noqa: ABS101
 from .util import get_named_logger, wf_parser  # noqa: ABS101
 
 logger = get_named_logger("AdaptScan")
@@ -35,9 +36,12 @@ def argparser():
     parser.add_argument("fastq", help="FASTQ of ONT reads", type=Path)
 
     parser.add_argument(
-        "--output_tsv",
-        help="Output file name for adapter configurations",
-        type=Path, default="adapters.tsv")
+        "--per_read_summary", type=Path,
+        help="Output file name for per-read adapter configurations")
+
+    parser.add_argument(
+        "--summary", type=Path,
+        help="Output for JSON summary of adapter classifications.")
 
     parser.add_argument(
         "--kit",
@@ -206,10 +210,9 @@ def parse_vsearch(tmp_vsearch):
         yield last, df[last_i:]
 
     # find adapters within reads by grouping hits to single read
-    read_info = {}
+    read_info = collections.defaultdict(list)  # key is original read ID
     for orig_read_id, read_result in _yield_reads():
         orig_adapter_config = "-".join(read_result["target"])
-        read_info[orig_read_id] = {}
 
         # find valid consecutive adapter pairs, this allows for some
         # forms of concatemeric reads to be recovered
@@ -218,9 +221,10 @@ def parse_vsearch(tmp_vsearch):
         if len(fl_pairs) > 0:
             # valid pairs found
             for fl_pair in fl_pairs:
-                read_info[orig_read_id][fl_pair['read_id']] = {
-                    "readlen": fl_pair["end"] - fl_pair["start"],
+                read_info[orig_read_id].append({
+                    "orig_read_id": orig_read_id,
                     "read_id": fl_pair["read_id"],
+                    "readlen": fl_pair["end"] - fl_pair["start"],
                     "start": fl_pair["start"],
                     "end": fl_pair["end"],
                     "fl": True,
@@ -228,7 +232,7 @@ def parse_vsearch(tmp_vsearch):
                     "orig_strand": fl_pair["strand"],
                     "orig_adapter_config": orig_adapter_config,
                     "adapter_config": fl_pair["config"],
-                    "lab": "full_len"}
+                    "lab": "full_len"})
         else:
             # no valid adapter pairs found, try to recover reads that have
             # one useful adapter it.
@@ -289,9 +293,10 @@ def parse_vsearch(tmp_vsearch):
                 else:
                     raise Exception("Unexpected adapter config!")
 
-            read_info[orig_read_id][read_id] = {
-                "readlen": readlen,
+            read_info[orig_read_id].append({
+                "orig_read_id": orig_read_id,
                 "read_id": read_id,
+                "readlen": readlen,
                 "start": start,
                 "end": end,
                 "fl": fl,
@@ -299,20 +304,38 @@ def parse_vsearch(tmp_vsearch):
                 "orig_strand": strand,
                 "orig_adapter_config": orig_adapter_config,
                 "adapter_config": adapter_config,
-                "lab": config_type}
+                "lab": config_type})
 
     return read_info
 
 
-def write_table(read_info, output_tsv):
-    """Write the final table."""
-    entries = []
-    for _, entry in read_info.items():
-        for _, sub_entry in entry.items():
-            entries.append(sub_entry)
-    df_table = pd.DataFrame(
-        entries).set_index('readlen', drop=True)
-    df_table.to_csv(output_tsv, sep="\t", index=True)
+def make_read_table(read_info):
+    """Make per-read data table."""
+    return pd.DataFrame(read_info).set_index('readlen', drop=True)
+
+
+class AdapterSummary(StatsSummary):
+    """Summary dictionary for storing adapter configuration summaries."""
+
+    fields = {
+        "reads", "full_length", "stranded", "plus", "minus",
+        "single_adapter1", "double_adapter1",
+        "single_adapter2", "double_adapter2",
+        "no_adapters", "other"}
+
+    @classmethod
+    def from_pandas(cls, df):
+        """Create an instance from a pandas dataframe."""
+        stats = dict()
+        stats["reads"] = len(df)
+        stats["full_length"] = len(df[df.fl].index)
+        stats["stranded"] = len(df[df['orig_strand'] != '*'])
+        stats["plus"] = len(df[df['orig_strand'] == '+'])
+        stats["minus"] = len(df[df['orig_strand'] == '-'])
+        # summary config: "single_adapter1" etc
+        stats.update(df['lab'].value_counts().astype(int).to_dict())
+        # don't worry about precise configuration
+        return cls(stats)
 
 
 def create_stranded_reads(fastq, read_info, kit, fl_only):
@@ -335,12 +358,13 @@ def create_stranded_reads(fastq, read_info, kit, fl_only):
         for entry in f_in:
             if read_info.get(entry.name):
                 # This read had some VSEARCH hits for adapter sequences
-                for subread_id, subread in read_info[entry.name].items():
+                for subread in read_info[entry.name]:
                     if fl_only and not subread["fl"]:
                         continue
                     # The read may contain more than one subread -
                     # segments flaked by compatible adapters. Extract these and
                     # trim
+                    subread_id = subread["read_id"]
                     subread_seq = entry.sequence[subread["start"]: subread["end"]]
                     subread_quals = entry.quality[subread["start"]: subread["end"]]
 
@@ -403,7 +427,20 @@ def main(args):
     for read in read_data:
         sys.stdout.write(read)
 
-    logger.info(f"Writing output table to {args.output_tsv}")
-    write_table(read_info, args.output_tsv)
+    if args.per_read_summary is not None or args.summary is not None:
+        logger.info("Making summary documents.")
+        data = list()
+        for subreads in read_info.values():
+            data.extend(subreads)
+        df = pd.DataFrame(data).set_index('read_id', drop=True)
+        if args.per_read_summary:
+            logger.info(f"Writing output table to {args.per_read_summary}")
+            df.to_csv(args.per_read_summary, sep="\t", index=True)
+        # TODO: make the summary without going via table, this could be done directly
+        #       in parse_vsearch()
+        if args.summary:
+            logger.info(f"Writing JSON summary to {args.summary}")
+            summary = AdapterSummary.from_pandas(df)
+            summary.to_json(args.summary)
 
     logger.info("Finished.")

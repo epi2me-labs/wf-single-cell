@@ -60,7 +60,6 @@ process makeReport {
         path 'params.csv'
         path stats, stageAs: "stats_*"
         path 'survival.tsv'
-        path 'wf_summary.tsv'
         path umap_dirs
         path images
         path umap_genes
@@ -79,7 +78,6 @@ process makeReport {
         --params params.csv \
         --versions versions \
         --survival survival.tsv \
-        --wf_summary wf_summary.tsv \
         --umap_dirs $umap_dirs \
         --images $images \
         --umap_genes $umap_genes \
@@ -173,32 +171,24 @@ process prepare_report_data {
     memory "1 GB"
     input:
         tuple val(meta),
-              path('read_tags'),
-              path('config_stats'),
-              path('white_list'),
+              path('read_tags.tsv'),
+              path('adapter_stats/stats*.json'),
+              path('expression_stats/stats*.json'),
+              path('white_list.txt'),
               path('gene_mean_expression.tsv'),
               path('transcript_mean_expression.tsv'),
               path('mitochondrial_expression.tsv'),
               path(umaps)
     output:
-        path 'survival_data.tsv',
-            emit: survival
-        path 'sample_summary.tsv',
-            emit: summary
-        path "${meta.alias}_umap",
-            emit: umap_dir
+        path "survival.tsv", emit: survival  // not meta.alias here, breaks collectFile()
+        path "${meta.alias}_umap", emit: umap_dir
 
     script:
         opt_umap = umaps.name != 'OPTIONAL_FILE'
         String hist_dir = "histogram_stats/${meta.alias}"
     """
     workflow-glue prepare_report_data \
-        --read_tags read_tags \
-        --config_stats config_stats \
-        --white_list white_list \
-        --sample_id ${meta.alias} \
-        --summary_out sample_summary.tsv \
-        --survival_out survival_data.tsv
+        "${meta.alias}" read_tags.tsv adapter_stats expression_stats white_list.txt survival.tsv
     
     umd=${meta.alias}_umap
     mkdir \$umd
@@ -256,7 +246,10 @@ workflow pipeline {
 
         prepare_report_data(
             process_bams.out.final_read_tags
-            .join(preprocess.out.config_stats)
+            .join(preprocess.out.adapter_summary.groupTuple())
+            .join(process_bams.out.expression_stats
+                .groupTuple()
+                .map{meta, chrs, stats -> [meta, stats]})
             .join(process_bams.out.white_list)
             .join(process_bams.out.gene_mean_expression)
             .join(process_bams.out.transcript_mean_expression)
@@ -273,6 +266,8 @@ workflow pipeline {
         metadata = for_report.meta.collect()
         stats = for_report.stats.collect()
 
+        // note the cheeky little .collectFile() here to concatenate the
+        // read survival stats from different samples into a single file
         makeReport(
             metadata,
             software_versions,
@@ -280,15 +275,12 @@ workflow pipeline {
             stats,
             prepare_report_data.out.survival
                 .collectFile(keepHeader:true),
-            prepare_report_data.out.summary
-                .collectFile(keepHeader:true),
             prepare_report_data.out.umap_dir.collect(),
             process_bams.out.plots,
             umap_genes,
             workflow.manifest.version)
     emit:
         results = process_bams.out.results
-        config_stats = preprocess.out.config_stats
         report = makeReport.out
 }
 
@@ -362,7 +354,7 @@ workflow {
                 l.add(tuple(it[0], it[i]))
             }
             return l
-        }).concat(pipeline.out.config_stats)
+        })
     )
 
     output_report(pipeline.out.report)

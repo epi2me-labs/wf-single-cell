@@ -11,6 +11,7 @@ from umi_tools import UMIClusterer
 from .expression_matrix import ExpressionMatrix  # noqa: ABS101
 from .tag_bam import BAM_TAGS  # noqa: ABS101
 from .util import get_named_logger, wf_parser  # noqa: ABS101
+from .sc_util import StatsSummary  # noqa: ABS101
 
 
 def argparser():
@@ -32,7 +33,11 @@ def argparser():
         help="Output TSV containing a subset of read-tags in human-readable form")
     grp.add_argument(
         "--hdf_out", type=Path,
-        help="Output filename fo HDF matrix output. \
+        help="Output filename for HDF matrix output. \
+            Two files will be produced as filename.{gene, transcript}.ext")
+    grp.add_argument(
+        "--stats", type=Path,
+        help="Output filename for JSON statistics summary. \
             Two files will be produced as filename.{gene, transcript}.ext")
     parser.add_argument(
         "--ref_interval", type=int, default=1000,
@@ -166,6 +171,26 @@ def cluster_dataframe(df, ref_interval):
     return df
 
 
+class ExpressionSummary(StatsSummary):
+    """Gene and transcript feature summary statistics."""
+
+    fields = {
+        "tagged",
+        "gene_tagged", "transcript_tagged",
+        "unique_genes", "unique_transcripts"}
+
+    @classmethod
+    def from_pandas(cls, df):
+        """Create statistics from pandas dataframe."""
+        stats = dict()
+        stats["tagged"] = len(df)
+        stats["gene_tagged"] = len(df[df.gene != '-'])
+        stats["transcript_tagged"] = len(df[df.transcript != '-'])
+        stats["genes"] = df['gene'].nunique()  # this will include "-"
+        stats["transcripts"] = df['transcript'].nunique()  # and this
+        return cls(stats)
+
+
 def main(args):
     """Run entry point."""
     logger = get_named_logger('CrteMatrix')
@@ -193,6 +218,11 @@ def main(args):
     logger.info("Filtering reads.")
     df_tag_feature = df_tag_feature.loc[
         (df_tag_feature.CB != '-') & (df_tag_feature.UR != '-')]
+
+    if args.stats:
+        logger.info("Writing JSON summary to {args.summary}")
+        summary = ExpressionSummary.from_pandas(df_tag_feature)
+        summary.to_json(args.stats)
 
     logger.info("Clustering UMIs.")
     df_tag_feature = cluster_dataframe(df_tag_feature, args.ref_interval)
