@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Combined various preprocessing steps into a single process to avoid
   unnecessary file writes.
 - Updated stringtie2 to v2.2.2.
+- Pre-calculate report summary data to reduce disk-space and IO overheads.
 ### Removed
 - Several workflow parameters as part of resource management simplification.
 - `--plot_umaps` option, as UMAP generation has been made much more efficient

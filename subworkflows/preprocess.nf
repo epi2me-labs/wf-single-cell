@@ -66,7 +66,7 @@ process call_adapter_scan {
         path "ref_genes.bed"
         path "ref_chrom_sizes.tsv"
     output:
-        tuple val(meta), path("adapt_scan.tsv"), emit: read_config_chunked
+        tuple val(meta), path("adapters.json"), emit: adapter_summary
         tuple val(meta), path("read_tags.tsv"), emit: read_tags
         tuple val(meta), path("high_quality_bc_counts.tsv"), emit: barcode_counts
         tuple val(meta), path("sorted.bam"), path("sorted.bam.bai"), emit: bam_sort
@@ -87,7 +87,7 @@ process call_adapter_scan {
     workflow-glue adapter_scan_vsearch \
         chunk.fq.gz \
         --kit ${meta['kit_name']} \
-        --output_tsv  "adapt_scan.tsv" \
+        --summary "adapters.json" \
         ${fl} \
     | \
     workflow-glue extract_barcode \
@@ -121,35 +121,16 @@ process call_adapter_scan {
 }
 
 
-process combine_adapter_tables {
+process summarize_adapter_table {
     label "singlecell"
     cpus 1
     memory "1 GB"
     input:
-        tuple val(meta), path("adapters.tsv")
-    output:
-        tuple val(meta), path("read_config.tsv"), emit: read_config
-    """
-    # Concatenate tsv file keeping header from first file.
-    awk 'FNR==1 && NR!=1{next;}{print}' adapters.tsv* > "read_config.tsv"
-    """
-}
-
-
-process summarize_adapter_table {
-    label "singlecell"
-    cpus 1
-    memory "2 GB"
-    input:
-        tuple val(meta), path(read_config)
+        tuple val(meta), path("inputs/summary*.json")
     output:
         tuple val(meta), path("config_stats.json"), emit: config_stats
     """
-    workflow-glue summarise_adapters \
-        --read_config_tsv "${read_config}" \
-        --sample_id "${meta.alias}" \
-        --out "config_stats.json" \
-        --threads $task.cpus
+    workflow-glue summarise_adapters inputs config_stats.json
     """
 }
 
@@ -176,16 +157,15 @@ workflow preprocess {
             call_paftools.out.ref_genes_bed,
             get_chrom_sizes.out.ref_chrom_sizes)
 
-        // TODO: this could/should be moved out of here as its not really part
-        //       of the per-chunk alignment processing. For instance we aren't
-        //       also combining the barcode counts here.
-        combine_adapter_tables(
-            call_adapter_scan.out.read_config_chunked.groupTuple())
-        summarize_adapter_table(combine_adapter_tables.out.read_config)
+        // TODO: we don't necessarily need to merge these, they
+        //       could just be given to the final reporting
+        //       without pre-aggregating
+        //summarize_adapter_table(
+        //    call_adapter_scan.out.adapter_summary.groupTuple())
 
     emit:
         bam_sort = call_adapter_scan.out.bam_sort
         read_tags = call_adapter_scan.out.read_tags
         high_qual_bc_counts = call_adapter_scan.out.barcode_counts
-        config_stats = summarize_adapter_table.out.config_stats
+        adapter_summary = call_adapter_scan.out.adapter_summary
 }

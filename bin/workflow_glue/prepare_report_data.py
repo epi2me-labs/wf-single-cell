@@ -1,10 +1,14 @@
 """Prepare data for the report."""
-from collections import defaultdict
-import json
+from pathlib import Path
 
 import pandas as pd
 
+from .adapter_scan_vsearch import AdapterSummary  # noqa: ABS101
+from .create_matrix import ExpressionSummary  # noqa: ABS101
 from .util import get_named_logger, wf_parser  # noqa: ABS101
+
+
+# TODO: Code in this script move into the main report.py script
 
 
 def argparser():
@@ -12,129 +16,74 @@ def argparser():
     parser = wf_parser("prepare_report_data")
 
     parser.add_argument(
-        "--sample_id",
+        "sample_id",
         help="ID of the sample being processed")
     parser.add_argument(
-        "--read_tags",
+        "read_tags", type=Path,
         help="TSV with read id gene, transcript, barcode, umi assignments")
     parser.add_argument(
-        "--config_stats",
+        "adapter_stats", type=Path,
         help="Workflow summary statistics")
     parser.add_argument(
-        "--white_list",
+        "expression_stats", type=Path,
+        help="Expression summary statistics")
+    parser.add_argument(
+        "white_list",
         help="Workflow summary statistics")
     parser.add_argument(
-        "--survival_out", help="Output TSV with survival data for each stage.")
-    parser.add_argument(
-        "--summary_out", help="Output TSV with sample summaries.")
+        "survival_out", type=Path,
+        help="Output TSV with survival data for each stage.")
     return parser
 
 
-def _get_sample_summaries(read_tags, white_list):
+def combine_expression_stats(input_dir):
+    """Summarise expressions summary files."""
+    fnames = list(input_dir.glob("*.json"))
+    if len(fnames) == 0:
+        raise IOError("No summary JSON files found.")
 
+    summary = ExpressionSummary.from_json(fnames[0])
+    if len(fnames) > 1:
+        for other in fnames[1:]:
+            summary += ExpressionSummary.from_json(other)
+    return summary
+
+
+def combine_adapter_stats(input_dir):
+    """Combine adapter configuration summary files."""
+    fnames = list(input_dir.glob("*.json"))
+    if len(fnames) == 0:
+        raise IOError("No summary JSON files found.")
+
+    summary = AdapterSummary.from_json(fnames[0])
+    if len(fnames) > 1:
+        for other in fnames[1:]:
+            summary += AdapterSummary.from_json(other)
+    return summary
+
+
+def get_total_cells(white_list):
+    """Create dataframe with total cells."""
+    # ok this is a little cheesy, but consistent for ease
     total_cells = len(pd.read_csv(white_list, sep='\t', header=None))
-    # The df contains only reads with a barcode and umi tag
-
-    total_tagged = 0
-    gene_tagged = 0
-    transcript_tagged = 0
-    unique_genes = set()
-    unique_transcripts = set()
-
-    # Read in read tags chunkwise so as not to use too much memory.
-    # For each chunk, increment the summary variables.
-    with pd.read_csv(
-            read_tags, sep='\t', chunksize=100000,
-            usecols=['gene', 'transcript']) as reader:
-        for df in reader:
-            total_tagged += len(df)
-            gene_tagged_df = df[df.gene != '-']
-            gene_tagged += len(gene_tagged_df)
-            unique_genes.update(gene_tagged_df['gene'])
-            transcript_tagged_df = df[df.transcript != '-']
-            transcript_tagged += len(transcript_tagged_df)
-            unique_transcripts.update(transcript_tagged_df['transcript'])
-    cols = [
-        'total_tagged', 'gene_tagged', 'transcript_tagged',
-        'total_genes', 'total_transcripts', 'total_cells']
-    record = [[
-        total_tagged, gene_tagged, transcript_tagged,
-        len(unique_genes), len(unique_transcripts), total_cells]]
-
-    df = pd.DataFrame.from_records(record, columns=cols)
-    return df
-
-
-def _parse_config_stats(wf_config_stats, summ_df, sample_id):
-    """Parse the workflow config_stats."""
-    results = defaultdict(dict)
-    with open(wf_config_stats) as json_file:
-        data = json.load(json_file)
-        gen = data[sample_id]['general']
-        summ = data[sample_id]['summary_config']
-
-        # general section of the json
-        general_keys = [
-            'n_reads',
-            'n_fl',
-            'n_stranded',
-            'n_plus',
-            'n_minus']
-        for g in general_keys:
-            val = gen.get(g, 0)
-            results[sample_id][g] = val
-
-        # Summary section
-        summ_keys = [
-            'double_adapter2',
-            'single_adapter2',
-            'single_adapter1',
-            'double_adapter1',
-            'no_adapters',
-            'other']
-        for s in summ_keys:
-            val = summ.get(s, 0)
-            results[sample_id][s] = val
-        df = pd.DataFrame.from_dict(results).reset_index()
-        s = summ_df.T.reset_index(drop=False)
-        s.columns = ['index', sample_id]
-        df = pd.concat([df, s])
-
-        df = df.melt(id_vars='index')
-        # Class can be workflow stage or the primer config.
-        df = df.rename(
-            columns={
-                'index': 'class',
-                'variable': 'sample',
-                'value': 'count'})  # Proportion of reads [%]
-        df['class'].replace('n_fl', 'full_length', inplace=True)
-        dfs = []
-        for _, df_sample in df.groupby('sample'):
-            df_sample[
-                'Proportion of reads [%]'] = 100 / df_sample.loc[
-                    df_sample['class'] == 'n_reads', 'count'].values[0] \
-                    * df_sample['count']
-            dfs.append(df_sample)
-        final_df = pd.concat(dfs)
-        return final_df
+    return {"cells": total_cells}
 
 
 def main(args):
     """Entry point for script."""
     logger = get_named_logger('PrepReport')
-    logger.info('preparing report data')
-    df_summ = _get_sample_summaries(
-        args.read_tags, args.white_list)
+    logger.info('Preparing report data.')
+    stats = dict()
+    stats.update(combine_expression_stats(args.expression_stats))
+    stats.update(combine_adapter_stats(args.adapter_stats))
+    stats.update(get_total_cells(args.white_list))
 
-    df_survival = _parse_config_stats(
-        args.config_stats, df_summ, args.sample_id)
+    survival = (
+        pd.DataFrame.from_dict(stats, orient="index", columns=['count'])
+        .reset_index(names="statistic"))
 
-    df_survival['sample_id'] = args.sample_id
-    df_summ['sample_id'] = args.sample_id
-
-    # Put n_reads into the summary df
-    n_reads = df_survival.loc[
-        df_survival['class'] == 'n_reads', 'count'].values[0]
-    df_summ['n_reads'] = n_reads
-    df_summ.to_csv(args.summary_out, sep='\t')
-    df_survival.to_csv(args.survival_out, sep='\t')
+    n_reads = survival.loc[survival['statistic'] == 'reads', 'count'].values[0]
+    # this is a little non-sensical for some stats
+    survival['Proportion of reads [%]'] = 100 * survival['count'] / n_reads
+    survival['sample_id'] = args.sample_id
+    survival.to_csv(args.survival_out, sep='\t', index=False)

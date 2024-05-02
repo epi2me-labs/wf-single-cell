@@ -236,11 +236,13 @@ process create_matrix {
         tuple val(meta), val(chr), path("summary.tsv"), emit: summary
         tuple val(meta), val(chr), val("gene"), path("expression.gene.hdf"), emit: gene
         tuple val(meta), val(chr), val("transcript"), path("expression.transcript.hdf"), emit: transcript
+        tuple val(meta), val(chr), path("stats.json"), emit: stats
     """
     workflow-glue create_matrix \
         ${chr} barcodes.tsv features.tsv \
         --tsv_out summary.tsv \
         --hdf_out expression.hdf \
+        --stats stats.json
     """
 }
 
@@ -584,4 +586,5 @@ workflow process_bams {
             .map{it->[it[0], it[2]]}
             .groupTuple(size:2)
             .map{key, files -> [key, files.flatten()]}
-}
+        // per chromosome expression statistics
+        expression_stats = create_matrix.out.stats}
