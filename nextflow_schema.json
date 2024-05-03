@@ -29,13 +29,6 @@
                     "description": "The path to the 10x reference directory",
                     "help_text": "Human reference data can be downloaded from 10x [here](https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2020-A.tar.gz). Instructions for preparing reference data can be found [here](https://www.10xgenomics.com/support/software/cell-ranger/tutorials/cr-tutorial-mr#overview)"
                 },
-                "merge_bam": {
-                    "type": "boolean",
-                    "title": "Merge output BAM files",
-                    "description": "Merge BAM alignment files into a single BAM file per sample",
-                    "help_text": "Merging of BAM files can take a significant amount of time and uses additional disk space.  By default BAM files are output per chromosome. Set to true if a BAM file per sample is needed for downstream analyses.",
-                    "default": false
-                },
                 "kit_name": {
                     "type": "string",
                     "title": "Kit",

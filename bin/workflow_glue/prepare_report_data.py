@@ -19,9 +19,6 @@ def argparser():
         "sample_id",
         help="ID of the sample being processed")
     parser.add_argument(
-        "read_tags", type=Path,
-        help="TSV with read id gene, transcript, barcode, umi assignments")
-    parser.add_argument(
         "adapter_stats", type=Path,
         help="Workflow summary statistics")
     parser.add_argument(

@@ -17,7 +17,7 @@
       "type": "per-sample"
     },
     "results-summary": {
-      "filepath": "./{{ alias }}/{{ alias }}.config_stats.json",
+      "filepath": "./{{ alias }}/config_stats.json",
       "title": "Results summaries",
       "description": "Results summaries including adapter configuration numbers.",
       "mime-type": "application/json",
@@ -25,7 +25,7 @@
       "type": "per-sample"
     },
     "gene-expression": {
-      "filepath": "./{{ alias }}/{{ alias }}.gene_expression.counts.tsv",
+      "filepath": "./{{ alias }}/gene_expression.counts.tsv",
       "title": "Gene expression counts",
       "description": "Gene x cell expression matrix.",
       "mime-type": "text/tab-separated-values",
@@ -33,7 +33,7 @@
       "type": "per-sample"
     },
     "gene-expression-processed": {
-      "filepath": "./{{ alias }}/{{ alias }}.gene_expression.processed.tsv",
+      "filepath": "./{{ alias }}/gene_expression.processed.tsv",
       "title": "Processed gene expression counts",
       "description": "Filtered and normalized gene x cell expression matrix.",
       "mime-type": "text/tab-separated-values",
@@ -41,7 +41,7 @@
       "type": "per-sample"
     },
     "transcript-expression": {
-      "filepath": "./{{ alias }}/{{ alias }}.transcript_expression.counts.tsv",
+      "filepath": "./{{ alias }}/transcript_expression.counts.tsv",
       "title": "Transcript expression counts",
       "description": "Transcript x cell expression matrix.",
       "mime-type": "text/tab-separated-values",
@@ -49,7 +49,7 @@
       "type": "per-sample"
     },
     "transcript-expression-processed": {
-      "filepath": "./{{ alias }}/{{ alias }}.transcript_expression.processed.tsv",
+      "filepath": "./{{ alias }}/transcript_expression.processed.tsv",
       "title": "Processed transcript expression counts",
       "description": "Filtered and normalized transcript x cell expression matrix.",
       "mime-type": "text/tab-separated-values",
@@ -57,39 +57,23 @@
       "type": "per-sample"
     },
     "mitochondrial-expression": {
-      "filepath": "./{{ alias }}/{{ alias }}.gene_expression.mito.tsv",
+      "filepath": "./{{ alias }}/gene_expression.mito.tsv",
       "title": "Mitochondrial expression levels",
       "description": "Per cell mitochondrial gene expression as percentage total of total gene expression.",
       "mime-type": "text/tab-separated-values",
       "optional": false,
       "type": "per-sample"
     },
-    "knee-plot": {
-      "filepath": "./{{ alias }}/{{ alias }}.kneeplot.png",
-      "title": "Knee plot",
-      "description": "Knee plot illustrating the filtering of cells by read count.",
-      "mime-type": "image/png",
-      "optional": false,
-      "type": "per-sample"
-    },
-    "saturation-curves": {
-      "filepath": "./{{ alias }}/{{ alias }}.saturation_curves.png",
-      "title": "Saturation curves",
-      "description": "Saturation plots that indicate sampling of library complexity.",
-      "mime-type": "image/png",
-      "optional": false,
-      "type": "per-sample"
-    },
     "read-tags": {
-      "filepath": "./{{ alias }}/{{ alias }}.read_tags.tsv",
-      "title": "Read tags",
+      "filepath": "./{{ alias }}/read_summary.tsv",
+      "title": "Read summary",
       "description": "Per read assigned barcodes UMIs genes and transcripts.",
       "mime-type": "text/tab-separated-values",
       "optional": false,
       "type": "per-sample"
     },
     "barcode-counts": {
-      "filepath": "./{{ alias }}/{{ alias }}.uncorrected_bc_counts.tsv",
+      "filepath": "./{{ alias }}/uncorrected_bc_counts.tsv",
       "title": "Barcode counts",
       "description": "The counts of each barcode present in the sequenced library (only barcodes that have a 100% match in the 10x whitelist are included).",
       "mime-type": "text/tab-separated-values",
@@ -97,47 +81,31 @@
       "type": "per-sample"
     },
     "whitelist": {
-      "filepath": "./{{ alias }}/{{ alias }}.whitelist.tsv",
+      "filepath": "./{{ alias }}/whitelist.tsv",
       "title": "Whitelist",
       "description": "The barcodes found in the library that remain after filtering.",
       "mime-type": "text/tab-separated-values",
       "optional": false,
       "type": "per-sample"
     },
-    "alignment-per-chromosome": {
-      "filepath": "./{{ alias }}/bams/{{ alias }}.{{ chromosome }}.tagged.bam",
-      "title": "Alignment output per chromosome",
-      "description": "Genomic alignment output file per chromosome.",
-      "mime-type": "application/gzip",
-      "optional": true,
-      "type": "per-sample"
-    },
-    "alignment-index-per-chromosome": {
-      "filepath": "./{{ alias }}/bams/{{ alias }}.{{ chromosome }}.tagged.bam.bai",
-      "title": "Alignment index per chromosome",
-      "description": "Genomic alignment index file per chromosome.",
-      "mime-type": "application/gzip",
-      "optional": true,
-      "type": "per-sample"
-    },
-    "alignment-per-sample": {
-      "filepath": "./{{ alias }}/bams/{{ alias }}.tagged.sorted.bam",
+    "alignment": {
+      "filepath": "./{{ alias }}/tagged.bam",
       "title": "Alignment output per sample",
-      "description": "Genomic alignment output file with aggregated chromosomes (when using --merge_bam).",
+      "description": "Genomic alignment output file.",
       "mime-type": "application/gzip",
       "optional": true,
       "type": "per-sample"
     },
-    "alignment-index-per-sample": {
-      "filepath": "./{{ alias }}/bams/{{ alias }}.tagged.sorted.bam.bai",
+    "alignment-index": {
+      "filepath": "./{{ alias }}/tagged.bam.bai",
       "title": "Alignment index per sample",
-      "description": "Genomic alignment index file with aggregated chromosomes (when using --merge_bam).",
+      "description": "Genomic alignment index file.",
       "mime-type": "application/gzip",
       "optional": true,
       "type": "per-sample"
     },
     "transcriptome_fasta": {
-      "filepath": "./{{ alias }}/{{ alias }}.transcriptome.fa.gz",
+      "filepath": "./{{ alias }}/transcriptome.fa.gz",
       "title": "Transcriptome sequence",
       "description": "Transcriptome generated by Stringtie during transcript discovery stage",
       "mime-type": "application/gzip",
@@ -145,7 +113,7 @@
       "type": "per-sample"
     },
     "transcriptome_annotation": {
-      "filepath": "./{{ alias }}/{{ alias }}.transcriptome.gff.gz",
+      "filepath": "./{{ alias }}/transcriptome.gff.gz",
       "title": "Transcriptome annotation",
       "description": "Transcriptome annotation generated by Stringtie during transcript discovery stage",
       "mime-type": "application/gzip",

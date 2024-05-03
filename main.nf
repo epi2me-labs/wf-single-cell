@@ -54,6 +54,7 @@ process makeReport {
     label "wf_common"
     cpus 1
     memory "32 GB"
+    publishDir "${params.out_dir}", mode: 'copy', pattern: "wf-single-cell-report.html"
     input:
         val metadata
         path 'versions'
@@ -84,49 +85,6 @@ process makeReport {
         --metadata metadata.json \
         --wf_version $wf_version \
         --metadata metadata.json
-    """
-}
-
-
-// See https://github.com/nextflow-io/nextflow/issues/1636
-// This is the only way to publish files from a workflow whilst
-// decoupling the publish from the process steps.
-process output {
-    label "singlecell"
-    cpus 1
-    memory "1 GB"
-    // // publish inputs to output directory
-    publishDir "${params.out_dir}", mode: 'copy', pattern: "*.{bam,bai}",
-        saveAs: { filename -> "${meta.alias}/bams/$filename" }
-    publishDir "${params.out_dir}", mode: 'copy', pattern: "*umap*.{tsv,png}",
-        saveAs: { filename -> "${meta.alias}/umap/$filename" }
-    publishDir "${params.out_dir}", mode: 'copy', 
-        pattern: "*{images,counts,gene_expression,transcript_expression,kneeplot,saturation,config,tags,whitelist,transcriptome,annotation}*",
-        saveAs: { filename -> "${meta.alias}/$filename" }
-
-    input:
-        tuple val(meta),
-              path(fname)
-    output:
-        path fname
-    """
-    echo "Writing output files"
-    """
-}
-
-
-process output_report {
-    // publish inputs to output directory
-    label "singlecell"
-    cpus 1
-    memory "1 GB"
-    publishDir "${params.out_dir}", mode: 'copy', pattern: "*"
-    input:
-        path fname
-    output:
-        path fname
-    """
-    echo "Writing output files."
     """
 }
 
@@ -171,7 +129,6 @@ process prepare_report_data {
     memory "1 GB"
     input:
         tuple val(meta),
-              path('read_tags.tsv'),
               path('adapter_stats/stats*.json'),
               path('expression_stats/stats*.json'),
               path('white_list.txt'),
@@ -188,7 +145,7 @@ process prepare_report_data {
         String hist_dir = "histogram_stats/${meta.alias}"
     """
     workflow-glue prepare_report_data \
-        "${meta.alias}" read_tags.tsv adapter_stats expression_stats white_list.txt survival.tsv
+        "${meta.alias}" adapter_stats expression_stats white_list.txt survival.tsv
     
     umd=${meta.alias}_umap
     mkdir \$umd
@@ -245,8 +202,7 @@ workflow pipeline {
             ref_genome_idx)
 
         prepare_report_data(
-            process_bams.out.final_read_tags
-            .join(preprocess.out.adapter_summary.groupTuple())
+            preprocess.out.adapter_summary.groupTuple()
             .join(process_bams.out.expression_stats
                 .groupTuple()
                 .map{meta, chrs, stats -> [meta, stats]})
@@ -279,9 +235,6 @@ workflow pipeline {
             process_bams.out.plots,
             umap_genes,
             workflow.manifest.version)
-    emit:
-        results = process_bams.out.results
-        report = makeReport.out
 }
 
 
@@ -345,19 +298,6 @@ workflow {
         sample_and_kit_meta,
         ref_genome_dir,
         umap_genes)
-
-    output(pipeline.out.results.flatMap({it ->
-        // Convert [meta, file, file, ..]
-        // to      [[meta, file], [meta, file], ...]
-        l = [];
-            for (i=1; i<it.size(); i++) {
-                l.add(tuple(it[0], it[i]))
-            }
-            return l
-        })
-    )
-
-    output_report(pipeline.out.report)
 }
 
 workflow.onComplete {

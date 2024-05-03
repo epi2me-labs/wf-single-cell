@@ -28,11 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unnecessary file writes.
 - Updated stringtie2 to v2.2.2.
 - Pre-calculate report summary data to reduce disk-space and IO overheads.
+- Single BAM per-sample is now always produced (option `--merge_bam` is removed).
 ### Removed
 - Several workflow parameters as part of resource management simplification.
 - `--plot_umaps` option, as UMAP generation has been made much more efficient
   and is always enabled.
-
+- `--merge_bam` option.
 
 ## [v1.1.0]
 ### Added

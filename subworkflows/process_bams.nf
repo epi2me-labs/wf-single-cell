@@ -19,6 +19,7 @@ process generate_whitelist{
     label "singlecell"
     cpus 4
     memory "4 GB"
+    publishDir "${params.out_dir}/${meta.alias}", mode: 'copy'
     input:
         tuple val(meta),
               path("barcodes/?_barcode.tsv")
@@ -33,9 +34,6 @@ process generate_whitelist{
         //       high quality exact matches to longlist. Low frequency barcodes
         //       are assumed to be false positives. The list is further
         //       filtered by the selected method (basically by abundance).
-        tuple val(meta),
-              path("high_qual_bc_counts.tsv"),
-              emit: uncorrected_bc_counts
     // TODO: change this to take precomputed, filtered counts from extract_barcodes
     """
     workflow-glue create_shortlist \
@@ -75,29 +73,45 @@ process assign_barcodes{
 }
 
 
-process combine_bams_and_tags {
-    // Merge all BAM and tags files chunks
+process merge_bams {
+    // Combine all BAMs derived from the initial chunking into per sample files
     label "wf_common"
     cpus params.threads
     memory "8 GB"
     input:
         tuple val(meta),
-              path('bams/*aln.bam'),
-              path('bams/*aln.bam.bai'),
-              path('tags/*tags.tsv')
+            path('bams/*aln.bam'),
+            path('bams/*aln.bam.bai')
     output:
         tuple val(meta),
-              path("*tagged.sorted.bam"), 
-              path("*tagged.sorted.bam.bai"),
+              path("merged.sorted.bam"),
+              path("merged.sorted.bam.bai"),
               emit: merged_bam
+    script:
+    def cat_threads = 2
+    def sort_threads = Math.max(task.cpus - cat_threads, 6)
+    """
+    samtools cat -@$cat_threads -b <(find bams -name '*aln.bam') \
+        | samtools sort - -@sort_threads --write-index \
+        -o "merged.sorted.bam##idx##merged.sorted.bam.bai"
+    """
+}
+
+
+process cat_tags_by_chrom {
+    // Merge per-chunk tags to create per-chromosome tags
+    label "wf_common"
+    cpus params.threads
+    memory "8 GB"
+    input:
         tuple val(meta),
+              path('tags/*tags.tsv')
+    output:
+         tuple val(meta),
               path("chr_tags/*"),
               emit: merged_tags
-    """
-    samtools cat -b <(find bams -name '*aln.bam') \
-    | samtools sort - -@ ${task.cpus} --write-index \
-        -o "tagged.sorted.bam##idx##tagged.sorted.bam.bai"
 
+    """
     mkdir chr_tags
     # Find the chr column number
     files=(tags/*)
@@ -252,7 +266,8 @@ process create_matrix {
 process process_matrix {
     label "singlecell"
     cpus  1
-    memory "32 GB"  // TODO: check program its using up to 24GB, could be lower
+    memory "16 GB"
+    publishDir "${params.out_dir}/${meta.alias}", mode: 'copy', pattern: "*{mito,umap,raw,processed}*"
     input:
         tuple val(meta), val(feature), path('inputs/matrix*.hdf')
     output:
@@ -261,8 +276,6 @@ process process_matrix {
         tuple val(meta), val(feature), path("${feature}.expression.mean-per-cell.tsv"), emit: meancell
         tuple val(meta), val(feature), path("${feature}.expression.mito-per-cell.tsv"), emit: mitocell
         tuple val(meta), val(feature), path("${feature}.expression.umap*.tsv"), emit: umap
-    publishDir:
-        
     script:
     def mito_prefixes = params.mito_prefix.replaceAll(',', ' ')
     """
@@ -292,6 +305,7 @@ process merge_transcriptome {
     label "singlecell"
     cpus 2
     memory "2GB"
+    publishDir "${params.out_dir}/${meta.alias}", mode: 'copy'
     input:
         tuple val(meta),
             path('fasta/?.fa'),
@@ -314,10 +328,11 @@ process merge_transcriptome {
 
 
 process combine_final_tag_files {
-    // Combine the final
+    // Create final per-sample read summaries with information from all stages
     label "singlecell"
     cpus 1
     memory "1 GB"
+    publishDir "${params.out_dir}/${meta.alias}", mode: 'copy'
     input:
         tuple val(meta),
               path("tags*.tsv")
@@ -339,7 +354,7 @@ process umi_gene_saturation {
               path("read_tags.tsv")
     output:
         tuple val(meta),
-              path("*saturation_curves.png"),
+              path("saturation_curves.png"),
               emit: saturation_curve
     """
     export POLARS_MAX_THREADS=$task.cpus
@@ -371,45 +386,23 @@ process tag_bam {
     label "singlecell"
     cpus 4
     memory "16 GB"
+    publishDir "${params.out_dir}/${meta.alias}", mode: 'copy'
     input:
         tuple val(meta),
-              path("align.bam"),
-              path("align.bam.bai"),
-              val(chr),
+              path('align.bam'),
+              path('align.bam.bai'),
               path('tags.tsv')
     output:
          tuple val(meta),
-              path("${chr}.tagged.bam"),
-              path("${chr}.tagged.bam.bai"),
-              emit: tagged_bam
+              path("tagged.bam"),
+              path('tagged.bam.bai')
     script:
     """
     workflow-glue tag_bam \
-        align.bam "${chr}.tagged.bam" tags.tsv "${chr}" \
+        align.bam tagged.bam tags.tsv \
         --threads ${task.cpus}
 
-    samtools index -@ ${task.cpus} "${chr}.tagged.bam"
-    """
-}
-
-
-process combine_chrom_bams {
-    // Merge all chromosome bams by sample_id
-    label "wf_common"
-    cpus params.threads
-    memory "8 GB"
-    input:
-        tuple val(meta),
-              path(chrom_bams),
-              path('chrom.bam.bai')
-    output:
-        tuple val(meta),
-              path("tagged.sorted.bam"),
-              path("tagged.sorted.bam.bai"),
-              emit: bam_fully_tagged
-    """
-    samtools merge -@ ${task.cpus - 1} --write-index \
-        -o "tagged.sorted.bam##idx##tagged.sorted.bam.bai" ${chrom_bams};
+    samtools index -@ ${task.cpus} "tagged.bam"
     """
 }
 
@@ -443,22 +436,13 @@ workflow process_bams {
                 barcodes = it[1][1]
                 [meta, whitelist, barcodes]})
 
-        // Combine the BAM chunks and tags chunks
-        // TODO: this process 
-        //       i) combines BAM chunks into a single who genome BAM
-        //       ii) combines TAGs from chunks above and re-splits into separate per-chrom files
-        //       It should be split into distinct cat_bams and cat_tags processes
-        //       If we change to bambu and can have it read multiple BAMs at once
-        //       we can potentially delay the BAM merging step until after
-        //       all the tag data has been prepared.
-        combine_bams_and_tags(
-            bam.groupTuple()
-                .join(assign_barcodes.out.tags.groupTuple()))
-
-        // Spread the chr tag files across
-        chr_tags = combine_bams_and_tags.out.merged_tags
+        // Combine the tag chunks to per chrom chunks and emit [meta, chr, tags]
+        chr_tags = cat_tags_by_chrom(assign_barcodes.out.tags.groupTuple())
             .transpose()
             .map {meta, file -> [meta, file.baseName, file]}
+
+        // Combine the BAM chunks per-sample
+        merge_bams(bam.groupTuple())
 
         // Run stringtie per-chrom.
         // Note: this passes in the whole genome BAM but the
@@ -467,7 +451,7 @@ workflow process_bams {
         stringtie(
             ref_genome_fasta,
             ref_genome_idx,
-            combine_bams_and_tags.out.merged_bam
+            merge_bams.out.merged_bam
                 .combine(chr_gtf))
 
         // TODO: We're likely to change this to use bambu and avoid using
@@ -514,7 +498,7 @@ workflow process_bams {
         // TODO: this save figures with matplotlib -- just output
         //       data and plot in report with bokeh
         umi_gene_saturation(final_read_tags)
-        
+
         // TODO: see above:
         //       i) we shouldn't be making ugly static images
         //       ii) this process simply stages images under a common folder
@@ -530,42 +514,11 @@ workflow process_bams {
         //       in the BAM file as well. This whole genome BAM is currently created
         //       above already to give to stringtie. As an interim (before switching
         //       to bambu) we can just tag this BAM and output it as the final BAM.
-        tag_bam(combine_bams_and_tags.out.merged_bam
-             // cross by sample_id on the output of create_matrix to return
-             // [sample_id, chr, kit_name, bam, bai, tags.tsv]
-            .cross(create_matrix.out.summary)
-            .map {it -> it.flatten()[0, 1, 2, 4, 5 ]})
-        if (params.merge_bam) {
-            combine_chrom_bams(tag_bam.out.tagged_bam
-                .groupTuple())
-            // [sample_id, bam]
-            tagged_bams = combine_chrom_bams.out.bam_fully_tagged
-        } else {
-            tagged_bams = tag_bam.out.tagged_bam
-                // [sample_id, bam, bai]
-                .map {it -> it[0, 1, 2]}
-                .groupTuple()
-        }
+        tag_bam(
+            merge_bams.out
+            .join(final_read_tags))
 
     emit:
-        results = umi_gene_saturation.out.saturation_curve
-            .join(final_read_tags)
-            .join(
-                process_matrix.out.mitocell
-                .filter{it[1] == "gene"}
-                .map{it->[it[0], it[2]]})
-            .join(
-                process_matrix.out.umap
-                .map{it->[it[0], it[2]]}
-                .groupTuple(size:2)
-                .map{key, files -> [key, files.flatten()]})
-            .join(generate_whitelist.out.whitelist)
-            .join(generate_whitelist.out.uncorrected_bc_counts)
-            .join(generate_whitelist.out.kneeplot)
-            .join(tagged_bams)
-            .join(pack_images.out)
-            .join(merge_transcriptome.out)
-            .map{it -> it.flatten()}
 
         // Emit sperately for use in the report
         // TODO: it shouldn't be the concern of this process what goes in the report
