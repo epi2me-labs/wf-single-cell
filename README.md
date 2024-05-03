@@ -132,7 +132,6 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 |--------------------------|------|-------------|------|---------|
 | fastq | string | FASTQ files to use in the analysis. | This accepts one of three cases: (i) the path to a single FASTQ file; (ii) the path to a top-level directory containing FASTQ files; (iii) the path to a directory containing one level of sub-directories which in turn contain FASTQ files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`. |  |
 | ref_genome_dir | string | The path to the 10x reference directory | Human reference data can be downloaded from 10x [here](https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2020-A.tar.gz). Instructions for preparing reference data can be found [here](https://www.10xgenomics.com/support/software/cell-ranger/tutorials/cr-tutorial-mr#overview) |  |
-| merge_bam | boolean | Merge BAM alignment files into a single BAM file per sample | Merging of BAM files can take a significant amount of time and uses additional disk space.  By default BAM files are output per chromosome. Set to true if a BAM file per sample is needed for downstream analyses. | False |
 | kit_name | string | 10x kit name | If `single_cell_sample_sheet` is not defined, kit_name is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied. | 3prime |
 | kit_version | string | 10x kit version | 10x kits can be released with different versions, each requiring a specific whitelist that is looked-up by the workflow. If `single_cell_sample_sheet` is not defined, kit_version is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied. 3prime kit options: [v2, v3]. For 5prime and multiome kits only `v1` is available. | v3 |
 | expected_cells | integer | Number of expected cells in the sample. | The number of expected cells. If `single_cell_sample_sheet` is not defined, `expected_cells` is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied. | 500 |
@@ -189,23 +188,19 @@ Output files may be aggregated including information for all samples or provided
 |-------|-----------|-------------|--------------------------|
 | workflow report | ./wf-single-cell-report.html | Report for all samples | aggregated |
 | Concatenated sequence data | ./fastq_ingress_results/reads/{{ alias }}.fastq.gz | Per sample reads concatenated in a single FASTQ file. | per-sample |
-| Results summaries | ./{{ alias }}/{{ alias }}.config_stats.json | Results summaries including adapter configuration numbers. | per-sample |
-| Gene expression counts | ./{{ alias }}/{{ alias }}.gene_expression.counts.tsv | Gene x cell expression matrix. | per-sample |
-| Processed gene expression counts | ./{{ alias }}/{{ alias }}.gene_expression.processed.tsv | Filtered and normalized gene x cell expression matrix. | per-sample |
-| Transcript expression counts | ./{{ alias }}/{{ alias }}.transcript_expression.counts.tsv | Transcript x cell expression matrix. | per-sample |
-| Processed transcript expression counts | ./{{ alias }}/{{ alias }}.transcript_expression.processed.tsv | Filtered and normalized transcript x cell expression matrix. | per-sample |
-| Mitochondrial expression levels | ./{{ alias }}/{{ alias }}.gene_expression.mito.tsv | Per cell mitochondrial gene expression as percentage total of total gene expression. | per-sample |
-| Knee plot | ./{{ alias }}/{{ alias }}.kneeplot.png | Knee plot illustrating the filtering of cells by read count. | per-sample |
-| Saturation curves | ./{{ alias }}/{{ alias }}.saturation_curves.png | Saturation plots that indicate sampling of library complexity. | per-sample |
-| Read tags | ./{{ alias }}/{{ alias }}.read_tags.tsv | Per read assigned barcodes UMIs genes and transcripts. | per-sample |
-| Barcode counts | ./{{ alias }}/{{ alias }}.uncorrected_bc_counts.tsv | The counts of each barcode present in the sequenced library (only barcodes that have a 100% match in the 10x whitelist are included). | per-sample |
-| Whitelist | ./{{ alias }}/{{ alias }}.whitelist.tsv | The barcodes found in the library that remain after filtering. | per-sample |
-| Alignment output per chromosome | ./{{ alias }}/bams/{{ alias }}.{{ chromosome }}.tagged.bam | Genomic alignment output file per chromosome. | per-sample |
-| Alignment index per chromosome | ./{{ alias }}/bams/{{ alias }}.{{ chromosome }}.tagged.bam.bai | Genomic alignment index file per chromosome. | per-sample |
-| Alignment output per sample | ./{{ alias }}/bams/{{ alias }}.tagged.sorted.bam | Genomic alignment output file with aggregated chromosomes (when using --merge_bam). | per-sample |
-| Alignment index per sample | ./{{ alias }}/bams/{{ alias }}.tagged.sorted.bam.bai | Genomic alignment index file with aggregated chromosomes (when using --merge_bam). | per-sample |
-| Transcriptome sequence | ./{{ alias }}/{{ alias }}.transcriptome.fa.gz | Transcriptome generated by Stringtie during transcript discovery stage | per-sample |
-| Transcriptome annotation | ./{{ alias }}/{{ alias }}.transcriptome.gff.gz | Transcriptome annotation generated by Stringtie during transcript discovery stage | per-sample |
+| Results summaries | ./{{ alias }}/config_stats.json | Results summaries including adapter configuration numbers. | per-sample |
+| Gene expression counts | ./{{ alias }}/gene_expression.counts.tsv | Gene x cell expression matrix. | per-sample |
+| Processed gene expression counts | ./{{ alias }}/gene_expression.processed.tsv | Filtered and normalized gene x cell expression matrix. | per-sample |
+| Transcript expression counts | ./{{ alias }}/transcript_expression.counts.tsv | Transcript x cell expression matrix. | per-sample |
+| Processed transcript expression counts | ./{{ alias }}/transcript_expression.processed.tsv | Filtered and normalized transcript x cell expression matrix. | per-sample |
+| Mitochondrial expression levels | ./{{ alias }}/gene_expression.mito.tsv | Per cell mitochondrial gene expression as percentage total of total gene expression. | per-sample |
+| Read summary | ./{{ alias }}/read_summary.tsv | Per read assigned barcodes UMIs genes and transcripts. | per-sample |
+| Barcode counts | ./{{ alias }}/uncorrected_bc_counts.tsv | The counts of each barcode present in the sequenced library (only barcodes that have a 100% match in the 10x whitelist are included). | per-sample |
+| Whitelist | ./{{ alias }}/whitelist.tsv | The barcodes found in the library that remain after filtering. | per-sample |
+| Alignment output per sample | ./{{ alias }}/tagged.bam | Genomic alignment output file. | per-sample |
+| Alignment index per sample | ./{{ alias }}/tagged.bam.bai | Genomic alignment index file. | per-sample |
+| Transcriptome sequence | ./{{ alias }}/transcriptome.fa.gz | Transcriptome generated by Stringtie during transcript discovery stage | per-sample |
+| Transcriptome annotation | ./{{ alias }}/transcriptome.gff.gz | Transcriptome annotation generated by Stringtie during transcript discovery stage | per-sample |
 
 
 

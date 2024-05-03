@@ -38,16 +38,12 @@ def argparser():
         help="Read tags TSV")
 
     parser.add_argument(
-        "chrom",
-        help="Chromosome name")
-
-    parser.add_argument(
         "--threads", default=2, type=int,
         help="Number of threads used for BAM reading/writing.")
     return parser
 
 
-def add_tags(tags_file, in_bam, out_bam, chrom, threads):
+def add_tags(tags_file, in_bam, out_bam, threads):
     """Add all the required tags to the BAM file."""
     logger.info("Reading tag data.")
 
@@ -64,7 +60,7 @@ def add_tags(tags_file, in_bam, out_bam, chrom, threads):
             in_bam, "rb", threads=threads) as bam_in:
         with pysam.AlignmentFile(
                 out_bam, "wb", template=bam_in, threads=threads) as bam_out:
-            for align in bam_in.fetch(contig=chrom):
+            for align in bam_in.fetch():
                 read_id = align.query_name
                 try:
                     row = tags[read_id]
@@ -79,4 +75,4 @@ def add_tags(tags_file, in_bam, out_bam, chrom, threads):
 
 def main(args):
     """Entry point."""
-    add_tags(args.tags, args.in_bam, args.out_bam, args.chrom, args.threads)
+    add_tags(args.tags, args.in_bam, args.out_bam, args.threads)

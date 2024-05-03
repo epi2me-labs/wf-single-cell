@@ -75,7 +75,7 @@ def test_add_tags(tags_file, input_bam):
     """Check that the output - bams and tag file - are correct."""
     # create_inputs
     out_bam = tempfile.NamedTemporaryFile('w', suffix='.bam').name
-    tag_bam.add_tags(tags_file, input_bam, out_bam, "chr17", 1)
+    tag_bam.add_tags(tags_file, input_bam, out_bam, 1)
 
     # Check that the correct tags have been set
     with pysam.AlignmentFile(out_bam, "rb") as bam_result:
