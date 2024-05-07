@@ -88,12 +88,8 @@ process merge_bams {
               path("merged.sorted.bam.bai"),
               emit: merged_bam
     script:
-    def cat_threads = 2
-    def sort_threads = Math.max(task.cpus - cat_threads, 6)
     """
-    samtools cat -@$cat_threads -b <(find bams -name '*aln.bam') \
-        | samtools sort - -@sort_threads --write-index \
-        -o "merged.sorted.bam##idx##merged.sorted.bam.bai"
+    samtools merge -@ ${task.cpus -1} --write-index -o "merged.sorted.bam##idx##merged.sorted.bam.bai" bams/*.bam
     """
 }
 
