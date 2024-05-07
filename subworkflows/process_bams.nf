@@ -207,8 +207,8 @@ process assign_features {
               val(chr),
               path("chr.gtf"),
               path("tr_align.bam"),
-              path('stringtie.gff'),
-              path(tags, stageAs: 'tags.tsv')
+              path("stringtie.gff"),
+              path(tags, stageAs: "tags.tsv")
     output:
         tuple val(meta),
               val(chr),
@@ -222,11 +222,11 @@ process assign_features {
     gffcompare -o gffcompare -r chr.gtf stringtie.gff
 
     workflow-glue assign_features \
-        --transcriptome_bam tr_align.bam \
-        --gffcompare_tmap gffcompare.stringtie.gff.tmap \
-        --gtf chr.gtf \
-        --tags tags.tsv \
-        --output "feature_assigns.tsv" \
+        tr_align.bam \
+        gffcompare.stringtie.gff.tmap \
+        chr.gtf \
+        tags.tsv \
+        feature_assigns.tsv \
         --min_mapq ${params.gene_assigns_minqv}
     """
 }
