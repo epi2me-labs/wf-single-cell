@@ -27,7 +27,7 @@ def getbam():
         # as it's higher AS and read and transcript cov > 0.4
         ['read_2', 150, 100, 400, 1, 'ST001', '100H400M'],
         ['read_2', 200, 500, 500, 60, 'ST002', '500M'],
-        # read_3 maps to two locations. Tge second alignemnt has higher AS score
+        # read_3 maps to two locations. The second alignemnt has higher AS score
         # but will not be assigned as reference coverage is < 0.4
         ['read_3', 150, 500, 100, 1, 'ST001', '50M400H50M'],
         ['read_3', 200, 500, 150, 60, 'ST001', '200H150M200H']
@@ -54,7 +54,6 @@ def getbam():
     return bam
 
 
-# @pytest.mark.skip
 def test_main():
     """Test main."""
     # gffcompare tmap dataframe. Maps stringtie transcripts (qry_id)
@@ -120,4 +119,5 @@ def test_main():
     assert result.at['read_2', 'gene'] == 'gene_name_2'
     assert result.at['read_2', 'transcript'] == 'ref_tr_2'
 
-    assert 'read_3' not in result.index
+    assert result.at['read_3', 'gene'] == 'gene_name_1'
+    assert result.at['read_3', 'transcript'] == '-'
