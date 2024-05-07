@@ -1,8 +1,9 @@
 """Add tags from a text file to a BAM."""
-
+import csv
+from dataclasses import dataclass
+import itertools
 from pathlib import Path
 
-import pandas as pd
 import pysam
 from .util import get_named_logger, wf_parser  # noqa: ABS101
 
@@ -43,34 +44,143 @@ def argparser():
     return parser
 
 
-def add_tags(tags_file, in_bam, out_bam, threads):
+# The use of a dataclass here is primarily to reduce memory:
+#  chr1, 9517964 reads. dict: 11.6 GB, class: 8.5 GB
+# The overhead in creating instances of the class is small
+# compared to the BAM writing time, and access is similarly
+# fast enough.
+
+@dataclass
+class Tags:
+    """Storing tag data for a read."""
+
+    CB = None
+    CR = None
+    CY = None
+    UB = None
+    UR = None
+    UY = None
+    GN = None
+    TR = None
+    chrom = None
+
+    @classmethod
+    def from_dict(cls, d):
+        """Create instance from a dictionary."""
+        self = cls()
+        for k in BAM_TAGS.values():
+            setattr(self, k, d[k])
+        setattr(self, "chrom", d["chr"])
+        return self
+
+
+class TagStore:
+    """Proxy to tag files for retrieving per-read tag information."""
+
+    def __init__(self, tags, bam=None):
+        """Initialize an instance."""
+        self._tags = None
+        self._cur = None
+        self._single = False
+        if tags.is_file():
+            self._single = True
+            self._tags = self._read_file(tags)
+        elif tags.is_dir():
+            if bam is None:
+                raise ValueError("`bam` should be provided when `tags` is a directory.")
+            tags = tags.glob("*.tsv")
+            self._index = dict()
+            for fname in tags:
+                d = self._read_file(fname, nrows=10)
+                chrom = getattr(next(iter(d.values())), "chrom")
+                self._index[chrom] = fname
+                logger.info(f"{fname} contains tags for reference: {chrom}.")
+        else:
+            raise ValueError(
+                "`tags` should be a tags file or directory containing such files.")
+
+    def populate(self, rname):
+        """Populate the proxy for a given reference."""
+        if not self._single:
+            self._cur = rname
+            self._tags = self._read_file(self._index[self._cur])
+
+    def _read_file(self, fname, nrows=None, cols=None):
+        """Read a tags file."""
+        # note: this is actually around 50% faster than:
+        #       pd.read_csv().to_dict(orient="index")
+        # first find and rename the fields to be tags rather than human names
+        fields = None
+        with open(fname) as csvfile:
+            iterator = csv.DictReader(csvfile, delimiter="\t")
+            fields = iterator.fieldnames
+            for k, v in BAM_TAGS.items():
+                for i in range(len(fields)):
+                    if fields[i] == k:
+                        fields[i] = v
+        # now parse the file
+        with open(fname) as csvfile:
+            iterator = csv.DictReader(csvfile, delimiter="\t", fieldnames=fields)
+            next(iterator)  # setting fieldnames doesn't read header
+            if nrows is not None:
+                iterator = itertools.islice(iterator, nrows)
+            data = {d["read_id"]: Tags.from_dict(d) for d in iterator}
+        return data
+
+    def __getitem__(self, read_data):
+        """Retrieve tags for a read."""
+        read_id, chrom = read_data
+        try:
+            data = self._tags[read_id]
+        except KeyError:
+            exp = KeyError(f"Read '{read_id}' not found in tag data.")
+            if chrom != self._cur:
+                self._cur = chrom
+                self._tags = self._read_file(self._index[self._cur])
+                try:
+                    data = self._tags[read_id]
+                except KeyError:
+                    raise exp
+            else:
+                raise exp
+        return data
+
+
+def add_tags(tags, in_bam, out_bam, threads):
     """Add all the required tags to the BAM file."""
-    logger.info("Reading tag data.")
+    store = TagStore(tags, bam=in_bam)
 
-    # read everything as str since we need to serialse to string anyway
-    tags = pd.read_csv(
-        tags_file, sep='\t', dtype=str, index_col="read_id")
-    tags.rename(columns=BAM_TAGS, copy=False, inplace=True)
-    logger.info("Indexing tag data by read_id")
-    tags = tags.to_dict(orient="index")
-
-    logger.info("Tagging reads.")
-    names = "CR CB CY UR UB UY GN TR".split()
-    with pysam.AlignmentFile(
-            in_bam, "rb", threads=threads) as bam_in:
+    skipped = 0
+    written = 0
+    with pysam.AlignmentFile(in_bam, "rb", threads=threads) as bam_in:
         with pysam.AlignmentFile(
                 out_bam, "wb", template=bam_in, threads=threads) as bam_out:
-            for align in bam_in.fetch():
-                read_id = align.query_name
+            for ref in bam_in.references:
+                logger.info(f"Processing reads from reference: {ref}.")
                 try:
-                    row = tags[read_id]
+                    store.populate(ref)
                 except KeyError:
-                    continue  # don't write reads without tags
-                else:
-                    for key in names:
-                        align.set_tag(key, row[key], value_type="Z")
-                    bam_out.write(align)
-    logger.info("Done.")
+                    logger.warn(f"Could not find tag data for reference: {ref}.")
+                    continue
+                logger.info("Tagging reads.")
+                for align in bam_in.fetch(ref):
+                    read_id = align.query_name
+                    try:
+                        row = store._tags[read_id]
+                    except KeyError:
+                        skipped += 1
+                        continue  # don't write reads without tags
+                    else:
+                        written += 1
+                        for tag in BAM_TAGS.values():
+                            align.set_tag(tag, getattr(row, tag), value_type="Z")
+                        bam_out.write(align)
+    total = skipped + written
+    written_pct = 100 * written / total
+    skipped_pct = 100 * skipped / total
+    logger.info(
+        f"Written: {written} ({written_pct:0.2f}%). "
+        f"Skipped: {skipped} ({skipped_pct:0.2f}%).")
 
 
 def main(args):
