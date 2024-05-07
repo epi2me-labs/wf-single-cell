@@ -384,20 +384,14 @@ process tag_bam {
     memory "16 GB"
     publishDir "${params.out_dir}/${meta.alias}", mode: 'copy'
     input:
-        tuple val(meta),
-              path('align.bam'),
-              path('align.bam.bai'),
-              path('tags.tsv')
+        tuple val(meta), path('align.bam'), path('align.bam.bai'), path('tags/tag_*.tsv')
     output:
-         tuple val(meta),
-              path("tagged.bam"),
-              path('tagged.bam.bai')
+         tuple val(meta), path("tagged.bam"), path('tagged.bam.bai')
     script:
     """
     workflow-glue tag_bam \
-        align.bam tagged.bam tags.tsv \
+        align.bam tagged.bam tags \
         --threads ${task.cpus}
-
     samtools index -@ ${task.cpus} "tagged.bam"
     """
 }
@@ -485,10 +479,14 @@ workflow process_bams {
                     [meta, tr_fa, ann_tr_gff]})
 
         // construct per-read summary tables for end user
-        final_read_tags = combine_final_tag_files(
-            create_matrix.out.summary
-                .groupTuple()
-                .map{meta, chrs, files -> [meta, files]})
+        // and a tagged bam -- we don't pass final_read_tags here since its
+        // advantageous for memory reasons to be able to read the per-chrom
+        // tables when iterating over the BAM
+        tags_by_sample = create_matrix.out.summary
+            .groupTuple()
+            .map{meta, chrs, files -> [meta, files]}
+        final_read_tags = combine_final_tag_files(tags_by_sample)
+        tag_bam(merge_bams.out.join(tags_by_sample))
 
         // UMI saturation curves
         // TODO: this save figures with matplotlib -- just output
@@ -503,17 +501,7 @@ workflow process_bams {
             generate_whitelist.out.kneeplot
                 .concat(umi_gene_saturation.out.saturation_curve)
                 .groupTuple())
-
-        // tag BAMs and merge per-chrom BAMs into one big one?
-        // TODO: Theres no good reason to output per-chrom BAMs. We should instead
-        //       create just a whole genome BAM. We can optionally include the tags
-        //       in the BAM file as well. This whole genome BAM is currently created
-        //       above already to give to stringtie. As an interim (before switching
-        //       to bambu) we can just tag this BAM and output it as the final BAM.
-        tag_bam(
-            merge_bams.out
-            .join(final_read_tags))
-
+    
     emit:
 
         // Emit sperately for use in the report
