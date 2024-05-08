@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [unreleased]
 ### Fixed
 - Reported cell count off by -1 in report summary table.
 - Issue with TSV concat/splitting during `combine_bam_and_tags` stage.
@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Corrected example command in README.
 - Incorrect reporting of unique gene and transcripts in report table.
 - Processed expression matrix entries incorrectly filtered.
+- Gene identity of multimapping reads could be incorrectly assigned.
 ### Changed
 - Read chunking done in library code.
 - `--process_chunk_size` parameter changed to `--fastq_chunk`
@@ -20,7 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Expression matrix construction code reworked to reduce memory usage.
 - Adapter search step now 3x faster.
 - Barcode assignment 3x faster.
-- Feature assignment now 4.5x faster.
+- Feature assignment now 15x faster.
+- UMI clustering 20x faster.
 - UMAP creation memory use reduced 6-fold and up-to 30x faster (and
   always enabled).
 - Final read tagging step is 3x faster.

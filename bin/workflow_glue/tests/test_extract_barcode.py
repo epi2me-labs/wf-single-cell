@@ -1,13 +1,19 @@
 """Test adapter_scan_vsearch."""
+import functools
+import os
 import tempfile
 from unittest.mock import Mock
 
 import pandas as pd
 import pytest
 from pytest import fixture
-from workflow_glue.extract_barcode import (
-    align_adapter, main, parse_probe_alignment)
+from workflow_glue import extract_barcode
 from ..sc_util import rev_cmp  # noqa: ABS101
+
+# prevent stdout writing in align_adapter even with `pytest -s`
+devnull = open(os.devnull, 'w')
+extract_barcode.align_adapter = functools.partial(
+    extract_barcode.align_adapter, fastq_out=devnull)
 
 
 def gene():
@@ -101,7 +107,7 @@ def test_main(args):
     args.output_barcode_counts = counts_file.name
     args.output_read_tags = tags_file.name
     args.output_trimmed_fastq = trimmed_fastq_file.name
-    main(args)
+    extract_barcode.main(args)
 
     # Barcode we expect to find in the input BAM
     # For 3prime this will be reverse
@@ -146,7 +152,7 @@ def test_align_adapter(args, adapter1_seq, tags_results_shape, counts_results_sh
     args.output_read_tags = tags_file.name
     args.kit = '3prime'
     args.output_trimmed_fastq = trimmed_fastq_file.name
-    df_counts = align_adapter(args)
+    df_counts = extract_barcode.align_adapter(args)
     assert df_counts.shape == counts_results_shape
 
     df_tags = pd.read_csv(tags_file.name, sep='\t')
@@ -230,7 +236,7 @@ def test_parse_probe_alignment(query, query_aln, query_ascii_q, expected_adapter
     (
         adapter1_editdist, barcode_result, umi_result,
         bc_qscores, umi_qscores
-    ) = parse_probe_alignment(
+    ) = extract_barcode.parse_probe_alignment(
         p_alignment, adapter1_probe_suffix,
         16, 12, qual_ints, query)
 
