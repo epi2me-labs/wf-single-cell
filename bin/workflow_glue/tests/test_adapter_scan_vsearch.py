@@ -1,6 +1,5 @@
 """Test adapter_scan_vsearch."""
 from pathlib import Path
-import sys
 import tempfile
 
 import pysam
@@ -25,20 +24,14 @@ def segment():
     [
         # Non-full length reads
         [[], [['*', 'no_adapters', '*']]],
-
         [['adapter1_f'], [['adapter1_f', 'single_adapter1', '+']]],
-
         [['adapter2_r'], [['adapter2_r', 'single_adapter2', '-']]],
-
         [['adapter2_r', 'adapter1_f'], [['adapter2_r-adapter1_f', 'other', '*']]],
-
         # Full length reds
         [['adapter1_f', 'adapter2_f'], [['adapter1_f-adapter2_f', 'full_len', '+']]],
-
         # 3 adapters with one full length segment
         [['adapter2_r', 'adapter1_r', 'adapter1_f'],
          [['adapter2_r-adapter1_r', 'full_len', '-']]],
-
         # Mutiple subreads in a read
         [['adapter1_f', 'adapter2_f', 'adapter2_r', 'adapter1_r'],
             [
@@ -48,19 +41,14 @@ def segment():
     ]
 )
 def test_call_vsearch(adapters, expected_results, segment):
-    """
-    Test call_vsearch running and parsing.
+    """Test call_vsearch running and parsing.
 
     This is the main function of the script that calls a bunch of other functions.
     """
     id_ = 'read_1'
-
     kits = ['3prime', '5prime', 'multiome']
 
     for kit in kits:
-        sys.stdout.write(f'\n--- Testing: {kit} ---\n')
-
-        sys.stdout.write(f'Testing case: {adapters}\n')
         # Build the read
         adapter_seqs = []
         for a in adapters:
@@ -90,7 +78,7 @@ def test_call_vsearch(adapters, expected_results, segment):
 
         vsearch_results = tempfile.NamedTemporaryFile(suffix='.fq')
         call_vsearch(
-            Path(fastq_file.name), Path(vsearch_results.name), 0.7, adapter_fasta)
+            Path(fastq_file.name), Path(vsearch_results.name), 0.7, adapter_fasta, 4)
         parsed_results = parse_vsearch(vsearch_results.name)
 
         # Each result can contain 0 or more subreads -

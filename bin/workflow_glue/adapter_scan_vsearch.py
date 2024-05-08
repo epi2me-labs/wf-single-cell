@@ -33,11 +33,13 @@ complement_trans = str.maketrans("ACGTacgt", "TGCAtgca")
 def argparser():
     """Create argument parser."""
     parser = wf_parser("adapt_scan")
-    parser.add_argument("fastq", help="FASTQ of ONT reads", type=Path)
+    parser.add_argument(
+        "fastq", type=Path,
+        help="FASTQ of ONT reads.")
 
     parser.add_argument(
         "--per_read_summary", type=Path,
-        help="Output file name for per-read adapter configurations")
+        help="Output file name for per-read adapter configurations.")
 
     parser.add_argument(
         "--summary", type=Path,
@@ -47,24 +49,25 @@ def argparser():
         "--kit",
         help="Specify either the 10X 3' gene expression kit (3prime), the 5' \
         gene expression kit (5prime), or the multiome kit (multiome) This \
-        determines which adapter sequences to search for in the reads",
+        determines which adapter sequences to search for in the reads.",
         default="3prime", choices=['3prime', '5prime', 'multiome'])
 
     parser.add_argument(
-        "--min_adapter_id",
-        help="Minimum adapter alignment identity for VSEARCH",
-        type=float, default=0.7)
+        "--min_adapter_id", type=float, default=0.7,
+        help="Minimum adapter alignment identity for VSEARCH.")
 
     parser.add_argument(
         "--keep_fl_only",
-        help="Only write full length reads",
+        help="Only write full length reads.",
         action="store_true", default=False)
 
     parser.add_argument(
-        "--adapters_fasta",
-        help="Filename for adapter query sequences",
-        type=Path, default="adapter_seqs.fasta")
+        "--adapters_fasta", type=Path, default="adapter_seqs.fasta",
+        help="Filename for adapter query sequences.")
 
+    parser.add_argument(
+        "--threads", type=int, default=8,
+        help="Compute threads for vsearch.")
     return parser
 
 
@@ -81,13 +84,13 @@ def write_adapters_fasta(adapter1_seq, adapter2_seq, output):
             fh.write(f">{name}\n{seq}\n")
 
 
-def call_vsearch(fastq, output, min_adapter_id, adapters_fasta):
+def call_vsearch(fastq, output, min_adapter_id, adapters_fasta, threads):
     """Call vsearch."""
-    vsearch_cmd = f"seqkit fq2fa {fastq} | vsearch --usearch_global -  \
+    vsearch_cmd = f"seqkit fq2fa {fastq} | vsearch --usearch_global - \
         --db {adapters_fasta} --minseqlength 20 --maxaccepts 5 --id {min_adapter_id} \
         --strand plus --wordlength 3 --minwordmatches 10 --output_no_hits --userfields \
         'query+target+id+alnlen+mism+opens+qilo+qihi+qstrand+tilo+tihi+ql+tl' \
-        --userout {output}"
+        --userout {output} --threads {threads}"
 
     logger.info(vsearch_cmd)
     p = subprocess.Popen(
@@ -416,7 +419,8 @@ def main(args):
 
     logger.info("Running vsearch")
     vsearch_out = args.fastq.with_suffix(".vsearch.tsv")
-    call_vsearch(args.fastq, vsearch_out, args.min_adapter_id, adapter_file)
+    call_vsearch(
+        args.fastq, vsearch_out, args.min_adapter_id, adapter_file, args.threads)
 
     logger.info("Parsing vsearch hits.")
     read_info = parse_vsearch(vsearch_out)

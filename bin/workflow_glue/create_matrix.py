@@ -1,5 +1,6 @@
 """Correct UMIs using clustering."""
 
+import collections
 import itertools
 from pathlib import Path
 
@@ -77,9 +78,7 @@ def umi_clusterer_call(self, umis, threshold):
     umis = list(umis.keys())
 
     self.positions += 1
-
     number_of_umis = len(umis)
-
     self.total_umis_per_position += number_of_umis
 
     if number_of_umis > self.max_umis_per_position:
@@ -92,7 +91,13 @@ def umi_clusterer_call(self, umis, threshold):
     return final_umis
 
 
-def cluster(df):
+# Monkey-patch the umi-tools clusterer with a modified method
+# using Levenshtein instead of Hamming distance.
+UMIClusterer._get_adj_list_directional = get_adj_list_directional_lev
+UMIClusterer.__call__ = umi_clusterer_call
+
+
+def cluster(umis):
     """Cluster UMIs.
 
     Search for UMI clusters within subsets of reads sharing the same corrected barcode
@@ -103,38 +108,25 @@ def cluster(df):
     based on edit distance threshold and whether node A counts >= (2* node B counts).
     https://umi-tools.readthedocs.io/en/latest/the_methods.html
 
-    :return:
-        DataFrame: The same as df with and additional UB (corrected barcode) column.
     """
-    # Monkey-patch the umi-tools clusterer with a modified method
-    # using Levenshtein instead of Hamming distance.
-    UMIClusterer._get_adj_list_directional = get_adj_list_directional_lev
-    UMIClusterer.__call__ = umi_clusterer_call
+    if len(umis) == 1:  # early return
+        return umis
+    clusterer = UMIClusterer(cluster_method="directional")
+    umi_counts = collections.Counter(umis)
+    clusters = clusterer(umi_counts, threshold=2)
 
-    def umi_tools_cluster(umis):
-        clusterer = UMIClusterer(cluster_method="directional")
+    if len(clusters) == len(umis):  # no corrections
+        return umis
 
-        umi_map = {}
-        umi_counts = umis.value_counts().to_dict()
-        clusters = clusterer(umi_counts, threshold=2)
-
-        # Make raw -> corrected umi map
-        for clust in clusters:
-            if len(clust) == 1:
-                # Single UMI cluster. Map it to itself.
-                umi_map[clust[0]] = clust[0]
-            else:
-                for i in range(0, len(clust)):
-                    # Map each umi in the cluster to the predicted 'true' umi.
-                    umi_map[clust[i]] = clust[0]
-
-        return umis.replace(umi_map)
-
-    # UB: corrected UMI tag
-    df["UB"] = df.groupby(
-        ["gene_cell"])["UR"].transform(umi_tools_cluster)
-    df.set_index('read_id', drop=True, inplace=True)
-    return df
+    # create list of corrections
+    umi_map = dict()
+    for clust in clusters:
+        if len(clust) > 1:
+            for umi in clust[1:]:
+                umi_map[umi] = clust[0]
+    if len(umi_map) > 0:  # pd.Series.replace is weird slow
+        umis = umis.replace(umi_map)
+    return umis
 
 
 def create_region_name(row, ref_interval):
@@ -164,7 +156,10 @@ def cluster_dataframe(df, ref_interval):
     df["gene_cell"] = df["gene"] + ":" + df["CB"]
     df['read_id'] = df.index
     df.set_index('gene_cell', inplace=True, drop=True)
-    df = cluster(df)
+    # UB: corrected UMI tag
+    groups = df.groupby("gene_cell")["UR"]
+    df["UB"] = groups.transform(cluster)
+    df.set_index('read_id', drop=True, inplace=True)
     # Reset unassigned genes to '-'
     df.loc[df.no_gene, 'gene'] = '-'
     df.drop(columns='no_gene', inplace=True)

@@ -235,7 +235,7 @@ def parse_probe_alignment(
     )
 
 
-def align_adapter(args):
+def align_adapter(args, fastq_out=sys.stdout):
     """
     Align a single adapter template to read and compute identity.
 
@@ -349,7 +349,7 @@ def align_adapter(args):
                     read.sequence = read.sequence[trim_pos:]
                     read.quality = read.quality[trim_pos:]
                 if read.sequence:
-                    sys.stdout.write(str(read) + '\n')
+                    fastq_out.write(str(read) + '\n')
 
     bc_counts = pd.DataFrame.from_dict(
         barcode_counts,
