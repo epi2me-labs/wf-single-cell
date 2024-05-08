@@ -291,7 +291,7 @@
             "cpus": 8,
             "memory": "32GB"
         },
-        "run_time": "Approximately 16h for 120M reads with the recommended requirements.",
+        "run_time": "Approximately 8h for 120M reads with the recommended requirements.",
         "arm_support": false
     }
 }
