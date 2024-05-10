@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [unreleased]
+### Added
+- Ability to use BAM files as input.
 ### Changed
 - Use exact kmer matching during barcode correction for further 5x
   performance improvement. Very minor (<0.02%) difference compared to
