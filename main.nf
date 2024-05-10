@@ -4,7 +4,7 @@ import groovy.json.JsonBuilder
 import nextflow.util.BlankSeparatedList;
 nextflow.enable.dsl = 2
 
-include { fastq_ingress } from './lib/ingress'
+include { fastq_ingress; xam_ingress } from './lib/ingress'
 include { preprocess } from './subworkflows/preprocess'
 include { process_bams } from './subworkflows/process_bams'
 
@@ -257,19 +257,27 @@ workflow {
         kit_configs_file = file("${projectDir}/kit_configs.csv", checkIfExists: true)
     }
 
-    fastq = file(params.fastq, type: "file")
+    if (params.fastq) {
+        samples = fastq_ingress([
+                "input":params.fastq,
+                "sample":params.sample,
+                "sample_sheet":params.sample_sheet,
+                "fastq_chunk": params.fastq_chunk,
+                "stats": true,
+                "per_read_stats": false])
+    } else {
+        samples = xam_ingress([
+                "input":params.bam,
+                "sample":params.sample,
+                "sample_sheet":params.sample_sheet,
+                "fastq_chunk": params.fastq_chunk,
+                "keep_unaligned": true,
+                "return_fastq": true,
+                "stats": true,
+                "per_read_stats": false])
 
-    samples = fastq_ingress([
-            "input":params.fastq,
-            "sample":params.sample,
-            "sample_sheet":params.sample_sheet,
-            "fastq_chunk": params.fastq_chunk,
-            "stats": true,
-            "per_read_stats": false])
-
-
+    }
     if (!params.single_cell_sample_sheet) {
-
         sc_sample_sheet = file("$projectDir/data/OPTIONAL_FILE")
     } else {
         // Read single_cell_sample_sheet
