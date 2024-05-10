@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [unreleased]
+### Changed
+- Use exact kmer matching during barcode correction for further 5x
+  performance improvement. Very minor (<0.02%) difference compared to
+  previous method.
+
 ## [v2.0.0]
 ### Fixed
 - Reported cell count off by -1 in report summary table.

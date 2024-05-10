@@ -2,14 +2,14 @@
 import tempfile
 
 import pandas as pd
-from pytest import fixture
+import pytest
 from workflow_glue.assign_barcodes import (
     determine_barcode, process_records
 )
 
 
-@fixture
-def whitelist():
+@pytest.fixture
+def allowed_barcodes():
     """Make a small barcode whitelist."""
     return set(
         ('AAAAAAAAAAAAAAAA',
@@ -19,20 +19,21 @@ def whitelist():
          'AAAggggAAAAAAAAA'))
 
 
-def test_calc_ed_with_whitelist(whitelist):
+def test_calc_ed_with_allowed_barcodes(allowed_barcodes):
     """Test edit distance calculation."""
     bc1 = 'AAAAAAAAAAAAAAAA'
-    bc_match = determine_barcode(bc1, whitelist, 2, 2)
+    bc_match = determine_barcode(bc1, list(allowed_barcodes), allowed_barcodes, 2, 2)
     assert bc_match == 'AAAAAAAAAAAAAAAA'
 
     # An uncorrected BC with a nearest match ED of 7 (cutoff = 6)
     # return no match
     bc2 = 'AAAAAAAAAggggggg'
-    bc_match = determine_barcode(bc2, whitelist, 2, 2)
+    bc_match = determine_barcode(bc2, list(allowed_barcodes), allowed_barcodes, 2, 2)
     assert bc_match == '-'
 
 
-def test_process_records(whitelist):
+@pytest.mark.parametrize("use_kmer_index", [False, True])
+def test_process_records(allowed_barcodes, use_kmer_index):
     """Test process_records.
 
     Check if barcodes are corrected and enumerted appropriately.
@@ -56,11 +57,12 @@ def test_process_records(whitelist):
     tags.to_csv(tags_file.name, sep='\t')
     tags_output = tempfile.NamedTemporaryFile(mode='w', suffix='.tsv')
 
-    max_ed = 16
+    max_ed = 2
     min_ed_diff = 2
     barcode_counter = process_records(
-        tags_file.name, whitelist,
-        max_ed, min_ed_diff, tags_output.name)
+        tags_file.name, allowed_barcodes,
+        max_ed, min_ed_diff, tags_output.name,
+        use_kmer_index=use_kmer_index)
 
     result_tags_df = pd.read_csv(tags_output.name, sep='\t', index_col=0)
 
