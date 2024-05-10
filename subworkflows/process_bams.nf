@@ -68,7 +68,8 @@ process assign_barcodes{
         whitelist.tsv extract_barcodes.tsv \
         extract_barcodes_with_bc.tsv bc_assign_counts.tsv \
         --max_ed ${params.barcode_max_ed} \
-        --min_ed_diff ${params.barcode_min_ed_diff}
+        --min_ed_diff ${params.barcode_min_ed_diff} \
+        --use_kmer_index
     """
 }
 
