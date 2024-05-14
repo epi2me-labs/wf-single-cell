@@ -271,7 +271,8 @@ process process_matrix {
         tuple val(meta), val(feature), path("${feature}_raw_feature_bc_matrix"), emit: raw
         tuple val(meta), val(feature), path("${feature}_processed_feature_bc_matrix"), emit: processed
         tuple val(meta), val(feature), path("${feature}.expression.mean-per-cell.tsv"), emit: meancell
-        tuple val(meta), val(feature), path("${feature}.expression.mito-per-cell.tsv"), emit: mitocell
+        // mito per cell makes sense only for feature=gene for now.
+        tuple val(meta), val(feature), path("gene.expression.mito-per-cell.tsv"), emit: mitocell, optional: true
         tuple val(meta), val(feature), path("${feature}.expression.umap*.tsv"), emit: umap
     script:
     def mito_prefixes = params.mito_prefix.replaceAll(',', ' ')

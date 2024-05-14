@@ -261,7 +261,7 @@ class ExpressionMatrix:
     def find_features(self, prefixes, inverse=False):
         """Find features by name prefix."""
         sel = np.array([], dtype=int)
-        feat = self.tcells
+        feat = self.tfeatures
         for pre in prefixes:
             sel = np.union1d(sel, np.argwhere(np.char.find(feat, pre) > -1))
         if inverse:
