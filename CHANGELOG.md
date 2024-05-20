@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [unreleased]
+### Fixed
+- Error when a tags file is empty
+### Added
+- More informative error message when all cells or features are filtered out.
+
 ## [v2.0.2]
 ### Fixed
 - Mito gene counts all being zero.

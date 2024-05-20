@@ -306,12 +306,18 @@ class ExpressionMatrix:
         """Remove matrix elements using masks and inplace copies."""
         # shuffle the rows (columns) we want to the front, then take a view.
         # Don't bother doing anything if the mask is everything
+        if sum(feat_mask) == 0:
+            raise ValueError(
+                "All features would be removed, try altering filter thresholds.")
         if feat_mask is not None and sum(feat_mask) != len(self.features):
             for i, x in enumerate(np.argwhere(feat_mask)):
                 self._matrix[i, :] = self._matrix[x, :]
             self._matrix = self._matrix[:i+1]
             self._features = self._features[feat_mask]
 
+        if sum(cell_mask) == 0:
+            raise ValueError(
+                "All cells would be removed, try altering filter thresholds.")
         if cell_mask is not None and sum(cell_mask) != len(self.cells):
             for j, x in enumerate(np.argwhere(cell_mask)):
                 self._matrix[:, j] = self.matrix[:, x].squeeze()

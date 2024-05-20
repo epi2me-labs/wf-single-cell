@@ -92,9 +92,13 @@ class TagStore:
             self._index = dict()
             for fname in tags:
                 d = self._read_file(fname, nrows=10)
-                chrom = getattr(next(iter(d.values())), "chrom")
-                self._index[chrom] = fname
-                logger.info(f"{fname} contains tags for reference: {chrom}.")
+                try:
+                    chrom = getattr(next(iter(d.values())), "chrom")
+                    self._index[chrom] = fname
+                except StopIteration:
+                    logger.warn(f"{fname} appears empty.")
+                else:
+                    logger.info(f"{fname} contains tags for reference: {chrom}.")
         else:
             raise ValueError(
                 "`tags` should be a tags file or directory containing such files.")
