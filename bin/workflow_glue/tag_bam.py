@@ -180,8 +180,11 @@ def add_tags(tags, in_bam, out_bam, threads):
                             align.set_tag(tag, getattr(row, tag), value_type="Z")
                         bam_out.write(align)
     total = skipped + written
-    written_pct = 100 * written / total
-    skipped_pct = 100 * skipped / total
+    written_pct = 0
+    skipped_pct = 0
+    if total > 0:
+        written_pct = 100 * written / total
+        skipped_pct = 100 * skipped / total
     logger.info(
         f"Written: {written} ({written_pct:0.2f}%). "
         f"Skipped: {skipped} ({skipped_pct:0.2f}%).")
