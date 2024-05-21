@@ -91,3 +91,22 @@ def test_add_tags(tags_file, input_bam):
                 assert align.get_tag('UR') == 'GGGGGtGGGGGG'
                 assert align.get_tag('UB') == 'GGGGGGGGGGGG'
                 assert align.get_tag('UY') == '????????????'
+
+
+def test_empty_file(input_bam):
+    """Test giving a header-only tags file, in a tags directory, to tag_bams."""
+    tags_header = (
+        'read_id', 'CR', 'CB', 'CY', 'UR', 'UB', 'UY', 'chr', 'start', 'end', 'gene',
+        'transcript')
+    tags_df = (
+        pd.DataFrame(columns=tags_header)
+        .set_index('read_id', drop=True)
+        .rename(
+            columns={v: k for k, v in tag_bam.BAM_TAGS.items()})
+    )
+    with tempfile.TemporaryDirectory() as fh:
+        tmp_test_dir = Path(fh)
+        header_only_file = tmp_test_dir / 'test_tags.tsv'
+        tags_df.to_csv(header_only_file, sep='\t')
+        out_bam = tempfile.NamedTemporaryFile('w', suffix='.bam', delete=False).name
+        tag_bam.add_tags(tmp_test_dir, input_bam, out_bam, 1)
