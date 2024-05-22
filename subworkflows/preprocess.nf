@@ -123,6 +123,7 @@ process call_adapter_scan {
 
 process summarize_adapter_table {
     label "singlecell"
+    publishDir "${params.out_dir}/${meta.alias}", mode: 'copy'
     cpus 1
     memory "1 GB"
     input:
@@ -160,8 +161,8 @@ workflow preprocess {
         // TODO: we don't necessarily need to merge these, they
         //       could just be given to the final reporting
         //       without pre-aggregating
-        //summarize_adapter_table(
-        //    call_adapter_scan.out.adapter_summary.groupTuple())
+        summarize_adapter_table(
+           call_adapter_scan.out.adapter_summary.groupTuple())
 
     emit:
         bam_sort = call_adapter_scan.out.bam_sort
