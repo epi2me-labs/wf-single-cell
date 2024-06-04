@@ -112,14 +112,12 @@ process parse_kit_metadata {
         """
         workflow-glue parse_kit_metadata from_cli \
             --kit_config kit_config.csv \
-            --kit_name "$params.kit_name" \
-            --kit_version $params.kit_version \
+            --kit "$params.kit" \
             --expected_cells $params.expected_cells \
             --sample_ids $sample_ids \
             --output merged.csv
         """
     }
-
 }
 
 
