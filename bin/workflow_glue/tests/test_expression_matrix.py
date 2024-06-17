@@ -3,8 +3,11 @@ import os
 from pathlib import Path
 import tempfile
 
+import h5py
+import numpy as np
 import pandas as pd
 import pytest
+from workflow_glue.expression_matrix import ExpressionMatrix
 from workflow_glue.process_matrix import argparser, main
 
 
@@ -41,6 +44,174 @@ def tags_df():
     })
 
     return df, expected_raw_result, expected_processed_result
+
+
+def test_empty_matrix():
+    """Test instantiating ExpressionMatrix with empty data."""
+    em = ExpressionMatrix(
+        matrix=np.ndarray(shape=(0, 2)),
+        features=np.array([], dtype=bytes),
+        cells=np.array([], dtype=bytes)
+    )
+
+    assert em.matrix.shape == (0, 2)
+    assert em.features.shape == (0,)
+    assert em.cells.shape == (0,)
+
+
+@pytest.fixture
+def empty_matrix():
+    """Create an empty ExpressionMatrix."""
+    matrix = ExpressionMatrix(
+        matrix=np.ndarray(shape=(0, 2)),
+        features=np.array([]),
+        cells=np.array([])
+    )
+    return matrix
+
+
+@pytest.fixture
+def small_matrix():
+    """Create a 2x2 ExpressionMatrix."""
+    matrix = ExpressionMatrix(
+        matrix=np.array([2, 2, 2, 2]).reshape((2, 2)),
+        features=np.array(['gene1', 'gene2'], dtype=bytes),
+        cells=np.array(['cell1', 'cell2'], dtype=bytes)
+    )
+    return matrix
+
+
+def test_normalize_empty_matrix(empty_matrix):
+    """Test normalizing with empty ExpressionMatrix."""
+    empty_matrix.normalize(10000)
+
+
+def test_remove_cells_empty_matrix(empty_matrix):
+    """Test cell filtering with empty ExpressionMatrix."""
+    with pytest.raises(
+        ValueError,
+        match="Matrix is zero-sized on entry to `remove_cells`."
+    ):
+        empty_matrix.remove_cells(0)
+
+
+def test_remove_cells_becomes_empty(small_matrix):
+    """Test cell filtering with small matrix made empty by filtering."""
+    with pytest.raises(
+        ValueError,
+        match="All cells would be removed, try altering filter thresholds."
+    ):
+        small_matrix.remove_cells(3)
+
+
+def test_remove_features_empty_matrix(empty_matrix):
+    """Test feature filtering with empty ExpressionMatrix."""
+    with pytest.raises(
+        ValueError,
+        match="Matrix is zero-sized on entry to `remove_features`."
+    ):
+        empty_matrix.remove_features(0)
+
+
+def test_remove_features_becomes_empty(small_matrix):
+    """Test fature filtering with small matrix made empty by filtering."""
+    with pytest.raises(
+        ValueError,
+        match="All features would be removed, try altering filter thresholds."
+    ):
+        small_matrix.remove_features(3)
+
+
+def test_remove_cells_and_features_empty_matrix(empty_matrix):
+    """Test cell and feature filtering with empty ExpressionMatrix."""
+    with pytest.raises(
+        ValueError,
+        match="Matrix is zero-sized on entry to `remove_cells_and_features`."
+    ):
+        empty_matrix.remove_cells_and_features(0, 0)
+
+
+def test_remove_cells_and_features_becomes_empty(small_matrix):
+    """Test cell and feature filtering made empty by filtering."""
+    with pytest.raises(
+        ValueError,
+        match="All features would be removed, try altering filter thresholds."
+    ):
+        small_matrix.remove_cells_and_features(3, 3)
+
+
+def test_remove_skewed_cells_empty_matrix(empty_matrix):
+    """Test skewed cell filtering with empty ExpressionMatrix."""
+    with pytest.raises(
+        ValueError,
+        match="Matrix is zero-sized on entry to `remove_skewed_cells`."
+    ):
+        empty_matrix.remove_skewed_cells(0, ['gene'])
+
+
+def test_remove_skewed_cells_becomes_empty(small_matrix):
+    """Test skewed cell filtering with empty ExpressionMatrix."""
+    with pytest.raises(
+        ValueError,
+        match="All cells would be removed, try altering filter thresholds."
+    ):
+        small_matrix.remove_skewed_cells(0.05, ['gene'])
+
+
+def test_remove_unknown_empty_matrix(empty_matrix):
+    """Test unknown feature filtering with empty ExpressionMatrix."""
+    with pytest.raises(
+        ValueError,
+        match="Matrix is zero-sized on entry to `remove_unknown`."
+    ):
+        empty_matrix.remove_unknown('-')
+
+
+def test_remove_unknown_becomes_empty():
+    """Test unknown filtering made empty by filtering."""
+    matrix = ExpressionMatrix(
+        matrix=np.array([2, 2]).reshape((1, 2)),
+        features=np.array(['-'], dtype=bytes),
+        cells=np.array(['cell1', 'cell2'], dtype=bytes)
+    )
+    with pytest.raises(
+        ValueError,
+        match="All features would be removed, try altering filter thresholds."
+    ):
+        matrix.remove_unknown('-')
+
+
+def test_aggregate_hdfs():
+    """Test the creation of an ExpressionMatrix from multiple HDF inputs."""
+    hdf1 = tempfile.NamedTemporaryFile(suffix='.hdf5', mode='w')
+    with h5py.File(hdf1.name, 'w') as fh1:
+        fh1['cells'] = ['cell1', 'cell2']
+        fh1['features'] = ['f1', 'f2']
+        fh1['matrix'] = np.array([
+            [1, 2], [3, 4]
+        ]).reshape((2, 2))
+
+    hdf2 = tempfile.NamedTemporaryFile(suffix='.hdf5', mode='w')
+    with h5py.File(hdf2.name, 'w') as fh2:
+        fh2['cells'] = ['cell3', 'cell1']
+        fh2['features'] = ['f2', 'f1']
+        fh2['matrix'] = np.array([
+            [1, 2], [2, 4]
+        ]).reshape((2, 2))
+
+    hdf3 = tempfile.NamedTemporaryFile(suffix='.hdf5', mode='w')
+    with h5py.File(hdf3.name, 'w') as fh3:
+        fh3['cells'] = []
+        fh3['features'] = []
+        fh3['matrix'] = np.ndarray(shape=(0, 0))
+
+    em = ExpressionMatrix.aggregate_hdfs((hdf1.name, hdf2.name, hdf3.name))
+
+    np.testing.assert_array_equal(em.tcells, np.array(['cell1', 'cell2', 'cell3']))
+    np.testing.assert_array_equal(em.tfeatures, np.array(['f1', 'f2']))
+    np.testing.assert_array_equal(
+        em.matrix,  np.array([[5, 2, 2], [5, 4, 1]])
+    )
 
 
 def test_main(tags_df):

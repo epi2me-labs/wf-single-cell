@@ -23,6 +23,7 @@ class ExpressionMatrix:
         self._matrix = matrix
         self._features = features
         self._cells = cells
+
         if fname is not None:
             self._fh = h5py.File(fname, 'r')
         self._cache = cache
@@ -44,7 +45,8 @@ class ExpressionMatrix:
     @classmethod
     def from_hdf(cls, name, cache=True, dtype=int):
         """Load a matrix from HDF file."""
-        return cls(fname=name, cache=cache, dtype=dtype)
+        ma = cls(fname=name, cache=cache, dtype=dtype)
+        return ma
 
     @classmethod
     def from_tags(cls, df, feature='gene'):
@@ -84,8 +86,9 @@ class ExpressionMatrix:
 
         # sort by names, just to be nice, doesn't guarantee matrices can be compared
         full_matrix = cls(
-            features=np.array(
-                sorted(features)), cells=np.array(sorted(cells)), dtype=dtype)
+            features=np.array(sorted(features), dtype=bytes),
+            cells=np.array(sorted(cells), dtype=bytes),
+            dtype=dtype)
         for fname in fnames:
             ma = cls.from_hdf(fname, dtype=dtype)
             full_matrix + ma
@@ -147,7 +150,7 @@ class ExpressionMatrix:
         if self._features is not None:
             return self._features
         elif self._fh is not None:
-            features = self._fh['features'][()]
+            features = self._fh['features'][()].astype(bytes)
             if self._cache:
                 self._features = features
             return features
@@ -160,7 +163,7 @@ class ExpressionMatrix:
         if self._cells is not None:
             return self._cells
         elif self._fh is not None:
-            cells = self._fh['cells'][()]
+            cells = self._fh['cells'][()].astype(bytes)
             if self._cache:
                 self._cells = cells
             return cells
@@ -210,6 +213,8 @@ class ExpressionMatrix:
 
     def remove_cells(self, threshold):
         """Remove cells with few features present."""
+        if self.matrix.size == 0:
+            raise ValueError("Matrix is zero-sized on entry to `remove_cells`.")
         n_features = np.count_nonzero(self.matrix, axis=0)
         mask = n_features >= threshold
         self._remove_elements(cell_mask=mask)
@@ -217,6 +222,8 @@ class ExpressionMatrix:
 
     def remove_features(self, threshold):
         """Remove features that are present in few cells."""
+        if self.matrix.size == 0:
+            raise ValueError("Matrix is zero-sized on entry to `remove_features`.")
         n_cells = np.count_nonzero(self.matrix, axis=1)
         mask = n_cells >= threshold
         self._remove_elements(feat_mask=mask)
@@ -229,6 +236,9 @@ class ExpressionMatrix:
         method provide a more uniform handling of cell and feature
         filtering.
         """
+        if self.matrix.size == 0:
+            raise ValueError(
+                "Matrix is zero-sized on entry to `remove_cells_and_features`.")
         n_features = np.count_nonzero(self.matrix, axis=0)
         cell_mask = n_features >= cell_thresh
 
@@ -241,6 +251,8 @@ class ExpressionMatrix:
 
     def remove_skewed_cells(self, threshold, prefixes, fname=None, label=None):
         """Remove cells with overabundance of feature class."""
+        if self.matrix.size == 0:
+            raise ValueError("Matrix is zero-sized on entry to `remove_skewed_cells`.")
         sel = self.find_features(prefixes)
         sel_total = self.matrix[sel].sum(axis=0, dtype=float)
         total = self.matrix.sum(axis=0, dtype=float)
@@ -250,12 +262,13 @@ class ExpressionMatrix:
             self.write_matrix(
                 fname, 100 * sel_total, self.tcells, [label], index_name="CB")
         self._remove_elements(cell_mask=mask)
-
         return self
 
     def remove_unknown(self, key="-"):
         """Remove the "unknown" feature."""
-        mask = self.features == "-".encode()
+        if self.matrix.size == 0:
+            raise ValueError("Matrix is zero-sized on entry to `remove_unknown`.")
+        mask = self.features == key.encode()
         self._remove_elements(feat_mask=~mask)
 
     def find_features(self, prefixes, inverse=False):

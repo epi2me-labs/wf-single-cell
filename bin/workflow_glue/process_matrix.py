@@ -100,7 +100,13 @@ def main(args):
         matrix = ExpressionMatrix.aggregate_tags(args.input, args.feature, dtype=float)
     except UnicodeDecodeError:
         matrix = ExpressionMatrix.aggregate_hdfs(args.input, dtype=float)
+
     logger.info("Removing unknown features.")
+    if len(matrix.cells) == 0:
+        raise ValueError("""The expression matrix contains no cells.
+            This may indicate an issue with data quality or volume.
+            Incorrectly specified 10x kits/versions and reference data can also lead to
+            to removal of all data at this point.""")
     matrix.remove_unknown()
 
     logger.info("Writing raw counts to file.")
