@@ -4,9 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v2.1.0]
 ### Changed
 - Options `--kit_name` and `--kit_version` replaced with single option `--kit` (eg `--kit 3prime:v3`)
+### Added
+- Error handling when empty expression matrix is created.  
 
 ## [v2.0.3]
 ### Fixed
