@@ -14,6 +14,7 @@ process getVersions {
     label "singlecell"
     cpus 1
     memory "1 GB"
+    time "01:00:00"
     output:
         path "versions.txt"
     script:
