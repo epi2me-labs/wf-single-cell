@@ -1,6 +1,7 @@
 process call_paftools {
     label "singlecell"
     memory "2 GB"
+    time "08:00:00"
     cpus 1
     input:
         path "ref_genes.gtf"
@@ -15,6 +16,7 @@ process call_paftools {
 process get_chrom_sizes {
     label "singlecell"
     memory "1 GB"
+    time "08:00:00"
     cpus 1
     input:
         path "ref_genome.fai"
@@ -33,6 +35,7 @@ process build_minimap_index {
     label "singlecell"
     cpus params.threads
     memory '16 GB'
+    time "08:00:00"
     input:
         path "reference.fa"
     output:
@@ -57,6 +60,7 @@ process call_adapter_scan {
     // peak RSS for aligning this data is robustly <12.4 GB with human reference. Set
     // a little more and do a retry
     memory {15.GB * task.attempt}
+    time "08:00:00"
     maxRetries 1
     errorStrategy { task.exitStatus in 137..140 ? 'retry' : 'terminate' }
     input:
@@ -126,6 +130,7 @@ process summarize_adapter_table {
     publishDir "${params.out_dir}/${meta.alias}", mode: 'copy'
     cpus 1
     memory "1 GB"
+    time "08:00:00"
     input:
         tuple val(meta), path("inputs/summary*.json")
     output:

@@ -5,6 +5,7 @@ process split_gtf_by_chroms {
     label "singlecell"
     cpus 1
     memory "1 GB"
+    time "01:00:00"
     input:
         path("ref.gtf")
     output:
@@ -19,6 +20,7 @@ process generate_whitelist{
     label "singlecell"
     cpus 4
     memory "4 GB"
+    time "08:00:00"
     publishDir "${params.out_dir}/${meta.alias}", mode: 'copy'
     input:
         tuple val(meta),
@@ -52,6 +54,7 @@ process assign_barcodes{
     label "singlecell"
     cpus 1
     memory "2 GB"
+    time "08:00:00"
     input:
          tuple val(meta),
                path("whitelist.tsv"),
@@ -79,6 +82,7 @@ process merge_bams {
     label "wf_common"
     cpus params.threads
     memory "8 GB"
+    time "08:00:00"
     input:
         tuple val(meta),
             path('bams/*aln.bam'),
@@ -100,6 +104,7 @@ process cat_tags_by_chrom {
     label "wf_common"
     cpus params.threads
     memory "8 GB"
+    time "08:00:00"
     input:
         tuple val(meta),
               path('tags/*tags.tsv')
@@ -128,6 +133,7 @@ process stringtie {
     cpus params.threads
     // Memory usage for this process is usually less than 3GB, but some cases it may go over this.
     memory = { 3.GB * task.attempt }
+    time "08:00:00"
     maxRetries = 3
     errorStrategy = { task.exitStatus in 137..140 ? 'retry' : 'terminate' }
     input:
@@ -167,6 +173,7 @@ process align_to_transcriptome {
     label "singlecell"
     cpus params.threads
     memory = "32 GB"
+    time "08:00:00"
     input:
         tuple val(meta),
               val(chr),
@@ -203,6 +210,7 @@ process assign_features {
     // quite widely in size. We don't have a fixed memory size here in order
     // to get better parallelism on single-host setups.
     memory { 1.0.GB.toBytes() + (tags.size() * 2 ) }
+    time "08:00:00"
     input:
         tuple val(meta),
               val(chr),
@@ -241,6 +249,7 @@ process create_matrix {
     // Benchmarking showed that memory usage was ~ 15x the size of read_tags input.
     // Set a minimum memory requirement of 1.0GB to allow for overhead.
     memory {1.0.GB.toBytes()  + (read_tags.size() * 20) }
+    time "08:00:00"
     input:
         tuple val(meta), val(chr), path("features.tsv"), path(read_tags, stageAs: "barcodes.tsv")
     output:
@@ -264,6 +273,7 @@ process process_matrix {
     label "singlecell"
     cpus  1
     memory "16 GB"
+    time "08:00:00"
     publishDir "${params.out_dir}/${meta.alias}", mode: 'copy', pattern: "*{mito,umap,raw,processed}*"
     input:
         tuple val(meta), val(feature), path('inputs/matrix*.hdf')
@@ -303,6 +313,7 @@ process merge_transcriptome {
     label "singlecell"
     cpus 2
     memory "2GB"
+    time "08:00:00"
     publishDir "${params.out_dir}/${meta.alias}", mode: 'copy'
     input:
         tuple val(meta),
@@ -330,6 +341,7 @@ process combine_final_tag_files {
     label "singlecell"
     cpus 1
     memory "1 GB"
+    time "08:00:00"
     publishDir "${params.out_dir}/${meta.alias}", mode: 'copy'
     input:
         tuple val(meta),
@@ -347,6 +359,7 @@ process umi_gene_saturation {
     label "singlecell"
     cpus 4
     memory "32 GB"
+    time "08:00:00"
     input:
         tuple val(meta),
               path("read_tags.tsv")
@@ -368,6 +381,7 @@ process pack_images {
     label "singlecell"
     cpus 1
     memory "1 GB"
+    time "08:00:00"
     input:
         tuple val(meta),
               path("images_${meta.alias}/*")
@@ -384,6 +398,7 @@ process tag_bam {
     label "singlecell"
     cpus 4
     memory "16 GB"
+    time "08:00:00"
     publishDir "${params.out_dir}/${meta.alias}", mode: 'copy'
     input:
         tuple val(meta), path('align.bam'), path('align.bam.bai'), path('tags/tag_*.tsv')
