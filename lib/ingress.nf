@@ -504,7 +504,7 @@ process fastcat {
     label "wf_common"
     cpus 4
     memory "2 GB"
-    time "01:00:00"
+    time "04:00:00"
     input:
         tuple val(meta), path(input_src, stageAs: "input_src")
         val fcargs
