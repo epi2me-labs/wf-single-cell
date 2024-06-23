@@ -209,7 +209,7 @@ process assign_features {
     // This step is performed per-chromosome. The tags file per chrom can vary
     // quite widely in size. We don't have a fixed memory size here in order
     // to get better parallelism on single-host setups.
-    memory { 1.0.GB.toBytes() + (tags.size() * 2 ) }
+    memory { 2.0.GB.toBytes() + (tags.size() * 2 ) }
     time "08:00:00"
     input:
         tuple val(meta),
@@ -247,8 +247,8 @@ process create_matrix {
     label "singlecell"
     cpus 1
     // Benchmarking showed that memory usage was ~ 15x the size of read_tags input.
-    // Set a minimum memory requirement of 1.0GB to allow for overhead.
-    memory {1.0.GB.toBytes()  + (read_tags.size() * 20) }
+    // Set a minimum memory requirement of 2.0GB to allow for overhead.
+    memory {2.0.GB.toBytes()  + (read_tags.size() * 20) }
     time "08:00:00"
     input:
         tuple val(meta), val(chr), path("features.tsv"), path(read_tags, stageAs: "barcodes.tsv")
