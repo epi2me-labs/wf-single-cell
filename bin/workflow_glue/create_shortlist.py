@@ -67,6 +67,10 @@ def argparser():
         "--min_qv", type=int, default=15,
         help="Minimum base quality values of shortlisted exact hits to long_list.")
 
+    parser.add_argument(
+        "--no_cell_filter", action='store_true',
+        help="Do not apply cell count thresholding to aggregated barcode counts.")
+
     return parser
 
 
@@ -144,17 +148,21 @@ def get_knee_distance(values):
     return idx
 
 
-def make_kneeplot(counts, n_cells, output, max_points=10000):
+def make_kneeplot(
+        counts, n_cells, output, no_threshold_line=False, title=None, max_points=10000):
     """Make kneeplot.
 
     :param counts: sorted counts of cells.
     :param n_cells: selection point to demarcate.
     :param output: output filepath.
     :param max_points: maximum number of points to plot.
+    :param no_threshold_line: If true do not plot vertical threshold (Visium data)
     """
     # plot is done on logscale from most to least abundant
     x = np.arange(0, len(counts))
     y = counts[::-1]
+
+    x_label = "Barcode rank" if no_threshold_line else "Cell barcode rank"
 
     fig = plt.figure(figsize=[6, 6])
     ax1 = fig.add_subplot(111)
@@ -162,11 +170,12 @@ def make_kneeplot(counts, n_cells, output, max_points=10000):
     ax1.set_xscale("log")
     ax1.set_yscale("log")
     ax1.set_xlim([1, 100000])
-    ax1.set_xlabel("Cell barcode rank")
+    ax1.set_xlabel(x_label)
     ax1.set_ylabel("Read count")
     ymax = ax1.get_ylim()[1]
-    ax1.vlines(n_cells, ymin=1, ymax=ymax, linestyle="--", color="k")
-    ax1.set_title(f"Cell barcodes above cutoff: {n_cells}")
+    if not no_threshold_line:
+        ax1.vlines(n_cells, ymin=1, ymax=ymax, linestyle="--", color="k")
+    ax1.set_title(f"Barcodes above cutoff: {n_cells}")
     fig.tight_layout()
     fig.savefig(output)
     return None
@@ -269,19 +278,29 @@ def main(args):
 
     logger.info(f"Finding count threshold from {len(hits)} good seeds.")
     hits = hits.iloc[::-1]  # we want them ascending for searching
-    threshold_index = find_threshold(
-        hits["count"], args.method,
-        exp_cells=args.exp_cells, cell_count=args.exp_cells,
-        read_count=args.read_count)
-    n_cells = len(hits) - threshold_index
-    threshold = hits["count"].iat[threshold_index]
-    shortlist = hits["barcode"].iloc[threshold_index:]
 
-    logger.info(f"Outputting {n_cells} with with more than {threshold} reads.")
+    if args.no_cell_filter:
+        # Use all the high quality barcodes as our shortlist.
+        # This is the case for Visium data
+        shortlist = hits["barcode"]
+        n_cells = len(shortlist)
+        logger.info(f"Outputting {n_cells} with no thresholding applied to reads.")
+    else:
+        threshold_index = find_threshold(
+            hits["count"], args.method,
+            exp_cells=args.exp_cells, cell_count=args.exp_cells,
+            read_count=args.read_count)
+        n_cells = len(hits) - threshold_index
+        threshold = hits["count"].iat[threshold_index]
+        shortlist = hits["barcode"].iloc[threshold_index:]
+        logger.info(f"Outputting {n_cells} with more than {threshold} reads.")
+
     with open(args.output, "wt") as f:
         f.write("\n".join(shortlist[::-1]))  # most common first
         f.write("\n")
 
     if args.plot is not None:
         logger.info(f"Generating knee plot: {args.plot}")
-        make_kneeplot(hits["count"], n_cells, args.plot)
+        make_kneeplot(
+            hits["count"], n_cells, args.plot,
+            no_threshold_line=args.no_cell_filter)

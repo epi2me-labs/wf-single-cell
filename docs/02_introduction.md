@@ -11,6 +11,13 @@ In brief, the workflow does the following:
 + Tagging BAM files with cell barcodes and UMIs.
 + Calculation of library saturation.
 
+This workflow supports the following 10x kits:
++ 3prime
++ 5prime
++ multiome (gene expression only)
++ visium spatial transcriptomics
+
+
 The [BLAZE](https://github.com/shimlab/BLAZE) preprint provided useful benchmarking of the original sockeye implementation. 
 This assisted in the selection of appropriate thresholds for cell cut-off and for defining the limits of the gene x cell matrix.
 

@@ -35,6 +35,10 @@ process generate_whitelist{
         //       are assumed to be false positives. The list is further
         //       filtered by the selected method (basically by abundance).
     // TODO: change this to take precomputed, filtered counts from extract_barcodes
+    script:
+    // It doesn't make sense to do cell count thresholding of the shortlist for visium data.
+    // A visium barcode is a tissue coordinate not a cell.
+    def no_thresholding_opt = meta.kit.split(':')[0] == 'visium' ? '--no_cell_filter' : ""
     """
     workflow-glue create_shortlist \
         barcodes whitelist.tsv \
@@ -43,7 +47,8 @@ process generate_whitelist{
         --exp_cells ${meta['expected_cells']} \
         --plot "kneeplot.png" \
         --counts_out "high_qual_bc_counts.tsv" \
-        --threads ${task.cpus}
+        --threads ${task.cpus} \
+        ${no_thresholding_opt}
     """
 }
 

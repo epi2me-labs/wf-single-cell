@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Options `--kit_name` and `--kit_version` replaced with single option `--kit` (eg `--kit 3prime:v3`)
 ### Added
 - Error handling when empty expression matrix is created.  
+- Support for Visium v1 kit.
 
 ## [v2.0.3]
 ### Fixed
