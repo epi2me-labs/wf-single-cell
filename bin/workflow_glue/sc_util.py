@@ -11,6 +11,10 @@ kit_adapters = {
         'adapter1': 'CTACACGACGCTCTTCCGATCT',
         'adapter2': 'ATGTACTCTGCGTTGATACCACTGCTT'
     },
+    'visium': {
+        'adapter1': 'CTACACGACGCTCTTCCGATCT',
+        'adapter2': 'ATGTACTCTGCGTTGATACCACTGCTT'
+    },
     '5prime': {
         'adapter1': 'CTACACGACGCTCTTCCGATCT',
         'adapter2': 'GTACTCTGCGTTGATACCACTGCTT'

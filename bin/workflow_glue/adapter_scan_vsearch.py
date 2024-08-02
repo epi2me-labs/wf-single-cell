@@ -50,7 +50,7 @@ def argparser():
         help="Specify either the 10X 3' gene expression kit (3prime), the 5' \
         gene expression kit (5prime), or the multiome kit (multiome) This \
         determines which adapter sequences to search for in the reads.",
-        default="3prime", choices=['3prime', '5prime', 'multiome'])
+        default="3prime", choices=['3prime', '5prime', 'multiome', 'visium'])
 
     parser.add_argument(
         "--min_adapter_id", type=float, default=0.7,
@@ -374,7 +374,7 @@ def create_stranded_reads(fastq, read_info, kit, fl_only):
                     if any([
                         (subread["orig_strand"] == "-" and kit == '5prime'),
                         (subread["orig_strand"] == '+' and kit in [
-                            '3prime', 'multiome'])
+                            '3prime', 'multiome', 'visium'])
                     ]):
                         # Do any necessary stranding
                         #

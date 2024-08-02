@@ -19,6 +19,7 @@ class KitName(str, Enum):
     prime3 = '3prime'
     prime5 = '5prime'
     multiome = 'multiome'
+    visium = 'visium'
 
 
 def argparser():
@@ -254,7 +255,7 @@ def align_adapter(args, fastq_out=sys.stdout):
     # Use only the specified suffix length of adapter1
     adapter1_probe_seq = args.adapter1_seq[-args.adapter1_suff_length:]
 
-    if args.kit in (KitName.prime3, KitName.multiome):
+    if args.kit in (KitName.prime3, KitName.multiome, KitName.visium):
         # For these kits the probe needs to be reverse complemented
         # <adapter1_suffix>NNN...NNN<TTTTT....>
         probe_seq = "{a1}{bc}{umi}{pt}".format(
@@ -287,7 +288,7 @@ def align_adapter(args, fastq_out=sys.stdout):
 
         for read in fastq_fh:
 
-            if args.kit in (KitName.prime3, KitName.multiome):
+            if args.kit in (KitName.prime3, KitName.multiome, KitName.visium):
                 # Flip back to barcode orientation (reverse)
                 prefix_seq = rev_cmp(read.sequence)[: args.window]
                 prefix_qv = read.quality[::-1][: args.window:]
@@ -328,7 +329,7 @@ def align_adapter(args, fastq_out=sys.stdout):
                 # For full length reads, adapter2 already trimmed.
                 # Now the barcode and UMI have been extracted, these along with adapter1
                 # can be removed.
-                if args.kit in (KitName.prime3, KitName.multiome):
+                if args.kit in (KitName.prime3, KitName.multiome, KitName.visium):
                     # The reads will be cDNA-polyA-UMI-BC-Adapter1,
                     # so to trim from right
                     trim_side = 'right'
