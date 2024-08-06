@@ -65,6 +65,7 @@ process makeReport {
         path images
         path umap_genes
         val wf_version
+        path 'bam_stats.tsv'
 
     output:
         path "wf-single-cell-*.html"
@@ -84,7 +85,8 @@ process makeReport {
         --umap_genes $umap_genes \
         --metadata metadata.json \
         --wf_version $wf_version \
-        --metadata metadata.json
+        --metadata metadata.json \
+        --bam_stats bam_stats.tsv
     """
 }
 
@@ -133,9 +135,12 @@ process prepare_report_data {
               path('gene_mean_expression.tsv'),
               path('transcript_mean_expression.tsv'),
               path('mitochondrial_expression.tsv'),
-              path(umaps)
+              path(umaps),
+              path('bamstats/bam_stats*.tsv')
     output:
-        path "survival.tsv", emit: survival  // not meta.alias here, breaks collectFile()
+        // sample_id column added to survival.tsv and bm_stats.tsv no need for meta
+        path "survival.tsv", emit: survival
+        path "bam_stats.tsv", emit: bam_stats
         path "${meta.alias}_umap", emit: umap_dir
 
     script:
@@ -143,11 +148,10 @@ process prepare_report_data {
         String hist_dir = "histogram_stats/${meta.alias}"
     """
     workflow-glue prepare_report_data \
-        "${meta.alias}" adapter_stats expression_stats white_list.txt survival.tsv
-    
+        "${meta.alias}" adapter_stats bamstats expression_stats white_list.txt survival.tsv bam_stats.tsv
+
     umd=${meta.alias}_umap
     mkdir \$umd
-
     if [ "$opt_umap" = true ]; then
         echo "Adding umap data to sample directory"
         # Add data required for umap plotting into sample directory
@@ -208,7 +212,9 @@ workflow pipeline {
             .join(process_bams.out.gene_mean_expression)
             .join(process_bams.out.transcript_mean_expression)
             .join(process_bams.out.mitochondrial_expression)
-            .join(process_bams.out.umap_matrices))
+            .join(process_bams.out.umap_matrices)
+            .join(preprocess.out.bam_stats
+                .groupTuple()))
 
         // Get the metadata and stats for the report
         chunks
@@ -232,7 +238,9 @@ workflow pipeline {
             prepare_report_data.out.umap_dir.collect(),
             process_bams.out.plots,
             umap_genes,
-            workflow.manifest.version)
+            workflow.manifest.version,
+            prepare_report_data.out.bam_stats
+                .collectFile(keepHeader:true))
 }
 
 

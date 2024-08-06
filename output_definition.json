@@ -8,14 +8,6 @@
       "optional": false,
       "type": "aggregated"
     },
-    "sample-data": {
-      "filepath": "./fastq_ingress_results/reads/{{ alias }}.fastq.gz",
-      "title": "Concatenated sequence data",
-      "description": "Per sample reads concatenated in a single FASTQ file.",
-      "mime-type": "text/json",
-      "optional": false,
-      "type": "per-sample"
-    },
     "results-summary": {
       "filepath": "./{{ alias }}/config_stats.json",
       "title": "Results summaries",
