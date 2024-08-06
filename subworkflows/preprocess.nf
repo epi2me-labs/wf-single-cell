@@ -12,20 +12,6 @@ process call_paftools {
 }
 
 
-process get_chrom_sizes {
-    label "singlecell"
-    memory "1 GB"
-    cpus 1
-    input:
-        path "ref_genome.fai"
-    output:
-        path 'chr_sizes', emit: ref_chrom_sizes
-    """
-    cut -f1,2 ref_genome.fai | sort -V > chr_sizes
-    """
-}
-
-
 process build_minimap_index {
     /*
     Build minimap index from reference genome
@@ -64,12 +50,12 @@ process call_adapter_scan {
         path "bc_longlist_dir"
         path "genome_index.mmi"
         path "ref_genes.bed"
-        path "ref_chrom_sizes.tsv"
     output:
         tuple val(meta), path("adapters.json"), emit: adapter_summary
         tuple val(meta), path("read_tags.tsv"), emit: read_tags
         tuple val(meta), path("high_quality_bc_counts.tsv"), emit: barcode_counts
         tuple val(meta), path("sorted.bam"), path("sorted.bam.bai"), emit: bam_sort
+        tuple val(meta), path("bamstats.tsv"), emit: bam_stats
     script:
     def fl = params.full_length_only ? "--keep_fl_only": ""
     // alignment is the real bottleneck here, don't worry about threads
@@ -89,8 +75,7 @@ process call_adapter_scan {
         --kit ${meta['kit_name']} \
         --summary "adapters.json" \
         ${fl} \
-    | \
-    workflow-glue extract_barcode \
+    | workflow-glue extract_barcode \
         - \
         bc_longlist_dir/${meta['bc_long_list']} \
         --kit ${meta["kit_name"]} \
@@ -100,13 +85,14 @@ process call_adapter_scan {
         --umi_length ${meta['umi_length']} \
         --output_read_tags "bc_extract.tsv" \
         --output_barcode_counts "high_quality_bc_counts.tsv" \
-    | \
-    minimap2 -ax splice -uf --secondary=no --MD \
+    | minimap2 -ax splice -uf --MD \
         -t $mm2_threads -K 10M \
         --junc-bed ref_genes.bed  \
         --cap-kalloc 100m --cap-sw-mem 50m \
         genome_index.mmi - \
-    | samtools view -u --no-PG -t ref_chrom_sizes - \
+    | samtools view -uh --no-PG - \
+    | tee >(seqkit bam -s  2> bamstats.tsv ) \
+    | samtools view -uh -F 256 - \
     | tee >(samtools sort --write-index -o "sorted.bam"##idx##"sorted.bam.bai" --no-PG  -) \
     | seqkit bam -F - 2> bam_info.tsv
 
@@ -147,7 +133,6 @@ workflow preprocess {
     main:
         // alignment pre-requisites
         call_paftools(ref_genes_gtf)
-        get_chrom_sizes(ref_genome_idx)
         build_minimap_index(ref_genome_fasta)
         
         // find adapters, trim barcodes, and align
@@ -155,8 +140,7 @@ workflow preprocess {
             read_chunks,
             bc_longlist_dir,
             build_minimap_index.out.index,
-            call_paftools.out.ref_genes_bed,
-            get_chrom_sizes.out.ref_chrom_sizes)
+            call_paftools.out.ref_genes_bed)
 
         // TODO: we don't necessarily need to merge these, they
         //       could just be given to the final reporting
@@ -166,6 +150,7 @@ workflow preprocess {
 
     emit:
         bam_sort = call_adapter_scan.out.bam_sort
+        bam_stats = call_adapter_scan.out.bam_stats
         read_tags = call_adapter_scan.out.read_tags
         high_qual_bc_counts = call_adapter_scan.out.barcode_counts
         adapter_summary = call_adapter_scan.out.adapter_summary

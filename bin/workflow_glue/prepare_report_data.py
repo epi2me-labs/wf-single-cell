@@ -22,6 +22,9 @@ def argparser():
         "adapter_stats", type=Path,
         help="Workflow summary statistics")
     parser.add_argument(
+        "bam_stats", type=Path,
+        help="Alignment summary statistics")
+    parser.add_argument(
         "expression_stats", type=Path,
         help="Expression summary statistics")
     parser.add_argument(
@@ -30,7 +33,36 @@ def argparser():
     parser.add_argument(
         "survival_out", type=Path,
         help="Output TSV with survival data for each stage.")
+    parser.add_argument(
+        "bam_stats_out", type=Path,
+        help="Output TSV with combined alignment summary stats.")
     return parser
+
+
+def combine_bam_stats(input_dir, sample_id):
+    """Aggregate alignment statistics."""
+    dfs = []
+    colnames = {
+        "PrimAln": "primary",
+        "SecAln": "secondary",
+        "SupAln": "supplementary",
+        "Unmapped": "unmapped",
+        "TotalReads": "reads_aligned"
+
+    }
+    for stats in input_dir.glob('*.tsv'):
+        dfs.append(pd.read_csv(
+            stats, sep='\t',
+            usecols=colnames.keys(),
+            dtype=int
+        ))
+    df = pd.concat(dfs)
+    df = pd.DataFrame(df.sum(axis=0)).T
+    df = df.rename(columns=colnames)
+    df.insert(0, 'sample', sample_id)
+    df.insert(1, 'reads_aligned', df.pop('reads_aligned'))
+
+    return df
 
 
 def combine_expression_stats(input_dir):
@@ -80,7 +112,10 @@ def main(args):
         .reset_index(names="statistic"))
 
     n_reads = survival.loc[survival['statistic'] == 'reads', 'count'].values[0]
-    # this is a little non-sensical for some stats
+    # this is a little nonsensical for some stats
     survival['Proportion of reads [%]'] = 100 * survival['count'] / n_reads
     survival['sample_id'] = args.sample_id
     survival.to_csv(args.survival_out, sep='\t', index=False)
+
+    aln_stats = combine_bam_stats(args.bam_stats, args.sample_id)
+    aln_stats.to_csv(args.bam_stats_out, sep='\t', index=False)

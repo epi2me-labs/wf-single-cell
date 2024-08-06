@@ -318,7 +318,7 @@ def align_adapter(args, fastq_out=sys.stdout):
                 if bc_min_qv >= args.min_barcode_qv:
                     barcode_counts[barcode] += 1
 
-                # Escape double quotes, with a precedding `"` in the quality strings
+                # Escape double quotes, with a preceding `"` in the quality strings
                 # see https://rfc-editor.org/rfc/rfc4180.html
                 umi_q_quoted = umi_qscores.replace('"', '""')
                 barcode_q_quoted = bc_qscores.replace('"', '""')

@@ -3,7 +3,6 @@ Output files may be aggregated including information for all samples or provided
 | Title | File path | Description | Per sample or aggregated |
 |-------|-----------|-------------|--------------------------|
 | workflow report | ./wf-single-cell-report.html | Report for all samples | aggregated |
-| Concatenated sequence data | ./fastq_ingress_results/reads/{{ alias }}.fastq.gz | Per sample reads concatenated in a single FASTQ file. | per-sample |
 | Results summaries | ./{{ alias }}/config_stats.json | Results summaries including adapter configuration numbers. | per-sample |
 | Gene expression counts | ./{{ alias }}/gene_expression.counts.tsv | Gene x cell expression matrix. | per-sample |
 | Processed gene expression counts | ./{{ alias }}/gene_expression.processed.tsv | Filtered and normalized gene x cell expression matrix. | per-sample |

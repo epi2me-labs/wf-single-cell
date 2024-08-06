@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from dominate.tags import b, figure, h6, img, li, p, ul
+from dominate.util import raw
 import ezcharts
 from ezcharts.components import fastcat
 from ezcharts.components.ezchart import EZChart
@@ -207,6 +208,25 @@ def main(args):
                     grp.loc['genes', 'count'],
                     grp.loc['transcripts', 'count']])
 
+    with report.add_section('Alignment summary', 'Alignment'):
+        p("""Summaries of genome read alignment per sample.""")
+        raw("""Note that <i>reads aligned</i> may be less than the total number of
+        input reads if non-full-length reads were filtered.
+        see option: <i>full_length_only</i>.""")
+
+        dtypes = {
+            "primary": int,
+            "secondary": int,
+            "supplementary": int,
+            "unmapped": int,
+            "total_reads": int,
+            "sample": str
+        }
+        df_aln = pd.read_csv(args.bam_stats, sep='\t', index_col=0, dtype=dtypes)
+        df_aln = df_aln.rename(
+            columns={'sample': 'sample ID', "reads aligned": "reads aligned"})
+        DataTable.from_pandas(df_aln, use_index=True)
+
     with report.add_section('Read survival by stage', 'Attrition'):
         p(
             """These plots detail the number of remaining reads at different
@@ -363,6 +383,9 @@ def argparser():
     parser.add_argument(
         "--survival",
         help="Read survival data in TSV format")
+    parser.add_argument(
+        "--bam_stats",
+        help="Alignment summary statistics in TSV format")
     parser.add_argument(
         "--params", help="Workflow params json file")
     parser.add_argument(
