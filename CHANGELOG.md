@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - Alignment summary section to report.
+- Support for 10x 3prime v4 (GEM-X) (`--kit 3prime:v4`). 
 
 ## [v2.1.0]
 ### Changed

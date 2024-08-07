@@ -44,10 +44,12 @@
                     "enum": [
                         "3prime:v2",
                         "3prime:v3",
+                        "3prime:v4",
                         "5prime:v1",
                         "5prime:v2",
                         "multiome:v1",
                         "visium:v1"
+
                     ]
                 },
                 "expected_cells": {
