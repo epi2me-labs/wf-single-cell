@@ -20,10 +20,10 @@ In brief, the workflow does the following:
 + Calculation of library saturation.
 
 This workflow supports the following 10x kits:
-+ 3prime
-+ 5prime
-+ multiome (gene expression only)
-+ visium spatial transcriptomics
++ 3': v2/v3 and v4 (GEM-X)
++ 5': v1/v2
++ multiome (gene expression only): v1 
++ visium spatial transcriptomics: v1
 
 
 The [BLAZE](https://github.com/shimlab/BLAZE) preprint provided useful benchmarking of the original sockeye implementation. 
