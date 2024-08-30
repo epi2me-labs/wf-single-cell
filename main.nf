@@ -61,17 +61,19 @@ process makeReport {
         path 'params.csv'
         path stats, stageAs: "stats_*"
         path 'survival.tsv'
-        path umap_dirs
+        path expression_dirs
         path images
         path umap_genes
         val wf_version
         path 'bam_stats.tsv'
+        path visium_coords, stageAs: "visium_ccords.tv"
 
     output:
         path "wf-single-cell-*.html"
     script:
         String report_name = "wf-single-cell-report.html"
         String metadata = new JsonBuilder(metadata).toPrettyString()
+        def visium_opt = visium_coords.fileName.name != OPTIONAL_FILE.name ? '--visium_spatial_coords visium_ccords.tv' : ""
     """
     echo '${metadata}' > metadata.json
     workflow-glue report \
@@ -80,13 +82,14 @@ process makeReport {
         --params params.csv \
         --versions versions \
         --survival survival.tsv \
-        --umap_dirs $umap_dirs \
+        --expr_dirs $expression_dirs \
         --images $images \
         --umap_genes $umap_genes \
         --metadata metadata.json \
         --wf_version $wf_version \
         --metadata metadata.json \
-        --bam_stats bam_stats.tsv
+        --bam_stats bam_stats.tsv \
+        $visium_opt
     """
 }
 
@@ -132,33 +135,39 @@ process prepare_report_data {
               path('adapter_stats/stats*.json'),
               path('expression_stats/stats*.json'),
               path('white_list.txt'),
+              path('raw_gene_expression'),
               path('gene_mean_expression.tsv'),
               path('transcript_mean_expression.tsv'),
               path('mitochondrial_expression.tsv'),
               path(umaps),
               path('bamstats/bam_stats*.tsv')
+        path("genes_of_interest.tsv")
     output:
         // sample_id column added to survival.tsv and bm_stats.tsv no need for meta
         path "survival.tsv", emit: survival
         path "bam_stats.tsv", emit: bam_stats
-        path "${meta.alias}_umap", emit: umap_dir
+        path "${meta.alias}_expression", emit: expression_dir
 
     script:
         opt_umap = umaps.name != 'OPTIONAL_FILE'
         String hist_dir = "histogram_stats/${meta.alias}"
     """
+    # Make a directory to stick some expression related files per sample
+    expression_dir="${meta.alias}_expression"
+    mkdir \$expression_dir
+    echo \$expression_dir
     workflow-glue prepare_report_data \
-        "${meta.alias}" adapter_stats bamstats expression_stats white_list.txt survival.tsv bam_stats.tsv
+        "${meta.alias}" adapter_stats bamstats expression_stats \
+        white_list.txt survival.tsv bam_stats.tsv raw_gene_expression genes_of_interest.tsv
 
-    umd=${meta.alias}_umap
-    mkdir \$umd
+
     if [ "$opt_umap" = true ]; then
         echo "Adding umap data to sample directory"
         # Add data required for umap plotting into sample directory
-        mv *umap*.tsv \$umd
-        mv gene_mean_expression.tsv \$umd
-        mv transcript_mean_expression.tsv \$umd
-        mv mitochondrial_expression.tsv \$umd
+        mv *umap*.tsv \$expression_dir
+        mv gene_mean_expression.tsv \$expression_dir
+        mv transcript_mean_expression.tsv \$expression_dir
+        mv mitochondrial_expression.tsv \$expression_dir
     else
         touch "\$umd"/OPTIONAL_FILE
     fi
@@ -171,7 +180,7 @@ workflow pipeline {
     take:
         chunks
         ref_genome_dir
-        umap_genes
+        genes_of_interest
     main:
         // throw an exception for deprecated conda users
         if (workflow.profile.contains("conda")) {
@@ -187,6 +196,12 @@ workflow pipeline {
         workflow_params = getParams()
 
         bc_longlist_dir = file("${projectDir}/data", checkIfExists: true)
+        if (params.kit == 'visium:v1'){
+            visium_coords = file("${bc_longlist_dir}/visium-v1_coordinates.txt", checkIfExists: true)
+        }
+        else {
+             visium_coords = OPTIONAL_FILE
+        }
 
         preprocess(
             chunks.map{meta, fastq, stats -> [meta, fastq]},
@@ -203,18 +218,22 @@ workflow pipeline {
             ref_genome_fasta,
             ref_genome_idx)
 
-        prepare_report_data(
+       prepare_report_data(
             preprocess.out.adapter_summary.groupTuple()
             .join(process_bams.out.expression_stats
                 .groupTuple()
                 .map{meta, chrs, stats -> [meta, stats]})
             .join(process_bams.out.white_list)
+            .join(process_bams.out.raw_gene_expression)
             .join(process_bams.out.gene_mean_expression)
             .join(process_bams.out.transcript_mean_expression)
             .join(process_bams.out.mitochondrial_expression)
             .join(process_bams.out.umap_matrices)
             .join(preprocess.out.bam_stats
-                .groupTuple()))
+                .groupTuple()),
+            genes_of_interest
+            )
+
 
         // Get the metadata and stats for the report
         chunks
@@ -235,12 +254,13 @@ workflow pipeline {
             stats,
             prepare_report_data.out.survival
                 .collectFile(keepHeader:true),
-            prepare_report_data.out.umap_dir.collect(),
+            prepare_report_data.out.expression_dir.collect(),
             process_bams.out.plots,
-            umap_genes,
+            genes_of_interest,
             workflow.manifest.version,
             prepare_report_data.out.bam_stats
-                .collectFile(keepHeader:true))
+                .collectFile(keepHeader:true),
+            visium_coords)
 }
 
 
@@ -251,10 +271,10 @@ workflow {
     Pinguscript.ping_start(nextflow, workflow, params)
     ref_genome_dir = file(params.ref_genome_dir, checkIfExists: true)
 
-    if (params.umap_plot_genes){
-        umap_genes = file(params.umap_plot_genes, checkIfExists: true)
+    if (params.genes_of_interest){
+        genes_of_interest = file(params.genes_of_interest, checkIfExists: true)
     }else{
-        umap_genes = file("${projectDir}/umap_plot_genes.csv", checkIfExists: true)
+        genes_of_interest = file("${projectDir}/data/genes_of_interest.csv", checkIfExists: true)
     }
 
     if (params.kit_config){
@@ -311,7 +331,7 @@ workflow {
     pipeline(
         sample_and_kit_meta,
         ref_genome_dir,
-        umap_genes)
+        genes_of_interest)
 }
 
 workflow.onComplete {

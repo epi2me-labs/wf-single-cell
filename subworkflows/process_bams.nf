@@ -298,7 +298,7 @@ process process_matrix {
         --mito_prefixes $mito_prefixes \
         --norm_count $params.matrix_norm_count \
         --enable_umap \
-        --replicates 3 
+        --replicates 3
     """
 }
 
@@ -518,6 +518,9 @@ workflow process_bams {
         plots = pack_images.out.collect{it -> it[1]}.collect()
         white_list = generate_whitelist.out.whitelist
         gene_mean_expression = process_matrix.out.meancell
+            .filter{it[1] == "gene"}
+            .map{it->[it[0], it[2]]}
+        raw_gene_expression = process_matrix.out.raw
             .filter{it[1] == "gene"}
             .map{it->[it[0], it[2]]}
         transcript_mean_expression = process_matrix.out.meancell
