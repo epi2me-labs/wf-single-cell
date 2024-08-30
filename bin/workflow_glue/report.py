@@ -3,7 +3,10 @@ import base64
 import json
 from pathlib import Path
 
-from dominate.tags import b, figure, h6, img, li, p, ul
+from bokeh.models import ColorBar
+from bokeh.models.tickers import BasicTicker
+from bokeh.transform import linear_cmap
+from dominate.tags import b, figure, img, li, p, ul
 from dominate.util import raw
 import ezcharts
 from ezcharts.components import fastcat
@@ -11,8 +14,10 @@ from ezcharts.components.ezchart import EZChart
 from ezcharts.components.reports.labs import LabsReport
 from ezcharts.components.theme import LAB_head_resources
 from ezcharts.layout.snippets import DataTable, Grid, Tabs
-from ezcharts.plots import Plot, util
+from ezcharts.plots import BokehPlot, Plot, util
 from ezcharts.util import get_named_logger
+import matplotlib
+import numpy as np
 import pandas as pd
 
 from .util import wf_parser  # noqa: ABS101
@@ -24,9 +29,87 @@ REPORT_TITLE = f'{WORKFLOW_NAME} report'
 Colors = util.Colors
 
 
+def visium_spatial_plots(coords_file, sample_dirs):
+    """
+    Plot visium spatial expression.
+
+    :param coords_file: path to 10x barcode coordinate file
+    :param sample_dirs: per-sample directories containing gene expression data.
+    """
+    # Read barcode coordinates
+    xy_df = pd.read_csv(
+        coords_file,
+        delimiter="\t",
+        names=["barcode", "X", "Y"]
+    ).set_index("barcode")
+
+    raw(
+        """These plots display the raw, UMI deduplicated, expression levels of the
+        genes listed in the <i>genes_of_interest</i> file.
+        Each point represents a spot on the 10x Visium expression slide.""")
+    tabs = Tabs()
+
+    for d in sample_dirs:
+        sample_id = d.replace('_expression', '')
+        sample_dir = Path(d)
+        goi_file = sample_dir / 'raw_goi_expression.tsv'
+
+        goi_df = pd.read_csv(goi_file, sep='\t', index_col=0)
+        goi_df = goi_df.sort_index()
+
+        no_data = goi_df.loc[~goi_df.any(axis=1)]
+        goi_df = goi_df.loc[goi_df.any(axis=1)]
+
+        with tabs.add_dropdown_menu(sample_id, change_header=False):
+            for i in range(0, len(goi_df), 2):
+                df_subset = goi_df.iloc[i: i+2]
+                genes = "; ".join(df_subset.index.tolist())
+
+                with tabs.add_dropdown_tab(genes):
+                    with Grid(columns=2):
+                        for gene_name, gene_data in df_subset.iterrows():
+                            df = xy_df.copy().assign(gene=gene_data)
+                            plt = BokehPlot(toolbar_location='right')
+
+                            mpl_cmap = (
+                                matplotlib.colors.LinearSegmentedColormap.from_list(
+                                    "visium_rainbow_cmap",
+                                    [
+                                        '#2d009e',
+                                        '#42cef5',
+                                        '#42f545',
+                                        '#f2f542',
+                                        '#f54242',
+                                        '#960000'
+                                    ])
+                            )
+                            # Set zeros to NAN as these can be individually set a color
+                            df.replace(0, np.nan, inplace=True)
+                            pallete = [
+                                matplotlib.colors.rgb2hex(mpl_cmap(c))
+                                for c in range(mpl_cmap.N)]
+                            cmap = linear_cmap(
+                                field_name='gene',
+                                palette=pallete,
+                                low=0,
+                                high=np.nanmax(gene_data), nan_color=(50, 50, 50, 0.1))
+                            plt._fig.scatter(
+                                x='X', y='Y', source=df, fill_color=cmap,
+                                line_alpha=0.0, radius=1.0)
+                            color_bar = ColorBar(
+                                color_mapper=cmap['transform'], width=8, title='count',
+                                ticker=BasicTicker(min_interval=1))
+                            plt._fig.title.text = gene_name
+                            plt._fig.add_layout(color_bar, 'right')
+                            EZChart(plt, width='500px', height='500px')
+        if len(no_data) > 1:
+            raw(f"<br>The following genes were not found in the expression matrix: "
+                f"{', '.join(no_data.index)}")
+
+
 def umap_plots(umaps_dirs, genes_file):
     """Plot UMAPs."""
-    # Raad single column gene list file
+    # Read single column gene list file
     genes = pd.read_csv(genes_file, header=None)[0]
 
     sample_tabs = Tabs()
@@ -126,6 +209,7 @@ def umap_plots(umaps_dirs, genes_file):
                                   'annotation', hue='mito_pct')
 
                         # Plot expression levels from a single gene over gene UMAP.
+                        no_data = []
                         for gene in genes:
                             if gene in gene_mean_expression.index:
                                 go_data = gene_umap.merge(
@@ -137,7 +221,11 @@ def umap_plots(umaps_dirs, genes_file):
                                           f'annotation: {gene}',
                                     hue=gene)
                             else:
-                                h6(f'{gene} not in dataset / has been filtered out')
+                                no_data.append(gene)
+                    if no_data:
+                        p(
+                            "The following genes were not in the dataset "
+                            f"/ so have been filtered out: {', '.join(no_data)}")
 
 
 def diagnostic_plots(img_dirs):
@@ -344,27 +432,28 @@ def main(args):
 
         diagnostic_plots(args.images)
 
-    # Check if umaps were skipped
-    if not (Path(args.umap_dirs[0]) / 'OPTIONAL_FILE').is_file():
-        with report.add_section('UMAP projections', 'UMAP'):
-            p(
-                """This section presents various UMAP projections
-                of the data.
-                UMAP is an unsupervised algorithm that projects the
-                multidimensional single cell expression data into 2
-                dimensions. This could reveal structure in the data representing
-                different cell types or cells that share common regulatory
-                pathways, for example.
+    with report.add_section('UMAP projections', 'UMAP'):
+        p(
+            """This section presents various UMAP projections
+            of the data.
+            UMAP is an unsupervised algorithm that projects the
+            multidimensional single cell expression data into 2
+            dimensions. This could reveal structure in the data representing
+            different cell types or cells that share common regulatory
+            pathways, for example.
 
-                The UMAP algorithm is stochastic; analysing the same data
-                multiple times with UMAP, using identical parameters, can lead to
-                visually different projections.
-                In order to have some confidence in the observed results,
-                it can be useful to run the projection multiple times and so a series of
-                UMAP projections can be viewed below.""")
-            umap_plots(args.umap_dirs, args.umap_genes)
-    else:
-        logger.info('Skipping UMAP plotting')
+            The UMAP algorithm is stochastic; analysing the same data
+            multiple times with UMAP, using identical parameters, can lead to
+            visually different projections.
+            In order to have some confidence in the observed results,
+            it can be useful to run the projection multiple times and so a series of
+            UMAP projections can be viewed below.""")
+        umap_plots(args.expr_dirs, args.umap_genes)
+
+    # Check if visium data were analysed
+    if args.visium_spatial_coords:
+        with report.add_section('Visium spatial plots', 'Visium'):
+            visium_spatial_plots(args.visium_spatial_coords, args.expr_dirs)
 
     report.write(args.report)
     logger.info('Report writing finished')
@@ -391,7 +480,7 @@ def argparser():
     parser.add_argument(
         "--versions", help="Workflow versions file")
     parser.add_argument(
-        "--umap_dirs", nargs='+',
+        "--expr_dirs", nargs='+',
         help="Sample directories containing umap and gene expression files")
     parser.add_argument(
         "--umap_genes", help="File containing list of genes to annnotate UMAPs")
@@ -401,4 +490,7 @@ def argparser():
     parser.add_argument(
         "--wf_version", default='unknown',
         help="version of the executed workflow")
+    parser.add_argument(
+        "--visium_spatial_coords", default=False, type=Path,
+        help='')
     return parser

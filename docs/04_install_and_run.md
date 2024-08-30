@@ -50,7 +50,7 @@ nextflow run epi2me-labs/wf-single-cell \
 	--fastq 'wf-single-cell-demo/chr17.fq.gz' \
 	--kit '3prime:v3' \
 	--ref_genome_dir 'wf-single-cell-demo' \
-	--umap_plot_genes 'wf-single-cell-demo/umap_plot_genes.csv' \
+	--genes_of_interest 'wf-single-cell-demo/umap_plot_genes.csv' \
 	-profile standard
 ```
 

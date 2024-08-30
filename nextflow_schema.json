@@ -214,11 +214,11 @@
                     "description": "Normalize expression matrix to <matrix_norm_count> counts per cell.",
                     "default": 10000
                 },
-                "umap_plot_genes": {
+                "genes_of_interest": {
                     "type": "string",
                     "format": "path",
-                    "title": "UMAP gene list",
-                    "description": "File containing a list of gene symbols (one symbol per line) to annotate with expression values in the UMAP projections."
+                    "title": "Gene of interest file",
+                    "description": "File containing a list of gene symbols (one symbol per line) to annotate with expression values in the UMAP projections. If doing visium spatial analysis, these genes will be used to annotate the spatial plots. "
                 },
                 "mito_prefix": {
                     "type": "string",

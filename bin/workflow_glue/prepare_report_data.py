@@ -1,7 +1,9 @@
 """Prepare data for the report."""
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+from scipy.io import mmread
 
 from .adapter_scan_vsearch import AdapterSummary  # noqa: ABS101
 from .create_matrix import ExpressionSummary  # noqa: ABS101
@@ -36,6 +38,12 @@ def argparser():
     parser.add_argument(
         "bam_stats_out", type=Path,
         help="Output TSV with combined alignment summary stats.")
+    parser.add_argument(
+        "raw_gene_expression", type=Path,
+        help="Sparse data in MEX format.")
+    parser.add_argument(
+        "genes_of_interest", type=Path,
+        help="TSV file of file names.")
     return parser
 
 
@@ -98,6 +106,31 @@ def get_total_cells(white_list):
     return {"cells": total_cells}
 
 
+def get_genes_of_interest_expression(mex_dir, genes):
+    """Get a subset of the expression data.
+
+    Given a list of genes, extract corresponding expression data from the MEX format
+    matrix.
+    """
+    genes_to_plot = pd.read_csv(genes, header=None)[0]
+    matrix = mmread(mex_dir / 'matrix.mtx.gz')
+    barcodes = pd.read_csv(mex_dir / 'barcodes.tsv.gz', header=None)
+    # Remove '-1' suffix from barcodes
+    barcodes = barcodes[0].str.split('-', expand=True)[0]
+    features = pd.read_csv(mex_dir / 'features.tsv.gz', sep='\t', header=None)[1]
+    rows = []
+    for g in genes_to_plot:
+        try:
+            feature_idx = features[features == g].index[0]
+            rows.append(np.array(matrix.getrow(feature_idx).todense()).flatten())
+        except IndexError:
+            rows.append([np.nan] * len(barcodes))
+
+    return (
+        pd.DataFrame.from_records(rows, index=genes_to_plot, columns=barcodes)
+    )
+
+
 def main(args):
     """Entry point for script."""
     logger = get_named_logger('PrepReport')
@@ -119,3 +152,8 @@ def main(args):
 
     aln_stats = combine_bam_stats(args.bam_stats, args.sample_id)
     aln_stats.to_csv(args.bam_stats_out, sep='\t', index=False)
+
+    goi_df = get_genes_of_interest_expression(
+        args.raw_gene_expression, args.genes_of_interest)
+    goi_df.to_csv(
+        Path(f"{args.sample_id}_expression") / 'raw_goi_expression.tsv', sep='\t')

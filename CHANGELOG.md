@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Added
+- Spatial plotting of visium data in workflow report for genes specified by `--genes_of_interest`.
+### Changed
+- The genes to be used for annotating UMAP plots are now specified by `--genes_of_interest`.
+
 ## [v2.2.0]
 ### Added
 - Alignment summary section to report.
@@ -11,14 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [v2.1.0]
 ### Changed
-- Options `--kit_name` and `--kit_version` replaced with single option `--kit` (eg `--kit 3prime:v3`)
+- Options `--kit_name` and `--kit_version` replaced with single option `--kit` (eg `--kit 3prime:v3`).
 ### Added
 - Error handling when empty expression matrix is created.  
 - Support for Visium v1 kit.
 
 ## [v2.0.3]
 ### Fixed
-- Error when a tags file is empty
+- Error when a tags file is empty.
 ### Added
 - More informative error message when all cells or features are filtered out.
 
