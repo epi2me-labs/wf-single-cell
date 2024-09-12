@@ -66,14 +66,14 @@ process makeReport {
         path umap_genes
         val wf_version
         path 'bam_stats.tsv'
-        path visium_coords, stageAs: "visium_ccords.tv"
+        path visium_coords
 
     output:
         path "wf-single-cell-*.html"
     script:
         String report_name = "wf-single-cell-report.html"
         String metadata = new JsonBuilder(metadata).toPrettyString()
-        def visium_opt = visium_coords.fileName.name != OPTIONAL_FILE.name ? '--visium_spatial_coords visium_ccords.tv' : ""
+        def visium_opt = visium_coords.fileName.name != OPTIONAL_FILE.name ? '--visium_spatial_coords ' + visium_coords : ""
     """
     echo '${metadata}' > metadata.json
     workflow-glue report \
