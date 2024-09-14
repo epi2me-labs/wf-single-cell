@@ -1,7 +1,7 @@
 {
   "files": {
     "workflow-report": {
-      "filepath": "./wf-single-cell-report.html",
+      "filepath": "wf-single-cell-report.html",
       "title": "workflow report",
       "description": "Report for all samples",
       "mime-type": "text/html",
@@ -9,71 +9,127 @@
       "type": "aggregated"
     },
     "results-summary": {
-      "filepath": "./{{ alias }}/config_stats.json",
+      "filepath": "{{ alias }}/config_stats.json",
       "title": "Results summaries",
       "description": "Results summaries including adapter configuration numbers.",
       "mime-type": "application/json",
       "optional": false,
       "type": "per-sample"
     },
-    "gene-expression": {
-      "filepath": "./{{ alias }}/gene_expression.counts.tsv",
+    "gene-expression-matrix": {
+      "filepath": "{{ alias }}/gene_raw_feature_bc_matrix/matrix.mtx.gz",
       "title": "Gene expression counts",
-      "description": "Gene x cell expression matrix.",
-      "mime-type": "text/tab-separated-values",
+      "description": "Gene x cell expression sparse matrix values (MEX format).",
+      "mime-type": "application/gzip",
       "optional": false,
       "type": "per-sample"
     },
-    "gene-expression-processed": {
-      "filepath": "./{{ alias }}/gene_expression.processed.tsv",
-      "title": "Processed gene expression counts",
-      "description": "Filtered and normalized gene x cell expression matrix.",
-      "mime-type": "text/tab-separated-values",
+    "gene-expression-barcodes": {
+      "filepath": "{{ alias }}/gene_raw_feature_bc_matrix/barcodes.tsv.gz",
+      "title": "Gene expression barcodes",
+      "description": "Barcode column names (MEX format).",
+      "mime-type": "application/gzip",
       "optional": false,
       "type": "per-sample"
     },
-    "transcript-expression": {
-      "filepath": "./{{ alias }}/transcript_expression.counts.tsv",
+    "gene-expression-features": {
+      "filepath": "{{ alias }}/gene_raw_feature_bc_matrix/features.tsv.gz",
+      "title": "Gene expression features",
+      "description": "Feature row names (MEX format).",
+      "mime-type": "application/gzip",
+      "optional": false,
+      "type": "per-sample"
+    },
+    "transcript-expression-matrix": {
+      "filepath": "{{ alias }}/transcript_raw_feature_bc_matrix/matrix.mtx.gz",
       "title": "Transcript expression counts",
-      "description": "Transcript x cell expression matrix.",
-      "mime-type": "text/tab-separated-values",
+      "description": "Transcript x cell expression sparse matrix values (MEX format).",
+      "mime-type": "application/gzip",
       "optional": false,
       "type": "per-sample"
     },
-    "transcript-expression-processed": {
-      "filepath": "./{{ alias }}/transcript_expression.processed.tsv",
+    "transcript-expression-barcodes": {
+      "filepath": "{{ alias }}/transcript_raw_feature_bc_matrix/barcodes.tsv.gz",
+      "title": "Transcript expression MEX barcodes",
+      "description": "Barcode column names (MEX format).",
+      "mime-type": "application/gzip",
+      "optional": false,
+      "type": "per-sample"
+    },
+    "transcript-expression-features": {
+      "filepath": "{{ alias }}/transcript_raw_feature_bc_matrix/features.tsv.gz",
+      "title": "Transcript expression MEX features",
+      "description": "Feature row names (MEX format).",
+      "mime-type": "application/gzip",
+      "optional": false,
+      "type": "per-sample"
+    },
+    "gene-processed-expression-matrix": {
+      "filepath": "{{ alias }}/gene_processed_feature_bc_matrix/matrix.mtx.gz",
+      "title": "Processed gene expression counts",
+      "description": "Filtered and normalized gene x cell expression sparse matrix values (MEX format).",
+      "mime-type": "application/gzip",
+      "optional": false,
+      "type": "per-sample"
+    },
+    "gene-processed-expression-barcodes": {
+      "filepath": "{{ alias }}/gene_processed_feature_bc_matrix/barcodes.tsv.gz",
+      "title": "Processed gene expression barcodes",
+      "description": "Barcode column names (MEX format) for processed matrix.",
+      "mime-type": "application/gzip",
+      "optional": false,
+      "type": "per-sample"
+    },
+    "gene-processed-expression-features": {
+      "filepath": "{{ alias }}/gene_processed_feature_bc_matrix/features.tsv.gz",
+      "title": "Processed gene expression features",
+      "description": "Feature row names (MEX format) for processed matrix.",
+      "mime-type": "application/gzip",
+      "optional": false,
+      "type": "per-sample"
+    },
+    "transcript-processed-expression-matrix": {
+      "filepath": "{{ alias }}/transcript_processed_feature_bc_matrix/matrix.mtx.gz",
       "title": "Processed transcript expression counts",
-      "description": "Filtered and normalized transcript x cell expression matrix.",
-      "mime-type": "text/tab-separated-values",
+      "description": "Filtered and normalized transcript x cell expression sparse matrix values (MEX format).",
+      "mime-type": "application/gzip",
+      "optional": false,
+      "type": "per-sample"
+    },
+    "transcript-processed-expression-barcodes": {
+      "filepath": "{{ alias }}/transcript_processed_feature_bc_matrix/barcodes.tsv.gz",
+      "title": "Processed transcript expression MEX barcodes",
+      "description": "Barcode column names (MEX format) for processed matrix.",
+      "mime-type": "application/gzip",
+      "optional": false,
+      "type": "per-sample"
+    },
+    "transcript-processed-expression-features": {
+      "filepath": "{{ alias }}/transcript_processed_feature_bc_matrix/features.tsv.gz",
+      "title": "Processed transcript expression MEX features",
+      "description": "Feature row names (MEX format) for processed matrix.",
+      "mime-type": "application/gzip",
       "optional": false,
       "type": "per-sample"
     },
     "mitochondrial-expression": {
-      "filepath": "./{{ alias }}/gene_expression.mito.tsv",
+      "filepath": "{{ alias }}/gene_expression.mito-per-cell.tsv",
       "title": "Mitochondrial expression levels",
       "description": "Per cell mitochondrial gene expression as percentage total of total gene expression.",
       "mime-type": "text/tab-separated-values",
       "optional": false,
       "type": "per-sample"
     },
-    "read-tags": {
-      "filepath": "./{{ alias }}/read_summary.tsv",
+    "read-summary": {
+      "filepath": "{{ alias }}/read_summary.tsv",
       "title": "Read summary",
       "description": "Per read assigned barcodes UMIs genes and transcripts.",
       "mime-type": "text/tab-separated-values",
       "optional": false,
       "type": "per-sample"
     },
-    "barcode-counts": {
-      "filepath": "./{{ alias }}/uncorrected_bc_counts.tsv",
-      "title": "Barcode counts",
-      "description": "The counts of each barcode present in the sequenced library (only barcodes that have a 100% match in the 10x whitelist are included).",
-      "mime-type": "text/tab-separated-values",
-      "optional": false,
-      "type": "per-sample"
-    },
     "whitelist": {
-      "filepath": "./{{ alias }}/whitelist.tsv",
+      "filepath": "{{ alias }}/whitelist.tsv",
       "title": "Whitelist",
       "description": "The barcodes found in the library that remain after filtering.",
       "mime-type": "text/tab-separated-values",
@@ -81,7 +137,7 @@
       "type": "per-sample"
     },
     "alignment": {
-      "filepath": "./{{ alias }}/tagged.bam",
+      "filepath": "{{ alias }}/tagged.bam",
       "title": "Alignment output per sample",
       "description": "Genomic alignment output file.",
       "mime-type": "application/gzip",
@@ -89,7 +145,7 @@
       "type": "per-sample"
     },
     "alignment-index": {
-      "filepath": "./{{ alias }}/tagged.bam.bai",
+      "filepath": "{{ alias }}/tagged.bam.bai",
       "title": "Alignment index per sample",
       "description": "Genomic alignment index file.",
       "mime-type": "application/gzip",
@@ -97,7 +153,7 @@
       "type": "per-sample"
     },
     "transcriptome_fasta": {
-      "filepath": "./{{ alias }}/transcriptome.fa.gz",
+      "filepath": "{{ alias }}/transcriptome.fa.gz",
       "title": "Transcriptome sequence",
       "description": "Transcriptome generated by Stringtie during transcript discovery stage",
       "mime-type": "application/gzip",
@@ -105,7 +161,7 @@
       "type": "per-sample"
     },
     "transcriptome_annotation": {
-      "filepath": "./{{ alias }}/transcriptome.gff.gz",
+      "filepath": "{{ alias }}/transcriptome.gff.gz",
       "title": "Transcriptome annotation",
       "description": "Transcriptome annotation generated by Stringtie during transcript discovery stage",
       "mime-type": "application/gzip",
