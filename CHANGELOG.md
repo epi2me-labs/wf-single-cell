@@ -4,11 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v2.3.0]
+### Fix
+- Output schema with correct expression matrix paths.
 ### Added
 - Spatial plotting of visium data in workflow report for genes specified by `--genes_of_interest`.
 ### Changed
 - The genes to be used for annotating UMAP plots are now specified by `--genes_of_interest`.
+- Updated Ezcharts to v0.11.2.
 
 ## [v2.2.0]
 ### Added

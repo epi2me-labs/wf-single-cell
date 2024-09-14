@@ -341,9 +341,9 @@ process combine_final_tag_files {
               path("tags*.tsv")
     output:
         tuple val(meta),
-              path("read_tags.tsv")
+              path("read_summary.tsv")
     """
-    awk 'FNR>1 || NR==1' *.tsv > "read_tags.tsv"
+    awk 'FNR>1 || NR==1' *.tsv > "read_summary.tsv"
     """
 }
 
