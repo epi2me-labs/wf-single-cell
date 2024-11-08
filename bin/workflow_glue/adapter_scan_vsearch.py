@@ -321,7 +321,7 @@ class AdapterSummary(StatsSummary):
     """Summary dictionary for storing adapter configuration summaries."""
 
     fields = {
-        "reads", "full_length", "stranded", "plus", "minus",
+        "subreads", "full_length", "stranded", "plus", "minus",
         "single_adapter1", "double_adapter1",
         "single_adapter2", "double_adapter2",
         "no_adapters", "other"}
@@ -330,7 +330,7 @@ class AdapterSummary(StatsSummary):
     def from_pandas(cls, df):
         """Create an instance from a pandas dataframe."""
         stats = dict()
-        stats["reads"] = len(df)
+        stats["subreads"] = len(df)
         stats["full_length"] = len(df[df.fl].index)
         stats["stranded"] = len(df[df['orig_strand'] != '*'])
         stats["plus"] = len(df[df['orig_strand'] == '+'])

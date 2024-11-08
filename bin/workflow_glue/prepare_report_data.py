@@ -44,6 +44,9 @@ def argparser():
     parser.add_argument(
         "genes_of_interest", type=Path,
         help="TSV file of file names.")
+    parser.add_argument(
+        "n_input_seqs", type=int,
+        help="Number of seqs input to the workflow after read quality filtering.")
     return parser
 
 
@@ -139,14 +142,16 @@ def main(args):
     stats.update(combine_expression_stats(args.expression_stats))
     stats.update(combine_adapter_stats(args.adapter_stats))
     stats.update(get_total_cells(args.white_list))
+    # n seqs after any read quality filtering
+    n_input_reads = args.n_input_seqs
+    stats.update({'reads': n_input_reads})
 
     survival = (
         pd.DataFrame.from_dict(stats, orient="index", columns=['count'])
         .reset_index(names="statistic"))
 
-    n_reads = survival.loc[survival['statistic'] == 'reads', 'count'].values[0]
     # this is a little nonsensical for some stats
-    survival['Proportion of reads [%]'] = 100 * survival['count'] / n_reads
+    survival['Proportion of reads [%]'] = 100 * survival['count'] / n_input_reads
     survival['sample_id'] = args.sample_id
     survival.to_csv(args.survival_out, sep='\t', index=False)
 

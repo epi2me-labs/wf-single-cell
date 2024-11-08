@@ -65,6 +65,12 @@
                     "description": "Only process full length reads.",
                     "help_text": "If set to true, only process reads or subreads that are classified as full length (read segments flanked by compatible adapters in the expected orientation).",
                     "default": true
+                },
+                "min_read_qual": {
+                    "type": "number",
+                    "title": "Minimum read quality",
+                    "description": "Specify read quality lower limit.",
+                    "help_text": "Any reads with a quality lower than this limit will not be included in the analysis."
                 }
             },
             "allOf": [
