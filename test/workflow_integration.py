@@ -22,7 +22,7 @@ def test_workflow(wf_out_dir, sample_id):
     """Test the whole Nextflow workflow."""
     out_dir = Path(wf_out_dir)
     test_out_dir = out_dir / sample_id
-    read_tags = test_out_dir / 'read_summary.tsv'
+    read_tags = test_out_dir / 'sample1.read_summary.tsv'
 
     assert read_tags.is_file()
 

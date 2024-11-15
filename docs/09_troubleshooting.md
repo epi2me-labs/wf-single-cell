@@ -8,7 +8,9 @@ When using singularity the following error may occur:
 RuntimeError: cannot cache function 'rdist': no locator available for file '/home/epi2melabs/...'
 ```
 
-If you receive this error we suggest using the following in a `nextflow.config` file to set the cache directory to a location that is writable by the singularity container:
+If you receive this error, you may need to set the numba cache directory to a location that is writable by the singularity 
+container. To do this, add the following contents to a file (`numba.config` for example) and use `-c numba.config` in the workflow command
+to apply it.
 
 ```
 profiles {
@@ -19,5 +21,8 @@ profiles {
             runOptions = '--writable-tmpfs'
         }
     }
+}
+env {
+    NUMBA_CACHE_DIR = "${launchDir}/numba_cache"
 }
 ```

@@ -115,9 +115,9 @@ process summarize_adapter_table {
     input:
         tuple val(meta), path("inputs/summary*.json")
     output:
-        tuple val(meta), path("config_stats.json"), emit: config_stats
+        tuple val(meta), path("${meta.alias}.config_stats.json"), emit: config_stats
     """
-    workflow-glue summarise_adapters inputs config_stats.json
+    workflow-glue summarise_adapters inputs "${meta.alias}.config_stats.json"
     """
 }
 

@@ -162,9 +162,7 @@ def main(args):
             logger.info(f"UMAP Embedding has shape: {embedding.shape}")
 
             # would be nice to avoid a copy here, but the array is fairly small
-            fname = args.umap_tsv
-            if args.replicates > 1:
-                fname = args.umap_tsv.with_suffix(f".{replicate}{args.umap_tsv.suffix}")
+            fname = str(args.umap_tsv).replace('REPEAT', str(replicate))
             logger.info(f"Writing UMAP embedding {fname}.")
             cols = [f"D{i+1}" for i in range(args.dimensions)]
             out = pd.DataFrame(embedding, columns=cols, index=matrix.tcells)
