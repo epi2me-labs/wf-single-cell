@@ -171,7 +171,7 @@ process stringtie {
 process align_to_transcriptome {
     label "singlecell"
     cpus params.threads
-    memory = "32 GB"
+    memory = "31 GB"
     input:
         tuple val(meta),
               val(chr),
