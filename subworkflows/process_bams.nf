@@ -19,13 +19,13 @@ process generate_whitelist{
     label "singlecell"
     cpus 4
     memory "4 GB"
-    publishDir "${params.out_dir}/${meta.alias}", mode: 'copy'
+    publishDir "${params.out_dir}/${meta.alias}", mode: 'copy', pattern: "*.whitelist.tsv"
     input:
         tuple val(meta),
               path("barcodes/?_barcode.tsv")
     output:
         tuple val(meta),
-              path("whitelist.tsv"),
+              path("${meta.alias}.whitelist.tsv"),
               emit: whitelist
         tuple val(meta),
               path("kneeplot.png"),
@@ -41,7 +41,7 @@ process generate_whitelist{
     def no_thresholding_opt = meta.kit.split(':')[0] == 'visium' ? '--no_cell_filter' : ""
     """
     workflow-glue create_shortlist \
-        barcodes whitelist.tsv \
+        barcodes "${meta.alias}.whitelist.tsv" \
         --counts \
         --method quantile \
         --exp_cells ${meta['expected_cells']} \
@@ -273,12 +273,12 @@ process process_matrix {
     input:
         tuple val(meta), val(feature), path('inputs/matrix*.hdf')
     output:
-        tuple val(meta), val(feature), path("${feature}_raw_feature_bc_matrix"), emit: raw
-        tuple val(meta), val(feature), path("${feature}_processed_feature_bc_matrix"), emit: processed
-        tuple val(meta), val(feature), path("${feature}.expression.mean-per-cell.tsv"), emit: meancell
+        tuple val(meta), val(feature), path("${meta.alias}.${feature}_raw_feature_bc_matrix"), emit: raw
+        tuple val(meta), val(feature), path("${meta.alias}.${feature}_processed_feature_bc_matrix"), emit: processed
+        tuple val(meta), val(feature), path("${meta.alias}.${feature}_expression_mean_per_cell.tsv"), emit: meancell
         // mito per cell makes sense only for feature=gene for now.
-        tuple val(meta), val(feature), path("gene.expression.mito-per-cell.tsv"), emit: mitocell, optional: true
-        tuple val(meta), val(feature), path("${feature}.expression.umap*.tsv"), emit: umap
+        tuple val(meta), val(feature), path("${meta.alias}.gene_expression_mito_per_cell.tsv"), emit: mitocell, optional: true
+        tuple val(meta), val(feature), path("${meta.alias}.${feature}_expression_umap*.tsv"), emit: umap
     script:
     def mito_prefixes = params.mito_prefix.replaceAll(',', ' ')
     """
@@ -286,11 +286,11 @@ process process_matrix {
     workflow-glue process_matrix \
         inputs/matrix*.hdf \
         --feature ${feature} \
-        --raw ${feature}_raw_feature_bc_matrix \
-        --processed ${feature}_processed_feature_bc_matrix \
-        --per_cell_mito ${feature}.expression.mito-per-cell.tsv \
-        --per_cell_expr ${feature}.expression.mean-per-cell.tsv \
-        --umap_tsv ${feature}.expression.umap.tsv \
+        --raw "${meta.alias}.${feature}_raw_feature_bc_matrix" \
+        --processed "${meta.alias}.${feature}_processed_feature_bc_matrix" \
+        --per_cell_mito "${meta.alias}.${feature}_expression_mito_per_cell.tsv" \
+        --per_cell_expr "${meta.alias}.${feature}_expression_mean_per_cell.tsv" \
+        --umap_tsv "${meta.alias}.${feature}_expression_umap_REPEAT.tsv" \
         --enable_filtering \
         --min_features $params.matrix_min_genes \
         --min_cells $params.matrix_min_cells \
@@ -315,17 +315,17 @@ process merge_transcriptome {
             path('gffs/?.gff')
     output:
         tuple val(meta),
-            path("transcriptome.gff.gz"),
-            path("transcriptome.fa.gz"),
+            path("${meta.alias}.transcriptome.gff.gz"),
+            path("${meta.alias}.transcriptome.fa.gz"),
             emit: merged_annotation
     """
     find fasta/ -name '*.fa' -exec cat {} + \
         | bgzip --threads ${task.cpus} -c  \
-        > "transcriptome.fa.gz"
+        > "${meta.alias}.transcriptome.fa.gz"
     find gffs/ -name '*.gff' -exec cat {} + \
         | grep -v '^#' \
         | bgzip --threads ${task.cpus} -c  \
-        > "transcriptome.gff.gz"
+        > "${meta.alias}.transcriptome.gff.gz"
     """
 }
 
@@ -341,9 +341,9 @@ process combine_final_tag_files {
               path("tags*.tsv")
     output:
         tuple val(meta),
-              path("read_summary.tsv")
+              path("${meta.alias}.read_summary.tsv")
     """
-    awk 'FNR>1 || NR==1' *.tsv > "read_summary.tsv"
+    awk 'FNR>1 || NR==1' *.tsv > "${meta.alias}.read_summary.tsv"
     """
 }
 
@@ -393,13 +393,13 @@ process tag_bam {
     input:
         tuple val(meta), path('align.bam'), path('align.bam.bai'), path('tags/tag_*.tsv')
     output:
-         tuple val(meta), path("tagged.bam"), path('tagged.bam.bai')
+         tuple val(meta), path("${meta.alias}.tagged.bam"), path("${meta.alias}.tagged.bam.bai")
     script:
     """
     workflow-glue tag_bam \
-        align.bam tagged.bam tags \
+        align.bam "${meta.alias}.tagged.bam" tags \
         --threads ${task.cpus}
-    samtools index -@ ${task.cpus} "tagged.bam"
+    samtools index -@ ${task.cpus} "${meta.alias}.tagged.bam"
     """
 }
 
