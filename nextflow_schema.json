@@ -40,7 +40,6 @@
                     "title": "10x kit and version",
                     "description": "The 10x kit and version separated by a colon (eg: 3prime:v3)",
                     "help_text": "10x kits can be released with different versions, each requiring a specific whitelist that is looked-up by the workflow. If `single_cell_sample_sheet` is not defined, the 10x kit is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied.",
-                    "default":  "3prime:v3",
                     "enum": [
                         "3prime:v2",
                         "3prime:v3",
@@ -56,8 +55,14 @@
                     "type": "integer",
                     "title": "Expected cell number",
                     "description": "Number of expected cells in the sample.",
-                    "help_text": "The number of expected cells. If `single_cell_sample_sheet` is not defined, `expected_cells` is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied.",
-                    "default": 500
+                    "help_text": "The number of expected cells. If `single_cell_sample_sheet` is not defined, `expected_cells` is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied."
+                },
+                "single_cell_sample_sheet": {
+                    "type": "string",
+                    "title": "Single cell sample sheet",
+                    "description": "An optional CSV file used to assign library metadata per sample. If all samples have the same library metadata, this can be supplied instead by using the `--kit` and `--expected_cells` parameters.",
+                    "help_text": "Columns should be: [sample_id, kit, exp_cells]. This must not be confused with the MinKNOW sample_sheet. `sample_id` should correspond to `sample_name` which is defined either in the `sample_sheet`, given by the `sample` parameter (for single sample runs) or if no `sample_sheet` or `sample` is given, is derived from the folder name containing the FASTQ files.",
+                    "format": "file-path"
                 },
                 "full_length_only": {
                     "type": "boolean",
@@ -92,6 +97,20 @@
                             ]
                         }
                     ]
+                },
+                {
+                    "oneOf": [
+                        {
+                           "required": [
+                               "single_cell_sample_sheet"
+                           ]
+                        },
+                        {
+                            "required": [
+                                "kit"
+                            ]
+                        }
+                    ]
                 }
             ]
         },
@@ -101,13 +120,6 @@
             "fa_icon": "fas fa-vials",
             "description": "Parameters that relate to samples such as sample sheets and sample names.",
             "properties": {
-                "single_cell_sample_sheet": {
-                    "type": "string",
-                    "title": "Single cell sample sheet",
-                    "description": "An optional CSV file used to assign library metadata to the different samples. If all samples have the same library metadata, this can be supplied instead by using the parameters (kit, expected cells).",
-                    "help_text": "Columns should be: [sample_id, kit, exp_cells]. This must not be confused with the MinKNOW sample_sheet. `sample_id` should correspond to `sample_name` which is defined either in the `sample_sheet`, given by the `sample` parameter (for single sample runs) or if no `sample_sheet` or `sample` is given, is derived from the folder name containing the FASTQ files.",
-                    "format": "file-path"
-                },
                 "sample_sheet": {
                     "type": "string",
                     "format": "file-path",

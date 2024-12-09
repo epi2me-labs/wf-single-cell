@@ -117,6 +117,10 @@ process parse_kit_metadata {
             --output merged.csv
         """
     }else{
+        // A visium barcode is a tissue coordinate not a cell, so we don't need expected cells.
+        if (params.kit.split(':')[0] != "visium" & params.expected_cells == null ){
+            throw new Exception("expected_cells should be provided for 10x kits other than Visium")
+        }
         """
         workflow-glue parse_kit_metadata from_cli \
             --kit_config kit_config.csv \
