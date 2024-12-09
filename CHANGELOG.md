@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Output filenames to include sample alias.
 - Output filename formating standardised.
 - In the report 'reads' now refers to number of reads not subreads.
+- Reconcile wf with template v5.3.3
 ### Added 
 - Minimum read quality filter.
 

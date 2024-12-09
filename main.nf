@@ -38,6 +38,7 @@ process getVersions {
 process getParams {
     label "singlecell"
     cpus 1
+    cache false
     memory "1 GB"
     output:
         path "params.json"
