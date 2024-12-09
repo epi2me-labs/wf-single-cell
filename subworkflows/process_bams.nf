@@ -39,12 +39,13 @@ process generate_whitelist{
     // It doesn't make sense to do cell count thresholding of the shortlist for visium data.
     // A visium barcode is a tissue coordinate not a cell.
     def no_thresholding_opt = meta.kit.split(':')[0] == 'visium' ? '--no_cell_filter' : ""
+    def exp_cells_opt = meta.kit.split(':')[0] != 'visium' ? "--exp_cells ${meta['expected_cells']}" : ""
     """
     workflow-glue create_shortlist \
         barcodes "${meta.alias}.whitelist.tsv" \
         --counts \
         --method quantile \
-        --exp_cells ${meta['expected_cells']} \
+        ${exp_cells_opt} \
         --plot "kneeplot.png" \
         --counts_out "high_qual_bc_counts.tsv" \
         --threads ${task.cpus} \

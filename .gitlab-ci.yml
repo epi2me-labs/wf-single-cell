@@ -45,7 +45,7 @@ docker-run:
       - if: $MATRIX_NAME == "integration-test"
         variables:
           NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/ci_data.tar.gz https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/ci_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/ci_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
-          NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --fastq ${CI_PROJECT_NAME}/data/ci_data/sample1.fq --fastq_chunk 2500 --ref_genome_dir ${CI_PROJECT_NAME}/data/ci_data/10x_ref_chr21_22 --matrix_min_genes 1 --matrix_min_cells 1 --expected_cells 10"
+          NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --fastq ${CI_PROJECT_NAME}/data/ci_data/sample1.fq --fastq_chunk 2500 --ref_genome_dir ${CI_PROJECT_NAME}/data/ci_data/10x_ref_chr21_22 --matrix_min_genes 1 --matrix_min_cells 1 --expected_cells 10 --kit 3prime:v3"
       - if: $MATRIX_NAME == "bam-input"
         variables:
           NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v2.2.0_test_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/test_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
