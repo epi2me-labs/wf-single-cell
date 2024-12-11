@@ -4,5 +4,6 @@ kit,barcode_length,umi_length,bc_long_list
 3prime:v4,16,12,3M-3pgex-may-2023.txt.gz
 5prime:v1,16,10,737K-august-2016.txt.gz
 5prime:v2,16,10,737K-august-2016.txt.gz
+5prime:v3,16,12,3M-5pgex-jan-2023.txt.gz
 multiome:v1,16,12,737K-arc-v1.txt.gz
 visium:v1,16,12,visium-v1.txt.gz

@@ -96,14 +96,14 @@ def downsample_dataframe(df, fraction):
     n_reads = df_scaled.shape[0]
 
     # Get the unique number of reads, genes and UMIs per cell barcode
-    gb_cell = df_scaled.groupby("barcode")
+    gb_cell = df_scaled.group_by("barcode")
     gb_cell_median = gb_cell.n_unique().median()
     genes_per_cell = gb_cell_median['gene'][0]
     umis_per_cell = gb_cell_median['umi'][0]
     # Since polars 0.20.5 groupby.count() has been renamed groupby.len()
     reads_per_cell = gb_cell.count().median()['count'][0]
 
-    n_deduped_reads = df_scaled.groupby(['gene', 'barcode', 'umi']).count().shape[0]
+    n_deduped_reads = df_scaled.group_by(['gene', 'barcode', 'umi']).count().shape[0]
     if n_reads < 1:
         umi_saturation = 0
     else:
