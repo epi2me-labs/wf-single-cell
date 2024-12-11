@@ -38,19 +38,11 @@ def argparser():
     parser.add_argument(
         "superlist", type=Path,
         help="Comprehensive whitelist of all possible cell barcodes.\
-        These vary depending on which 10X kit was used. \
-        For 3' v3 single cell gene expression \
-        kit: data/3M-february-2018.txt.gz. \
-        For 3' v2 single cell gene expression \
-        kit: data/737K-august-2016.txt.gz. \
-        For 5' single cell gene expression \
-        kit: data/737K-august-2016.txt.gz. \
-        For single cell multiome (ATAC + GEX) \
-        kit: data/737K-arc-v1.txt.gz.")
+        These vary depending on which 10X kit was used.")
 
     parser.add_argument(
         "--kit", type=KitName, default=KitName.prime3,
-        help="Specify either the 10X 3' gene expression kit. This \
+        help="Specify the 10x kit name (without version). This \
         determines which adapter sequences to search for in the reads.")
 
     parser.add_argument(
