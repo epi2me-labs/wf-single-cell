@@ -183,6 +183,14 @@
       "mime-type": "text/tab-separated-values",
       "optional": true,
       "type": "per-sample"
+    },
+    "barcode_assignment_summary.tsv": {
+      "filepath": "{{ alias }}/{{ alias }}.bc_assignment_summary.tsv",
+      "title": "Barcode assignment summary",
+      "description": "TSV file with barcode assignment summary statistics.",
+      "mime-type": "text/tab-separated-values",
+      "optional": true,
+      "type": "per-sample"
     }
   }
 }

@@ -10,10 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Output filename formating standardised.
 - In the report 'reads' now refers to number of reads not subreads.
 - `kit` and `expected_cells` (visium excepted) are now required. Either as individual parameter or defined per sample via the `single_cell_sample_sheet`.
-- Reconcile wf with template v5.3.3
+- Reconcile wf with template v5.3.3.
 ### Added 
 - Minimum read quality filter.
 - 10x 5prime:v3 support.
+- Barcode statistics output file.
 
 ## [v2.3.0]
 ### Fix

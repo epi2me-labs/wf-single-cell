@@ -1,5 +1,6 @@
 import java.util.ArrayList;
 
+include { merge_and_publish_tsv } from '../modules/local/common'
 
 process split_gtf_by_chroms {
     label "singlecell"
@@ -19,7 +20,9 @@ process generate_whitelist{
     label "singlecell"
     cpus 4
     memory "4 GB"
-    publishDir "${params.out_dir}/${meta.alias}", mode: 'copy', pattern: "*.whitelist.tsv"
+    publishDir "${params.out_dir}/${meta.alias}", 
+                mode: 'copy', 
+                pattern: "*whitelist.tsv"
     input:
         tuple val(meta),
               path("barcodes/?_barcode.tsv")
@@ -30,10 +33,9 @@ process generate_whitelist{
         tuple val(meta),
               path("kneeplot.png"),
               emit: kneeplot
-        // Note: This is called "uncorrected", but they're actually counts of
-        //       high quality exact matches to longlist. Low frequency barcodes
-        //       are assumed to be false positives. The list is further
-        //       filtered by the selected method (basically by abundance).
+        tuple val(meta),
+              path("shortlist_summary.tsv"),
+              emit: shortlist_summary
     // TODO: change this to take precomputed, filtered counts from extract_barcodes
     script:
     // It doesn't make sense to do cell count thresholding of the shortlist for visium data.
@@ -42,7 +44,7 @@ process generate_whitelist{
     def exp_cells_opt = meta.kit.split(':')[0] != 'visium' ? "--exp_cells ${meta['expected_cells']}" : ""
     """
     workflow-glue create_shortlist \
-        barcodes "${meta.alias}.whitelist.tsv" \
+        barcodes "${meta.alias}.whitelist.tsv" shortlist_summary.tsv   \
         --counts \
         --method quantile \
         ${exp_cells_opt} \
@@ -69,10 +71,14 @@ process assign_barcodes{
         tuple val(meta),
               path("extract_barcodes_with_bc.tsv"),
               emit: tags
+        tuple val(meta),
+              path("summary.tsv"),
+              emit: summary
+    script:
     """
     workflow-glue assign_barcodes \
         whitelist.tsv extract_barcodes.tsv \
-        extract_barcodes_with_bc.tsv bc_assign_counts.tsv \
+        extract_barcodes_with_bc.tsv bc_assign_counts.tsv summary.tsv \
         --max_ed ${params.barcode_max_ed} \
         --min_ed_diff ${params.barcode_min_ed_diff} \
         --use_kmer_index
@@ -114,6 +120,7 @@ process cat_tags_by_chrom {
               path("chr_tags/*"),
               emit: merged_tags
 
+    script:
     """
     mkdir chr_tags
     # Find the chr column number
@@ -133,9 +140,9 @@ process stringtie {
     label "singlecell"
     cpus params.threads
     // Memory usage for this process is usually less than 3GB, but some cases it may go over this.
-    memory = { 3.GB * task.attempt }
-    maxRetries = 3
-    errorStrategy = { task.exitStatus in 137..140 ? 'retry' : 'terminate' }
+    memory { 3.GB * task.attempt } 
+    maxRetries 3
+    errorStrategy { task.exitStatus in 137..140 ? 'retry' : 'terminate' }
     input:
         path 'ref_genome.fa'
         path 'ref_genome.fa.fai'
@@ -172,7 +179,7 @@ process stringtie {
 process align_to_transcriptome {
     label "singlecell"
     cpus params.threads
-    memory = "31 GB"
+    memory "31 GB"
     input:
         tuple val(meta),
               val(chr),
@@ -224,6 +231,7 @@ process assign_features {
         tuple val(meta),
               path("gffcompare.annotated.gtf"),
               emit: annotation
+    script:
     """
     # gffcomapre maps transcript reference IDs to query transcripts.
     gffcompare -o gffcompare -r chr.gtf stringtie.gff
@@ -254,6 +262,7 @@ process create_matrix {
         tuple val(meta), val(chr), val("gene"), path("expression.gene.hdf"), emit: gene
         tuple val(meta), val(chr), val("transcript"), path("expression.transcript.hdf"), emit: transcript
         tuple val(meta), val(chr), path("stats.json"), emit: stats
+    script:
     """
     workflow-glue create_matrix \
         ${chr} barcodes.tsv features.tsv \
@@ -433,6 +442,12 @@ workflow process_bams {
                 whitelist = it[0][1]
                 barcodes = it[1][1]
                 [meta, whitelist, barcodes]})
+        
+        merge_and_publish_tsv(
+            assign_barcodes.out.summary
+                .concat(generate_whitelist.out.shortlist_summary)
+                .groupTuple(),
+            'bc_assignment_summary.tsv')
 
         // Combine the tag chunks to per chrom chunks and emit [meta, chr, tags]
         chr_tags = cat_tags_by_chrom(assign_barcodes.out.tags.groupTuple())
@@ -535,4 +550,5 @@ workflow process_bams {
             .groupTuple(size:2)
             .map{key, files -> [key, files.flatten()]}
         // per chromosome expression statistics
-        expression_stats = create_matrix.out.stats}
+        expression_stats = create_matrix.out.stats
+}

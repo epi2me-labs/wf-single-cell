@@ -27,6 +27,10 @@ def argparser():
         "output", type=Path,
         help="Output filepath for barcode shortlist.")
 
+    parser.add_argument(
+        "summary", type=Path,
+        help="Output filepath for TSV summary file.")
+
     grp = parser.add_mutually_exclusive_group(required=True)
     grp.add_argument(
         "--long_list", type=Path,
@@ -272,27 +276,35 @@ def main(args):
         raise ValueError("No good seed barcodes found.")
 
     logger.info("Writing counts of perfect hits.")
-    hits = pd.DataFrame(bc_counts.most_common(), columns=["barcode", "count"])
+    hq_bcs = pd.DataFrame(bc_counts.most_common(), columns=["barcode", "count"])
     if args.counts_out is not None:
-        hits.to_csv(args.counts_out, sep='\t', index=False)
+        hq_bcs.to_csv(args.counts_out, sep='\t', index=False)
 
-    logger.info(f"Finding count threshold from {len(hits)} good seeds.")
-    hits = hits.iloc[::-1]  # we want them ascending for searching
+    logger.info(f"Finding count threshold from {len(hq_bcs)} good seeds.")
+    hq_bcs = hq_bcs.iloc[::-1]  # we want them ascending for searching
 
+    total_hq_reads = sum(hq_bcs["count"])
     if args.no_cell_filter:
         # Use all the high quality barcodes as our shortlist.
         # This is the case for Visium data
-        shortlist = hits["barcode"]
+        # No thresholding applied
+        threshold = 0
+        threshold_index = 0
+        hq_reads_remaining = total_hq_reads
+        shortlist = hq_bcs["barcode"]
         n_cells = len(shortlist)
         logger.info(f"Outputting {n_cells} with no thresholding applied to reads.")
     else:
         threshold_index = find_threshold(
-            hits["count"], args.method,
+            hq_bcs["count"], args.method,
             exp_cells=args.exp_cells, cell_count=args.exp_cells,
             read_count=args.read_count)
-        n_cells = len(hits) - threshold_index
-        threshold = hits["count"].iat[threshold_index]
-        shortlist = hits["barcode"].iloc[threshold_index:]
+        n_cells = len(hq_bcs) - threshold_index
+        # The threshold (number of cells)
+        threshold = hq_bcs["count"].iat[threshold_index]
+        shortlist = hq_bcs["barcode"].iloc[threshold_index:]
+        # High quality reads remaining after cell filtering
+        hq_reads_remaining = sum(hq_bcs["count"].iloc[threshold_index:])
         logger.info(f"Outputting {n_cells} with more than {threshold} reads.")
 
     with open(args.output, "wt") as f:
@@ -302,5 +314,19 @@ def main(args):
     if args.plot is not None:
         logger.info(f"Generating knee plot: {args.plot}")
         make_kneeplot(
-            hits["count"], n_cells, args.plot,
+            hq_bcs["count"], n_cells, args.plot,
             no_threshold_line=args.no_cell_filter)
+
+    (
+        pd.DataFrame.from_dict(
+            dict(
+                high_quality_reads=total_hq_reads,
+                high_quality_barcodes=[len(hq_bcs)],
+                n_cells_after_filtering=[n_cells],
+                high_q_reads_in_cells=[hq_reads_remaining],
+                fraction_of_high_q_reads_in_cells=[
+                    hq_reads_remaining / total_hq_reads] if total_hq_reads > 0 else [0],
+                cell_count_read_threshold=[threshold]))
+        .transpose()
+        .to_csv(args.summary, sep='\t', header=False)
+    )
