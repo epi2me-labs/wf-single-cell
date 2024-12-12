@@ -37,6 +37,10 @@ def argparser():
             barcodes.")
 
     parser.add_argument(
+        "report", type=Path,
+        help="Path to TSV file to store reasons for barcode assignment.")
+
+    parser.add_argument(
         "--chunksize", type=int, default=50000,
         help="Process the BAM in chunks no larger than this.")
 
@@ -59,7 +63,7 @@ def argparser():
 
 def determine_barcode(
         bc_uncorr, whitelist, whiteset,
-        max_ed, min_ed_diff, index=None):
+        max_ed, min_ed_diff, assignment_log, index=None):
     """Find barcode in a whitelist corresponding to read barcode.
 
     :param bc_uncorr: uncorrected barcode.
@@ -68,6 +72,7 @@ def determine_barcode(
     :param max_ed: max. edit distance between barcode and whitelist hit.
     :param min_ed_diff: min. edit distance difference between first and
         second best hits in order to accept the first as valid.
+    :param assignment_log: a Counter object to store reasons for barcode assignment.
     :param index: a kmer index for reducing search space of fuzzy-matching.
 
     Passing the whitelist as both a list and set is for performance reasons
@@ -75,6 +80,7 @@ def determine_barcode(
     """
     # quick return
     if bc_uncorr in whiteset:
+        assignment_log["bc_shortlist_exact_match"] += 1
         return bc_uncorr
 
     if index is not None:
@@ -96,6 +102,7 @@ def determine_barcode(
         bc_match = result[0][0]
         bc_match_ed = result[0][1]
     else:
+        assignment_log['bc_no_shortlist_match'] += 1
         return corrected
     if len(result) > 1:
         next_match_diff = result[1][1] - bc_match_ed
@@ -110,13 +117,11 @@ def determine_barcode(
     # of the time). Consider removing this?
     if (bc_match_ed <= max_ed) and (next_match_diff >= min_ed_diff):
         corrected = bc_match
+        assignment_log['bc_corrected'] += 1
+    else:
+        assignment_log['bc_shortlist_multiple_hits'] += 1
 
     return corrected
-
-
-def list_set_and_match(*args, **kwargs):
-    """Pass a list and a set to ask for matches."""
-    return determine_barcode(*args, **kwargs)
 
 
 def build_index(whitelist, klen=5):
@@ -167,12 +172,13 @@ def process_records(
         fh.write("\n")
 
     total_reads = 0
+    assignment_log = collections.Counter()
     for df_tags in pd.read_csv(barcode_tags, sep='\t', chunksize=chunksize):
         df_tags["CB"] = "-"
         selected = df_tags["CR"].str.len() >= barcode_length - max_ed
         df_tags.loc[selected, "CB"] = df_tags.loc[selected].apply(
             lambda x: determine_barcode(
-                x.CR, whitelist, whiteset, max_ed, min_ed_diff, index),
+                x.CR, whitelist, whiteset, max_ed, min_ed_diff, assignment_log, index),
             axis=1)
         df_tags[output_cols].to_csv(
             tags_output, mode='a', sep='\t', header=None, index=False)
@@ -181,7 +187,7 @@ def process_records(
         logger.info(f"Processed {total_reads} reads.")
 
     del barcode_counter["-"]
-    return barcode_counter
+    return barcode_counter, assignment_log
 
 
 def main(args):
@@ -191,7 +197,7 @@ def main(args):
         args.whitelist, index_col=None, sep='\t', header=None)[0])
 
     logger.info("Processing reads.")
-    barcode_counter = process_records(
+    barcode_counter, assignment_log = process_records(
         args.barcode_tags, whiteset,
         args.max_ed, args.min_ed_diff,
         args.output_tags,
@@ -201,4 +207,8 @@ def main(args):
     with open(args.output_counts, "w") as f:
         for bc, n in barcode_counter.most_common():
             f.write(f"{bc}\t{n}\n")
+
+    df_summary = pd.DataFrame.from_dict(assignment_log, orient='index')
+    df_summary.to_csv(args.report, sep='\t', header=False)
+
     logger.info("Finished.")
