@@ -155,8 +155,8 @@ def umap_plots(umaps_dirs, genes_file):
 
             repl_tabs = Tabs()
 
-            gene_umap_files = sample_dir.glob('gene.expression.umap*.tsv')
-            transcript_umap_files = sample_dir.glob('transcript.expression.umap*.tsv')
+            gene_umap_files = sample_dir.glob('*gene_expression_umap*.tsv')
+            transcript_umap_files = sample_dir.glob('*transcript_expression_umap*.tsv')
 
             for i, (
                 gene_umap_file, transcript_umap_file
