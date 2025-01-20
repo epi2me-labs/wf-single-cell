@@ -1,1 +1,1 @@
-Identification of cell- and UMI barcodes from single-cell sequencing.
+Cell barcode & UMI identification from single-cell sequencing data.
