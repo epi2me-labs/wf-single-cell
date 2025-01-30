@@ -46,17 +46,20 @@ def test_process_records(allowed_barcodes, use_kmer_index):
     # Columns can be any value for now
     header = ('read_id', 'CR', 'CY', 'UR', 'UY', 'chr', 'start', 'end', 'mapq')
     rows = [
-        # This should 100% match to whitelist
+        # 100% match to whitelist
         ('read1', 'AAAAAAAAAAAAAAAA', 'qual', 'umi', 'qual' 'chr', 0, 100, 20),
         # This should be corrected to AAAAAAAAAAAAAAAA
         ('read2', 'AAAAcAAAcAAAAAAA', 'qual', 'umi', 'qual', 'chr', 0, 100, 20),
-        # These will not be corrected as the edit distance difference between
-        # the top match and the second-top match is < 2
+        # Not corrected due to multiple hits to whitelist.
+        # bc_match_ed <= max_ed  but next_match_diff < min_ed_diff
         ('read3', 'tAAAAAAAAAAAAAAA', 'qual', 'umi', 'qual', 'chr', 0, 100, 20),
         ('read4', 'AtAAAAAAAAAAAAAA', 'qual', 'umi', 'qual', 'chr', 0, 100, 20),
         # No matches to whitelist
         ('read5', 'GGGGGGGGGGGGGGGG', 'qual', 'umi', 'qual', 'chr', 0, 100, 20),
         ('read6', 'GCGCGCGCGCGCGCGC', 'qual', 'umi', 'qual', 'chr', 0, 100, 20),
+        # Not corrected. A hit will have been found in the initial rapidfuzz search but
+        # none have an ED <= max_ed (2).
+        ('read7', 'cccAAAAAAAAAAAAA', 'qual', 'umi', 'qual', 'chr', 0, 100, 20),
     ]
 
     tags = pd.DataFrame(rows, columns=header).set_index('read_id', drop=True)
@@ -86,8 +89,8 @@ def test_process_records(allowed_barcodes, use_kmer_index):
 
     assert dict(reasons_counter) == \
            {
-            'bc_shortlist_exact_match': 1,
-            'bc_corrected': 1,
-            'bc_no_shortlist_match': 2,
-            'bc_shortlist_multiple_hits': 2
+            'bc_shortlist_exact_match': 1,   # Read1
+            'bc_corrected': 1,               # Read2
+            'bc_no_shortlist_match': 3,      # Read5, Read6, Read7
+            'bc_shortlist_multiple_hits': 2  # Read3, Read4
            }
