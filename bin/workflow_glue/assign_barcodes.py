@@ -99,6 +99,7 @@ def determine_barcode(
 
     corrected = "-"
     if len(result) > 0:
+        # There is at least 1 initial match (ED >= max_ed + min_ed_diff + 1)
         bc_match = result[0][0]
         bc_match_ed = result[0][1]
     else:
@@ -118,7 +119,11 @@ def determine_barcode(
     if (bc_match_ed <= max_ed) and (next_match_diff >= min_ed_diff):
         corrected = bc_match
         assignment_log['bc_corrected'] += 1
-    else:
+    elif bc_match_ed > max_ed:
+        # There was an initial rapidfuzz match, but ED was greater than our max ED.
+        assignment_log['bc_no_shortlist_match'] += 1
+    elif next_match_diff < min_ed_diff:
+        # Two or more hits to the rapidfuzz results.
         assignment_log['bc_shortlist_multiple_hits'] += 1
 
     return corrected
@@ -178,7 +183,8 @@ def process_records(
         selected = df_tags["CR"].str.len() >= barcode_length - max_ed
         df_tags.loc[selected, "CB"] = df_tags.loc[selected].apply(
             lambda x: determine_barcode(
-                x.CR, whitelist, whiteset, max_ed, min_ed_diff, assignment_log, index),
+                x.CR, whitelist, whiteset, max_ed, min_ed_diff, assignment_log,
+                index),
             axis=1)
         df_tags[output_cols].to_csv(
             tags_output, mode='a', sep='\t', header=None, index=False)
