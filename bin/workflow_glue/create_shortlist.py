@@ -236,7 +236,7 @@ def aggregate_counts(input_dir):
 def find_threshold(counts, method, exp_cells=500, cell_count=5000, read_count=10000):
     """Calculate a threshold count for selecting cells.
 
-    :param: Series of sorted counts.
+    :param pd.series counts: cell read counts in descending order.
     """
     idx = len(counts)
     if method == "quantile":  # flames method
@@ -248,7 +248,9 @@ def find_threshold(counts, method, exp_cells=500, cell_count=5000, read_count=10
         idx = get_knee_distance(counts)
     elif method == "fixed":  # take a fixed number of cells
         logger.info(f"Using fixed method, taking {cell_count} cells.")
+        # If user requests more cells than we have, just take all
         idx = min(len(counts), cell_count)
+        idx = len(counts) - idx  # The barcode counts are ascending so take from right
     elif method == "abundance":  # threshold
         logger.info(f"Using abundance method with threshold {read_count} reads.")
         idx = np.searchsorted(counts, read_count)

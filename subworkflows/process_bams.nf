@@ -42,11 +42,12 @@ process generate_whitelist{
     // A visium barcode is a tissue coordinate not a cell.
     def no_thresholding_opt = meta.kit.split(':')[0] == 'visium' ? '--no_cell_filter' : ""
     def exp_cells_opt = meta.kit.split(':')[0] != 'visium' ? "--exp_cells ${meta['expected_cells']}" : ""
+    def method_opt = params.estimate_cell_count ? "--method quantile" : "--method fixed" 
     """
     workflow-glue create_shortlist \
         barcodes "${meta.alias}.whitelist.tsv" shortlist_summary.tsv   \
         --counts \
-        --method quantile \
+        ${method_opt} \
         ${exp_cells_opt} \
         --plot "kneeplot.png" \
         --counts_out "high_qual_bc_counts.tsv" \

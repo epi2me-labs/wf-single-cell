@@ -58,6 +58,14 @@
                     "description": "Number of expected cells in the sample.",
                     "help_text": "The number of expected cells. If `single_cell_sample_sheet` is not defined, `expected_cells` is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied."
                 },
+                "estimate_cell_count": {
+                    "type": "boolean",
+                    "title": "Estimate cell count",
+                    "description": "Estimate cell count from the data.",
+                    "help_text": "If set to true, the cell count will be estimated from the read count distribution. If set to false, the top `expected_cells` cells with highest read support will be selected.",
+                    "default": true
+
+                },
                 "single_cell_sample_sheet": {
                     "type": "string",
                     "title": "Single cell sample sheet",
