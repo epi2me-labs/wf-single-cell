@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Barcode assignment summary file incorrect values.
 ### Changed 
 - Updated project description.
+### Added
+- `estimate_cell_count` can be set to false to force the workflow to use the number of cells set by the `expected_cells` option.
 
 ## [v2.4.1]
 ### Fixed
