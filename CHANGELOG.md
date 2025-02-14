@@ -7,10 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Fixed
 - Barcode assignment summary file incorrect values.
-### Changed 
+### Changed
 - Updated project description.
 ### Added
 - `estimate_cell_count` can be set to false to force the workflow to use the number of cells set by the `expected_cells` option.
+- Minor decrease to some memory directives to avoid “Process requirement exceeds available memory” errors when running in WSL.
 
 ## [v2.4.1]
 ### Fixed

@@ -362,7 +362,7 @@ process combine_final_tag_files {
 process umi_gene_saturation {
     label "singlecell"
     cpus 4
-    memory "32 GB"
+    memory "31 GB"
     input:
         tuple val(meta),
               path("read_tags.tsv")
