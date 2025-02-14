@@ -54,7 +54,7 @@ process getParams {
 process makeReport {
     label "wf_common"
     cpus 1
-    memory "32 GB"
+    memory "31 GB"
     publishDir "${params.out_dir}", mode: 'copy', pattern: "wf-single-cell-report.html"
     input:
         val metadata
