@@ -88,7 +88,7 @@ process call_adapter_scan {
     | minimap2 -ax splice -uf --MD \
         -t $mm2_threads -K 10M \
         --junc-bed ref_genes.bed  \
-        --cap-kalloc 100m --cap-sw-mem 50m \
+        --cap-kalloc 100m \
         genome_index.mmi - \
     | samtools view -uh --no-PG - \
     | tee >(seqkit bam -s  2> bamstats.tsv ) \

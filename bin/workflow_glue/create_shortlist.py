@@ -236,7 +236,7 @@ def aggregate_counts(input_dir):
 def find_threshold(counts, method, exp_cells=500, cell_count=5000, read_count=10000):
     """Calculate a threshold count for selecting cells.
 
-    :param pd.series counts: cell read counts in descending order.
+    :param pd.series counts: cell read counts in ascending order.
     """
     idx = len(counts)
     if method == "quantile":  # flames method

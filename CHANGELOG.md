@@ -4,12 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v3.0.0]
+This major version release adds an experimental SNV calling workflow, enabled with --call_variants.
 ### Fixed
 - Barcode assignment summary file incorrect values.
-### Changed
-- Updated project description.
 ### Added
+- Single nucleotide variant (SNV) calling workflow, which uses [longshot](https://github.com/pjedge/longshot).
 - `estimate_cell_count` can be set to false to force the workflow to use the number of cells set by the `expected_cells` option.
 - Minor decrease to some memory directives to avoid “Process requirement exceeds available memory” errors when running in WSL.
 

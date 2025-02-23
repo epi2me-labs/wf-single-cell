@@ -26,6 +26,7 @@ docker-run:
           "integration-test",
           "bam-input",
           "visium",
+          "SNV"
 
         ]
     rules:
@@ -60,6 +61,11 @@ docker-run:
         variables:
           NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v2.2.0_test_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/test_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
           NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --fastq ${CI_PROJECT_NAME}/data/test_data/visium_fastq --fastq_chunk 2500 --kit visium:v1 --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCm39-2024-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"
+      - if: $MATRIX_NAME == "SNV" 
+        variables:
+          NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v2.5.0_test_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/test_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
+          NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --wf.merge_threads=2 --fastq ${CI_PROJECT_NAME}/data/test_data/variant_data/colo829_10_cells.fq.gz --call_variants=true --fastq_chunk 2500 --kit 3prime:v4 --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCm39-2024-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100 --expected_cells 10 --estimate_cell_count=false"
+
 
 macos-run:
   # Let's avoid those ARM64 runners for now

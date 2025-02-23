@@ -44,7 +44,7 @@ Recommended requirements:
 
 Minimum requirements:
 
-+ CPUs = 8
++ CPUs = 32
 + Memory = 32GB
 
 Approximate run time: Approximately 8h for 120M reads with the recommended requirements.
@@ -190,6 +190,8 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
+| call_variants | boolean | Call cell-level single nucleotide variants (SNV). | Call single cell variants using a longshot-based workflow. This subworkflow is computationally intensive, datasets with large numbers of cells may take a long time. | False |
+| report_variants | string | Display information about variants of interest in the report. | A VCF file containing variants of interest. |  |
 | kit_config | string | A file defining the configurations associated with the various supported 10x kits. | A CSV file is expected with the following headers [kit, barcode_length, umi_length]. If not specified, a default `kit_configs.csv` (found in the project directory root) will be used. This parameter does not typically need be changed. |  |
 | threads | integer | Number of CPU threads to use in resource intensive processes. | The total CPU resource used by the workflow is constrained by the executor configuration. | 8 |
 | fastq_chunk | integer | Sets the maximum number of reads per chunk for the initial processing of reads. | Controls batching of reads for processing. | 1000000 |
@@ -464,7 +466,32 @@ are subsampled by varying degrees and the resulting median reads/cell is plotted
     for example, then on average 1.25 reads would need to be sequenced to obtain a new UMI.
 
 
-### 11. Make UMAP plots
+### 11. SNV calling
+wf-single-cell contains an experimental single nucleotide variant (SNV) calling workflow based on [longshot](https://github.com/pjedge/longshot). 
+Currently the workflow has been tested with a maximum of 1500 cells, and can be expected to take up 24 hours with a 64 core machine. 
+Work is underway to improve the performance of the SNV workflow.
+
+#### Summary of the SNV workflow:
+- Tagged BAMs are split by cell barcode.
+- Preprocessing of the barcode-split BAM is required before processing with longshot:
+  * UMI deduplication with [UMI-tools](https://umi-tools.readthedocs.io/en/latest/reference/dedup.html).
+  * Splitting of records by exon using [gatk SplitNCigarReads](https://gatk.broadinstitute.org/hc/en-us/articles/360036858811-SplitNCigarReads).
+- Each per-cell BAM is processed with longshot to generate an initial set of per-cell candidates.
+These candidates can represent variants that may not be detected in bulk cDNA as they may be present in few cells.
+- The per-cell BAMs for each sample are merged and processed with longshot to give a set of bulk sample candidates. 
+Some of these candidate variants may represent variants that were not detected at the initial per-cell genotyping due to low coverage within the cell.
+- The bulk sample and per-cell candidate variants are merged to produce a final set of candidate variants.
+- A second round of per cell genotyping is carried out with longshot using the merged candidates from the previous steps. 
+- The SNV workflow outputs: 
+  * A merged VCF (`output/<alias>.final_merged.vcf.gz`) containing the genotype calls for each cell in the sample columns.
+  * A MEX format genotype snv x cell matrix (`output/genotype_matrix`), which can be loaded into downstream tools such as seurat.
+  * The genotypes are encodes as follows
+      * homozygous REF : 0
+      * heterozygous ALT/REF 1
+      * homozygous ALT: 2
+
+
+### 12. Make UMAP plots
 UMAP (Uniform Manifold Approximation and Projection) is a data visualisation algorithm used
 for dimensionality reduction. It aims to preserve the local structure and relationships in high-dimensional data (in this case a gene x cell count matrix)
 when projecting it into a two-dimensional space. This allows structure within the data, such as cell type and state, to be visualised, 

@@ -32,6 +32,8 @@
 
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
+| call_variants | boolean | Call cell-level single nucleotide variants (SNV). | Call single cell variants using a longshot-based workflow. This subworkflow is computationally intensive, datasets with large numbers of cells may take a long time. | False |
+| report_variants | string | Display information about variants of interest in the report. | A VCF file containing variants of interest. |  |
 | kit_config | string | A file defining the configurations associated with the various supported 10x kits. | A CSV file is expected with the following headers [kit, barcode_length, umi_length]. If not specified, a default `kit_configs.csv` (found in the project directory root) will be used. This parameter does not typically need be changed. |  |
 | threads | integer | Number of CPU threads to use in resource intensive processes. | The total CPU resource used by the workflow is constrained by the executor configuration. | 8 |
 | fastq_chunk | integer | Sets the maximum number of reads per chunk for the initial processing of reads. | Controls batching of reads for processing. | 1000000 |
