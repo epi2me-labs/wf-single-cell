@@ -10,6 +10,7 @@ process split_gtf_by_chroms {
         path("ref.gtf")
     output:
         path("*"), emit: chrom_gtf
+    script:
     """
     gawk '/^[^#]/ {print>\$1".gtf"}' ref.gtf 
     """
@@ -353,6 +354,7 @@ process combine_final_tag_files {
     output:
         tuple val(meta),
               path("${meta.alias}.read_summary.tsv")
+    script:
     """
     awk 'FNR>1 || NR==1' *.tsv > "${meta.alias}.read_summary.tsv"
     """
@@ -370,6 +372,7 @@ process umi_gene_saturation {
         tuple val(meta),
               path("saturation_curves.png"),
               emit: saturation_curve
+    script:
     """
     export POLARS_MAX_THREADS=$task.cpus
 
@@ -390,6 +393,7 @@ process pack_images {
     output:
          tuple val(meta),
               path("images_${meta.alias}")
+    script:
     """
     echo packing images
     """
@@ -402,9 +406,15 @@ process tag_bam {
     memory "16 GB"
     publishDir "${params.out_dir}/${meta.alias}", mode: 'copy'
     input:
-        tuple val(meta), path('align.bam'), path('align.bam.bai'), path('tags/tag_*.tsv')
+        tuple val(meta), 
+              path('align.bam'), 
+              path('align.bam.bai'), 
+              path('tags/tag_*.tsv')
     output:
-         tuple val(meta), path("${meta.alias}.tagged.bam"), path("${meta.alias}.tagged.bam.bai")
+         tuple val(meta), 
+               path("${meta.alias}.tagged.bam"), 
+               path("${meta.alias}.tagged.bam.bai"),
+               emit: tagged_bam
     script:
     """
     workflow-glue tag_bam \
@@ -510,6 +520,7 @@ workflow process_bams {
             .groupTuple()
             .map{meta, chrs, files -> [meta, files]}
         final_read_tags = combine_final_tag_files(tags_by_sample)
+
         tag_bam(merge_bams.out.join(tags_by_sample))
 
         // UMI saturation curves
@@ -532,6 +543,7 @@ workflow process_bams {
         // TODO: it shouldn't be the concern of this process what goes in the report
         //       instead just collate everything possible per sample
         final_read_tags = final_read_tags
+        tagged_bam = tag_bam.out.tagged_bam
         plots = pack_images.out.collect{it -> it[1]}.collect()
         white_list = generate_whitelist.out.whitelist
         gene_mean_expression = process_matrix.out.meancell

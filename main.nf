@@ -7,6 +7,7 @@ nextflow.enable.dsl = 2
 include { fastq_ingress; xam_ingress } from './lib/ingress'
 include { preprocess } from './subworkflows/preprocess'
 include { process_bams } from './subworkflows/process_bams'
+include { longshot as snv } from './subworkflows/snv'
 
 OPTIONAL_FILE = file("$projectDir/data/OPTIONAL_FILE")
 
@@ -23,7 +24,6 @@ process getVersions {
     python -c "import pandas; print(f'pandas,{pandas.__version__}')" >> versions.txt
     python -c "import rapidfuzz; print(f'rapidfuzz,{rapidfuzz.__version__}')" >> versions.txt
     python -c "import sklearn; print(f'scikit-learn,{sklearn.__version__}')" >> versions.txt
-    fastcat --version | sed 's/^/fastcat,/' >> versions.txt
     minimap2 --version | sed 's/^/minimap2,/' >> versions.txt
     samtools --version | head -n 1 | sed 's/ /,/' >> versions.txt
     bedtools --version | head -n 1 | sed 's/ /,/' >> versions.txt
@@ -147,7 +147,8 @@ process prepare_report_data {
               path('transcript_mean_expression.tsv'),
               path('mitochondrial_expression.tsv'),
               path(umaps),
-              path('bamstats/bam_stats*.tsv')
+              path('bamstats/bam_stats*.tsv'),
+              path(snv)
         path("genes_of_interest.tsv")
     output:
         // sample_id column added to survival.tsv and bm_stats.tsv no need for meta
@@ -157,6 +158,7 @@ process prepare_report_data {
 
     script:
         opt_umap = umaps.name != 'OPTIONAL_FILE'
+        opt_snv = snv.fileName.name != 'OPTIONAL_FILE'
         String hist_dir = "histogram_stats/${meta.alias}"
     """
     # Make a directory to stick some expression related files per sample
@@ -168,7 +170,7 @@ process prepare_report_data {
         white_list.txt survival.tsv bam_stats.tsv raw_gene_expression \
         genes_of_interest.tsv ${meta.n_seqs}
 
-    if [ "$opt_umap" = true ]; then
+    if [ "$opt_umap" = "true" ]; then
         echo "Adding umap data to sample directory"
         # Add data required for umap plotting into sample directory
         mv *umap*.tsv \$expression_dir
@@ -178,6 +180,11 @@ process prepare_report_data {
     else
         touch "\$umd"/OPTIONAL_FILE
     fi
+    
+    if [ "$opt_snv" = "true" ]; then
+        echo "Adding snv data to sample directory"
+        mv $snv \$expression_dir
+    fi  
     """
 }
 
@@ -225,6 +232,17 @@ workflow pipeline {
             ref_genome_fasta,
             ref_genome_idx)
 
+        if (params.call_variants) {
+            snv(
+                process_bams.out.tagged_bam,
+                ref_genome_fasta,
+                ref_genome_idx)
+            top_snvs = snv.out.top_snvs
+        }
+        else {
+            top_snvs = process_bams.out.tagged_bam.map {meta, bam, bai -> [meta, OPTIONAL_FILE] }
+        }
+
        prepare_report_data(
             preprocess.out.adapter_summary.groupTuple()
             .join(process_bams.out.expression_stats
@@ -236,10 +254,9 @@ workflow pipeline {
             .join(process_bams.out.transcript_mean_expression)
             .join(process_bams.out.mitochondrial_expression)
             .join(process_bams.out.umap_matrices)
-            .join(preprocess.out.bam_stats
-                .groupTuple()),
-            genes_of_interest
-            )
+            .join(preprocess.out.bam_stats.groupTuple())
+            .join(top_snvs),
+            genes_of_interest)
 
 
         // Get the metadata and stats for the report

@@ -162,6 +162,20 @@
             "description": "Advanced options for configuring processes inside the workflow.",
             "help_text": "These advanced options do not need to be changed for typical use, but allow fine tuning of workflows for users who want more control over the workflow.",
             "properties": {
+                "call_variants": {
+                    "type": "boolean",
+                    "title": "Call variants",
+                    "description": "Call cell-level single nucleotide variants (SNV).",
+                    "help_text": "Call single cell variants using a longshot-based workflow. This subworkflow is computationally intensive, datasets with large numbers of cells may take a long time.",
+                    "default": false
+                },
+                "report_variants": {
+                    "type": "string",
+                    "format": "file-path",
+                    "title": "Variants of interest",
+                    "description": "Display information about variants of interest in the report.",
+                    "help_text": "A VCF file containing variants of interest."
+                },
                 "kit_config": {
                     "type": "string",
                     "format": "file-path",
@@ -341,7 +355,7 @@
             "memory": "256GB"
         },
         "minimum": {
-            "cpus": 8,
+            "cpus": 32,
             "memory": "32GB"
         },
         "run_time": "Approximately 8h for 120M reads with the recommended requirements.",

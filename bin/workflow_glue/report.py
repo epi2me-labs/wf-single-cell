@@ -162,7 +162,7 @@ def umap_plots(umaps_dirs, genes_file):
                 gene_umap_file, transcript_umap_file
             ) in enumerate(zip(gene_umap_files, transcript_umap_files)):
 
-                with repl_tabs.add_tab(f'umap #{i}'):
+                with repl_tabs.add_tab(f'umap #{i}'):  # Tab for UMAP repeat
 
                     gene_umap = pd.read_csv(gene_umap_file, sep='\t', index_col=0)
 
@@ -208,24 +208,60 @@ def umap_plots(umaps_dirs, genes_file):
                             title='Gene UMAP / mean mito. expression '
                                   'annotation', hue='mito_pct')
 
-                        # Plot expression levels from a single gene over gene UMAP.
-                        no_data = []
-                        for gene in genes:
-                            if gene in gene_mean_expression.index:
-                                go_data = gene_umap.merge(
-                                    gene_mean_expression.loc[gene],
-                                    left_index=True, right_index=True)
-                                _plot(
-                                    go_data,
-                                    title=f'Gene umap / single gene expression '
-                                          f'annotation: {gene}',
-                                    hue=gene)
-                            else:
-                                no_data.append(gene)
-                    if no_data:
-                        p(
-                            "The following genes were not in the dataset "
-                            f"/ so have been filtered out: {', '.join(no_data)}")
+                        # Annotate with expression levels from a gene of interest.
+                        some_data = False
+                        gof_tabs = Tabs()
+                        with gof_tabs.add_dropdown_menu(
+                                'Genes expression', change_header=False):
+                            for gene in genes:
+                                if gene in gene_mean_expression.index:
+                                    some_data = True
+                                    go_data = gene_umap.merge(
+                                        gene_mean_expression.loc[gene],
+                                        left_index=True, right_index=True)
+                                    _plot(
+                                        go_data,
+                                        title=f'Gene umap / single gene expression '
+                                        f'annotation: {gene}',
+                                        hue=gene)
+                            if not some_data:
+                                plt = util.empty_plot()
+                                plt.title = {
+                                    "text": "Plotting Failed",
+                                    "subtext": "No genes."}
+                                EZChart(plt, theme='epi2melabs')
+
+                        # If there's a dataframe of top SNVs, create a further UMAP
+                        # figure in the grid with a drop-down of SNVs for overlay
+                        snv_tabs = Tabs()
+
+                        top_snv = sample_dir / 'top_snvs.tsv'
+                        if top_snv.is_file():
+                            snv_df = pd.read_csv(
+                                top_snv, sep='\t', dtype=str, index_col=0)
+                            snv_df = snv_df.replace({
+                                '-1': 'no_data',
+                                '0': 'hom-ref',
+                                '1': 'het',
+                                '2': 'hom-alt'
+                            })
+
+                            # SNV annotation
+                            with snv_tabs.add_dropdown_menu(
+                                    'SNV', change_header=False):
+                                for i, snv in snv_df.iterrows():
+                                    with snv_tabs.add_dropdown_tab(snv.name):
+                                        gene_snv_data = gene_umap.merge(
+                                            snv, left_index=True, right_index=True)
+                                        plt = ezcharts.scatterplot(
+                                            data=gene_snv_data,
+                                            x='D1', y='D2', hue=str(snv.name), s=0.3,
+                                            fill_alpha=.4, marker=True)
+                                        plt._fig.title = (
+                                            'Gene umap / genotype '
+                                            f'annotation: {snv.name}'
+                                        )
+                                        EZChart(plt, theme='epi2melabs')
 
 
 def diagnostic_plots(img_dirs):

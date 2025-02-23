@@ -5,7 +5,7 @@ Recommended requirements:
 
 Minimum requirements:
 
-+ CPUs = 8
++ CPUs = 32
 + Memory = 32GB
 
 Approximate run time: Approximately 8h for 120M reads with the recommended requirements.
