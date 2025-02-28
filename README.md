@@ -244,6 +244,11 @@ Output files may be aggregated including information for all samples or provided
 | Gene expression umap | {{ alias }}/{{ alias }}.gene_expression_umap_*.tsv | UMAP matrix from gene expression. Varying number of files will be present based on number of umap repeats. | per-sample |
 | Transcript expression umap | {{ alias }}/{{ alias }}.transcript_expression_umap_*.tsv | UMAP matrix from transcript expression. Varying number of files will be present based on number of umap repeats. | per-sample |
 | Barcode assignment summary | {{ alias }}/{{ alias }}.bc_assignment_summary.tsv | TSV file with barcode assignment summary statistics. | per-sample |
+| Single cell SNVs | {{ alias }}/{{ alias }}.final_merged.vcf.gz | VCF file containing per-barcode single nucleotide variant calls. | per-sample |
+| Single cell SNVs index | {{ alias }}/{{ alias }}.final_merged.vcf.gz.tbi | VCF index file. | per-sample |
+| Genotype matrix | {{ alias }}/{{ alias }}.genotype_matrix/matrix.mtx.gz | Sparse MEX format matrix file. | per-sample |
+| Genotype matrix barcodes | {{ alias }}/{{ alias }}.genotype_matrix/barcodes.tsv.gz | Sparse MEX format barcode (columns) file. | per-sample |
+| Genotype matrix features | {{ alias }}/{{ alias }}.genotype_matrix/features.tsv.gz | Sparse MEX format SNV ID (rows) file. | per-sample |
 
 
 

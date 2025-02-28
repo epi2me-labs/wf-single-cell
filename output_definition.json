@@ -184,11 +184,51 @@
       "optional": true,
       "type": "per-sample"
     },
-    "barcode_assignment_summary.tsv": {
+    "barcode_assignment_summary": {
       "filepath": "{{ alias }}/{{ alias }}.bc_assignment_summary.tsv",
       "title": "Barcode assignment summary",
       "description": "TSV file with barcode assignment summary statistics.",
       "mime-type": "text/tab-separated-values",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "snv_vcf": {
+      "filepath": "{{ alias }}/{{ alias }}.final_merged.vcf.gz",
+      "title": "Single cell SNVs",
+      "description": "VCF file containing per-barcode single nucleotide variant calls.",
+      "mime-type": "application/gzip",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "snv_vcf_index": {
+      "filepath": "{{ alias }}/{{ alias }}.final_merged.vcf.gz.tbi",
+      "title": "Single cell SNVs index",
+      "description": "VCF index file.",
+      "mime-type": "application/octet-stream",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "genotype_matrix": {
+      "filepath": "{{ alias }}/{{ alias }}.genotype_matrix/matrix.mtx.gz",
+      "title": "Genotype matrix",
+      "description": "Sparse MEX format matrix file.",
+      "mime-type": "application/gzip",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "genotype_matrix_barcodes": {
+      "filepath": "{{ alias }}/{{ alias }}.genotype_matrix/barcodes.tsv.gz",
+      "title": "Genotype matrix barcodes",
+      "description": "Sparse MEX format barcode (columns) file.",
+      "mime-type": "application/gzip",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "genotype_matrix_features": {
+      "filepath": "{{ alias }}/{{ alias }}.genotype_matrix/features.tsv.gz",
+      "title": "Genotype matrix features",
+      "description": "Sparse MEX format SNV ID (rows) file.",
+      "mime-type": "application/gzip",
       "optional": true,
       "type": "per-sample"
     }
