@@ -363,10 +363,10 @@ process merge_cell_snv {
     memory "31 GB"
     publishDir "${params.out_dir}/${meta.alias}", 
         mode: 'copy', 
-        pattern: "*{final_merged_vcf}*"
+        pattern: "*{final_merged.vcf}*"
     publishDir "${params.out_dir}/${meta.alias}", 
         mode: 'copy', 
-        pattern: "genotype_matrix/*"
+        pattern: "${meta.alias}.genotype_matrix/*"
     input:
         tuple val(meta),
               path('round_2_cell_vcfs/cell_vcf*.vcf.gz')
@@ -377,7 +377,7 @@ process merge_cell_snv {
               path("${meta.alias}.final_merged.vcf.gz.tbi"),
               emit: final_vcf
         tuple val(meta),
-              path("*genotype_matrix"),
+              path("${meta.alias}.genotype_matrix/*"),
               emit: genotype_matrix
         tuple val(meta),
               path("top_snvs.tsv"),
@@ -449,14 +449,14 @@ process merge_cell_snv {
     fi
 
     # Get sparse matrix output to stdout
-    mkdir genotype_matrix
+    mkdir "${meta.alias}.genotype_matrix"
     workflow-glue variant_mex \
-        "${meta.alias}.final_merged.vcf.gz"  "genotype_matrix" $opt_report_variants \
+        "${meta.alias}.final_merged.vcf.gz" "${meta.alias}.genotype_matrix" $opt_report_variants \
         | bgzip -@4 >  "matrix.mtx.gz"
 
-    # cat the header and the matrix as we don't knwo header dims upfront
+    # cat the header and the matrix as we don't know header dims upfront
     bgzip header.txt
-    cat header.txt.gz matrix.mtx.gz > "genotype_matrix/matrix.mtx.gz"
+    cat header.txt.gz matrix.mtx.gz > "${meta.alias}.genotype_matrix/matrix.mtx.gz"
     rm matrix.mtx.gz
     """
 }
