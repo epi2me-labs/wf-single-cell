@@ -308,7 +308,14 @@
                     "description": "Display version and exit.",
                     "fa_icon": "fas fa-question-circle",
                     "hidden": true
+                },
+                "store_dir": {
+                    "type": "string",
+                    "format": "directory-path",
+                    "description": "CI parameter.",
+                    "hidden": true
                 }
+
             }
         }
     },

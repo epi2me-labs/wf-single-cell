@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Changed
+- Reconciled workflow with wf-template v5.5.0.
+
 ## [v3.0.1]
 ### Fixed
 Missing output files (SNV matrix and SNV VCF).
@@ -28,7 +32,7 @@ This major version release adds an experimental SNV calling workflow, enabled wi
 - In the report 'reads' now refers to number of reads not subreads.
 - `kit` and `expected_cells` (visium excepted) are now required. Either as individual parameter or defined per sample via the `single_cell_sample_sheet`.
 - Reconcile wf with template v5.3.3.
-### Added 
+### Added
 - Minimum read quality filter.
 - 10x 5prime:v3 support.
 - Barcode statistics output file.
@@ -45,13 +49,13 @@ This major version release adds an experimental SNV calling workflow, enabled wi
 ## [v2.2.0]
 ### Added
 - Alignment summary section to report.
-- Support for 10x 3prime v4 (GEM-X) (`--kit 3prime:v4`). 
+- Support for 10x 3prime v4 (GEM-X) (`--kit 3prime:v4`).
 
 ## [v2.1.0]
 ### Changed
 - Options `--kit_name` and `--kit_version` replaced with single option `--kit` (eg `--kit 3prime:v3`).
 ### Added
-- Error handling when empty expression matrix is created.  
+- Error handling when empty expression matrix is created.
 - Support for Visium v1 kit.
 
 ## [v2.0.3]
@@ -149,7 +153,7 @@ This major version release adds an experimental SNV calling workflow, enabled wi
 -`exp_cells` to `expected_cells` in single_cell_sample_sheet to be consistent with CLI option.
 
 ## [v0.2.9]
-- Make `prepare_report_data` process more memory-efficient 
+- Make `prepare_report_data` process more memory-efficient
 
 ## [v0.2.8]
 ### Fixed
@@ -171,7 +175,7 @@ This major version release adds an experimental SNV calling workflow, enabled wi
 
 ## [v0.2.5]
 ### Added
-- Memory directives to some processes to better manage system resources 
+- Memory directives to some processes to better manage system resources
 
 ### Changed
 - Bumped minimum required Nextflow version to 22.10.8
