@@ -12,17 +12,17 @@ process split_gtf_by_chroms {
         path("*"), emit: chrom_gtf
     script:
     """
-    gawk '/^[^#]/ {print>\$1".gtf"}' ref.gtf 
+    gawk '/^[^#]/ {print>\$1".gtf"}' ref.gtf
     """
-}   
+}
 
 
 process generate_whitelist{
     label "singlecell"
     cpus 4
     memory "4 GB"
-    publishDir "${params.out_dir}/${meta.alias}", 
-                mode: 'copy', 
+    publishDir "${params.out_dir}/${meta.alias}",
+                mode: 'copy',
                 pattern: "*whitelist.tsv"
     input:
         tuple val(meta),
@@ -43,7 +43,7 @@ process generate_whitelist{
     // A visium barcode is a tissue coordinate not a cell.
     def no_thresholding_opt = meta.kit.split(':')[0] == 'visium' ? '--no_cell_filter' : ""
     def exp_cells_opt = meta.kit.split(':')[0] != 'visium' ? "--exp_cells ${meta['expected_cells']}" : ""
-    def method_opt = params.estimate_cell_count ? "--method quantile" : "--method fixed" 
+    def method_opt = params.estimate_cell_count ? "--method quantile" : "--method fixed"
     """
     workflow-glue create_shortlist \
         barcodes "${meta.alias}.whitelist.tsv" shortlist_summary.tsv   \
@@ -134,6 +134,13 @@ process cat_tags_by_chrom {
     {if (!seen[\$chr_col]++) \
         print hdr>"chr_tags/"\$chr_col".tsv"; \
         print>"chr_tags/"\$chr_col".tsv"}' tags/*
+
+    # Sort by corrected barcode to allow chunked reading later.
+    for file in chr_tags/*.tsv;
+    do
+        csvtk sort -t --keys CB "\$file" -o tmp.tsv;
+        mv tmp.tsv "\$file";
+    done
     """
 }
 
@@ -142,7 +149,7 @@ process stringtie {
     label "singlecell"
     cpus params.threads
     // Memory usage for this process is usually less than 3GB, but some cases it may go over this.
-    memory { 3.GB * task.attempt } 
+    memory { 3.GB * task.attempt }
     maxRetries 3
     errorStrategy { task.exitStatus in 137..140 ? 'retry' : 'terminate' }
     input:
@@ -254,22 +261,22 @@ process assign_features {
 process create_matrix {
     label "singlecell"
     cpus 1
-    // Benchmarking showed that memory usage was ~ 15x the size of read_tags input.
-    // Set a minimum memory requirement of 1.0GB to allow for overhead.
-    memory {1.0.GB.toBytes()  + (read_tags.size() * 20) }
+    memory "7 GB"
     input:
         tuple val(meta), val(chr), path("features.tsv"), path(read_tags, stageAs: "barcodes.tsv")
     output:
         tuple val(meta), val(chr), path("summary.tsv"), emit: summary
-        tuple val(meta), val(chr), val("gene"), path("expression.gene.hdf"), emit: gene
-        tuple val(meta), val(chr), val("transcript"), path("expression.transcript.hdf"), emit: transcript
+        tuple val(meta), val(chr), val("gene"), path("hdfs/*gene.hdf"), emit: gene
+        tuple val(meta), val(chr), val("transcript"), path("hdfs/*transcript.hdf"), emit: transcript
         tuple val(meta), val(chr), path("stats.json"), emit: stats
     script:
     """
+    mkdir -p hdfs
+
     workflow-glue create_matrix \
         ${chr} barcodes.tsv features.tsv \
         --tsv_out summary.tsv \
-        --hdf_out expression.hdf \
+        --hdf_out hdfs \
         --stats stats.json
     """
 }
@@ -319,7 +326,7 @@ process process_matrix {
 process merge_transcriptome {
     label "singlecell"
     cpus 2
-    memory "2GB"
+    memory "2 GB"
     publishDir "${params.out_dir}/${meta.alias}", mode: 'copy'
     input:
         tuple val(meta),
@@ -406,13 +413,13 @@ process tag_bam {
     memory "16 GB"
     publishDir "${params.out_dir}/${meta.alias}", mode: 'copy'
     input:
-        tuple val(meta), 
-              path('align.bam'), 
-              path('align.bam.bai'), 
+        tuple val(meta),
+              path('align.bam'),
+              path('align.bam.bai'),
               path('tags/tag_*.tsv')
     output:
-         tuple val(meta), 
-               path("${meta.alias}.tagged.bam"), 
+         tuple val(meta),
+               path("${meta.alias}.tagged.bam"),
                path("${meta.alias}.tagged.bam.bai"),
                emit: tagged_bam
     script:
@@ -453,7 +460,7 @@ workflow process_bams {
                 whitelist = it[0][1]
                 barcodes = it[1][1]
                 [meta, whitelist, barcodes]})
-        
+
         merge_and_publish_tsv(
             assign_barcodes.out.summary
                 .concat(generate_whitelist.out.shortlist_summary)
@@ -496,12 +503,15 @@ workflow process_bams {
                 // Join on [sample meta, chr]
                 .join(chr_tags, by: [0, 1]))
 
-        // aggregate per-chrom expression matrices to create MEX and UMAP TSVs
+        // Aggregate expression matrices to create sparse MEX matrices (https://math.nist.gov/MatrixMarket/formats.html#MMformat)
+        // and UMAP TSVs
         process_matrix(
             create_matrix.out.gene.groupTuple(by: [0, 2])
+                .map {meta, chroms, feature, hdfs -> [meta, feature, hdfs.flatten()]}
             .mix(
-                create_matrix.out.transcript.groupTuple(by: [0, 2]))
-            .map {meta, chroms, feature, hdfs -> [meta, feature, hdfs]})
+                create_matrix.out.transcript.groupTuple(by: [0, 2])
+                .map {meta, chroms, feature, hdfs -> [meta, feature, hdfs.flatten()]})
+            )
 
         // TODO: merging the gffs and merging the fasta files is two independent
         //       tasks, they can be done in parallel in two distinct processes.
@@ -536,7 +546,7 @@ workflow process_bams {
             generate_whitelist.out.kneeplot
                 .concat(umi_gene_saturation.out.saturation_curve)
                 .groupTuple())
-    
+
     emit:
 
         // Emit sperately for use in the report

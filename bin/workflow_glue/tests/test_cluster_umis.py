@@ -1,4 +1,4 @@
-"""Test assign_barcodes."""
+"""Test cluster barcodes."""
 import pandas as pd
 import pytest
 from workflow_glue.create_matrix import cluster_dataframe
@@ -53,18 +53,18 @@ def umi_gene_df():
 
 def test_process_records(umi_gene_df):
     """Check that process_records is clustering and correcting UMIs appropriately."""
-    cluster_dataframe(umi_gene_df, 1000)
+    result = cluster_dataframe(umi_gene_df, 1000)
 
-    assert 'UB' in umi_gene_df
+    assert 'UB' in result
     # Check for the correct number of clusters
-    assert umi_gene_df['UB'].nunique() == 4
+    assert result['UB'].nunique() == 4
 
     # Check that UMI2 is corrected to the 'true' UMI of cluster1
     assert all(
-        umi_gene_df.loc[
-            umi_gene_df['UR'] == 'ttAAAAAAAAAA'].loc[:, 'UB'] == 'AAAAAAAAAAAA')
+        result.loc[
+            result['UR'] == 'ttAAAAAAAAAA'].loc[:, 'UB'] == 'AAAAAAAAAAAA')
 
     # Check that the rest of the UMIs map back to themselves
     # as they are all single-UMI clsuters
-    df_no_clust1 = umi_gene_df[~umi_gene_df.UR.isin(['AAAAAAAAAAAA', 'ttAAAAAAAAAA'])]
+    df_no_clust1 = result[~result.UR.isin(['AAAAAAAAAAAA', 'ttAAAAAAAAAA'])]
     assert all(df_no_clust1.UR == df_no_clust1.UB)

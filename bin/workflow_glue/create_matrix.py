@@ -34,16 +34,18 @@ def argparser():
         help="Output TSV containing a subset of read-tags in human-readable form")
     grp.add_argument(
         "--hdf_out", type=Path,
-        help="Output filename for HDF matrix output. \
-            Two files will be produced as filename.{gene, transcript}.ext")
+        help="Output directory for HDF matrix output. \
+            HDF chunks will be saved here as <chunk_num>.{gene, transcript}.hdf")
     grp.add_argument(
         "--stats", type=Path,
-        help="Output filename for JSON statistics summary. \
-            Two files will be produced as filename.{gene, transcript}.ext")
+        help="Output filename for JSON statistics.")
     parser.add_argument(
         "--ref_interval", type=int, default=1000,
         help="Size of genomic window (bp) to assign as gene name if no gene \
             assigned by featureCounts.")
+    parser.add_argument(
+        "--chunk_size", type=int, default=200000,
+        help="Approximate size of chunks to read in from the input tags file.")
 
     return parser
 
@@ -167,23 +169,74 @@ def cluster_dataframe(df, ref_interval):
 
 
 class ExpressionSummary(StatsSummary):
-    """Gene and transcript feature summary statistics."""
+    """Gene and transcript feature statistics."""
 
     fields = {
         "tagged",
         "gene_tagged", "transcript_tagged",
-        "unique_genes", "unique_transcripts"}
+        "genes", "transcripts"}
 
-    @classmethod
-    def from_pandas(cls, df):
+    def __init__(self, *args, **kwargs):
+        """Create summary."""
+        super().__init__(*args, **kwargs)
+        self.unique_genes = set()
+        self.unique_transcripts = set()
+
+    def pandas_update(self, df):
         """Create statistics from pandas dataframe."""
-        stats = dict()
-        stats["tagged"] = len(df)
-        stats["gene_tagged"] = len(df[df.gene != '-'])
-        stats["transcript_tagged"] = len(df[df.transcript != '-'])
-        stats["genes"] = df['gene'].nunique()  # this will include "-"
-        stats["transcripts"] = df['transcript'].nunique()  # and this
-        return cls(stats)
+        self["tagged"] += len(df)
+        self["gene_tagged"] += len(df[df.gene != '-'])
+        self["transcript_tagged"] += len(df[df.transcript != '-'])
+        self.unique_genes.update(df['gene'])  # this will include "-"
+        self.unique_transcripts.update(df['transcript'])  # and this
+
+    def to_json(self, fname):
+        """Save to JSON. First  convert features counts to n unique."""
+        self['genes'] = len(self.unique_genes)
+        self['transcripts'] = len(self.unique_transcripts)
+        super().to_json(fname)
+
+
+def chunk_reader(file_path, chunk_size):
+    """
+    Read TSV file in chunks, ensuring that no CB (cell barcode) is split between chunks.
+
+    :param file_path str: Path to the TSV file.
+    :param chunk_size int: Desired number of rows per chunk (approximate).
+    :yields: Pandas DataFrame chunk.
+    """
+    reader = pd.read_csv(
+        file_path, index_col='read_id', sep="\t", iterator=True,
+        usecols=[
+            'read_id', 'CR', 'CY', 'UR', 'UY', 'chr', 'start', 'end', 'CB'])
+    buffer = []
+    last_cb = None
+    current_cb = None
+
+    # All barcodes must be processed together. A large chunk of records is read in
+    # from the barcode pre-sorted DataFrame.
+    # We then iterate over rows until a new barcode is encountered,
+    # at which point the chunk and the rows are combined and yielded.
+    try:
+        while True:
+            chunk = reader.get_chunk(chunk_size)
+            buffer.append(chunk)
+            last_cb = chunk.iat[-1, chunk.columns.get_loc("CB")]
+
+            # Look for a new barcode
+            while True:
+                row = reader.get_chunk(1)
+                current_cb = row.at[row.index[0], "CB"]
+                if current_cb != last_cb:
+                    yield pd.concat(buffer)
+                    buffer = [row]  # New barcode for next chunk
+                    break
+                buffer.append(row)
+            last_cb = current_cb
+    except StopIteration:
+        # No more rows in DataFrame, yield any remaining buffer.
+        if buffer:
+            yield pd.concat(buffer)
 
 
 def main(args):
@@ -193,55 +246,55 @@ def main(args):
     if args.tsv_out is None and args.hdf_out is None:
         raise ValueError("Please supply at least one of `--tsv_out` or `--hdf_out`.")
 
-    logger.info("Reading barcode tag information.")
-    df_tags = pd.read_csv(args.barcode_tags, sep='\t', index_col='read_id')
+    stats = ExpressionSummary()
 
-    dups = df_tags[df_tags.index.duplicated(keep='first')]
-    if not dups.empty:
-        raise ValueError(
-            f"One or more input reads are duplicated, please rectify.\n"
-            f"Duplicated reads: {list(set(dups.index))[:20]}")
+    tsv_out_cols = [
+        'read_id', 'CR', 'CB', 'CY', 'UR', 'UB',
+        'UY', 'gene', 'transcript', 'start', 'end', 'chr']
+    tag_to_desc_map = {v: k for k, v in BAM_TAGS.items()}
+    tsv_out_cols = [tag_to_desc_map.get(t, t) for t in tsv_out_cols]
+
+    # Create header for tags TSV output
+    pd.DataFrame(columns=tsv_out_cols).to_csv(
+        args.tsv_out, sep='\t', header=True, index=False)
 
     logger.info("Reading feature information.")
     df_features = pd.read_csv(
         args.features, sep='\t', index_col=0)
 
-    logger.info("Merging barcode and feature information.")
-    df_tag_feature = df_tags.merge(
-        df_features, how='left', left_index=True, right_index=True).fillna('-')
+    for chunk_num, df_tags in enumerate(
+            chunk_reader(args.barcode_tags, args.chunk_size)):
+        logger.info(f'processing chunk: {chunk_num}')
 
-    logger.info("Filtering reads.")
-    df_tag_feature = df_tag_feature.loc[
-        (df_tag_feature.CB != '-') & (df_tag_feature.UR != '-')]
+        df_tags = df_tags.merge(
+            df_features, how='left', left_index=True, right_index=True).fillna('-')
 
+        logger.info("Filtering reads.")
+        df_tags = df_tags.loc[
+            (df_tags.CB != '-') & (df_tags.UR != '-')]
+
+        if args.stats:
+            logger.info("Writing JSON stats to {args.stats}")
+            stats.pandas_update(df_tags)
+
+        logger.info("Clustering UMIs.")
+        df_tags = cluster_dataframe(df_tags, args.ref_interval)
+
+        df_tags.rename(
+            columns={v: k for k, v in BAM_TAGS.items()}, copy=False, inplace=True)
+        df_tags['chr'] = args.chrom
+        df_tags.reset_index(inplace=True, drop=False)
+        df_tags = df_tags[tsv_out_cols]
+
+        if args.tsv_out:
+            logger.info("Writing text output.")
+            df_tags.to_csv(args.tsv_out, sep='\t', header=False, mode='a', index=False)
+
+        if args.hdf_out:
+            for feature in ("gene", "transcript"):
+                logger.info(f"Creating {feature} expression matrix.")
+                matrix = ExpressionMatrix.from_tags(df_tags, feature)
+                fname = args.hdf_out / f"{chunk_num}.{feature}.hdf"
+                matrix.to_hdf(fname)
     if args.stats:
-        logger.info("Writing JSON summary to {args.summary}")
-        summary = ExpressionSummary.from_pandas(df_tag_feature)
-        summary.to_json(args.stats)
-
-    logger.info("Clustering UMIs.")
-    df_tag_feature = cluster_dataframe(df_tag_feature, args.ref_interval)
-
-    logger.info("Preparing output.")
-    cols = ['CR', 'CB', 'CY', 'UR', 'UB', 'UY', 'gene', 'transcript', 'start', 'end']
-    if len(df_tag_feature) > 0:
-        df_tags_out = df_tag_feature[cols].assign(chr=args.chrom)
-    else:
-        # TODO: comes back to this, it smells janky
-        df_tags_out = (
-            pd.DataFrame(columns=['read_id'] + cols + ['chr'])
-            .set_index('read_id', drop=True)
-        )
-    df_tags_out.rename(
-        columns={v: k for k, v in BAM_TAGS.items()}, copy=False, inplace=True)
-
-    if args.tsv_out:
-        logger.info("Writing text output.")
-        df_tags_out.to_csv(args.tsv_out, sep='\t')
-
-    if args.hdf_out:
-        for feature in ("gene", "transcript"):
-            logger.info(f"Creating {feature} expression matrix.")
-            matrix = ExpressionMatrix.from_tags(df_tags_out, feature)
-            fname = args.hdf_out.with_suffix(f".{feature}{args.hdf_out.suffix}")
-            matrix.to_hdf(fname)
+        stats = stats.to_json(args.stats)
