@@ -409,7 +409,7 @@ process pack_images {
 
 process tag_bam {
     label "singlecell"
-    cpus 4
+    cpus params.wf.merge_threads
     memory "16 GB"
     publishDir "${params.out_dir}/${meta.alias}", mode: 'copy'
     input:
@@ -423,11 +423,13 @@ process tag_bam {
                path("${meta.alias}.tagged.bam.bai"),
                emit: tagged_bam
     script:
+    def script_threads = Math.round(Math.max(task.cpus / 2.0, 2.0))
+    def sort_threads = Math.round(Math.max(task.cpus / 2.0, 2.0))
     """
     workflow-glue tag_bam \
-        align.bam "${meta.alias}.tagged.bam" tags \
-        --threads ${task.cpus}
-    samtools index -@ ${task.cpus} "${meta.alias}.tagged.bam"
+        align.bam - tags --threads ${script_threads} \
+        | samtools sort -@ ${sort_threads} - \
+            --write-index -o "${meta.alias}.tagged.bam##idx##${meta.alias}.tagged.bam.bai"
     """
 }
 
