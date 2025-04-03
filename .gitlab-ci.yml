@@ -38,29 +38,29 @@ docker-run:
       - if: $MATRIX_NAME == 'standard'
         variables:
           NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v2.2.0_test_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/test_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
-          NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --fastq ${CI_PROJECT_NAME}/data/test_data/fastq/ --fastq_chunk 2500 --single_cell_sample_sheet ${CI_PROJECT_NAME}/data/test_data/samples.test.csv --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"
+          NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --wf.merge_threads=4 --fastq ${CI_PROJECT_NAME}/data/test_data/fastq/ --fastq_chunk 2500 --single_cell_sample_sheet ${CI_PROJECT_NAME}/data/test_data/samples.test.csv --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"
       
       - if: $MATRIX_NAME == 'fixed_cell_count'
         variables:
           NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v2.2.0_test_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/test_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
-          NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --fastq ${CI_PROJECT_NAME}/data/test_data/fastq/ --estimate_cell_count=false --fastq_chunk 2500 --single_cell_sample_sheet ${CI_PROJECT_NAME}/data/test_data/samples.test.csv --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"  
+          NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --wf.merge_threads=4 --fastq ${CI_PROJECT_NAME}/data/test_data/fastq/ --estimate_cell_count=false --fastq_chunk 2500 --single_cell_sample_sheet ${CI_PROJECT_NAME}/data/test_data/samples.test.csv --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"  
       - if: $MATRIX_NAME == 'no_fl_filtering'
         variables:
           NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v2.2.0_test_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/test_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
-          NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --fastq ${CI_PROJECT_NAME}/data/test_data/fastq/ --fastq_chunk 2500 --full_length_only=false --single_cell_sample_sheet ${CI_PROJECT_NAME}/data/test_data/samples.test.csv --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"
+          NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --wf.merge_threads=4 --fastq ${CI_PROJECT_NAME}/data/test_data/fastq/ --fastq_chunk 2500 --full_length_only=false --single_cell_sample_sheet ${CI_PROJECT_NAME}/data/test_data/samples.test.csv --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"
 
       - if: $MATRIX_NAME == "integration-test"
         variables:
           NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/ci_data.tar.gz https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/ci_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/ci_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
-          NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --fastq ${CI_PROJECT_NAME}/data/ci_data/sample1.fq --fastq_chunk 2500 --ref_genome_dir ${CI_PROJECT_NAME}/data/ci_data/10x_ref_chr21_22 --matrix_min_genes 1 --matrix_min_cells 1 --expected_cells 10 --kit 3prime:v3"
+          NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --wf.merge_threads=4 --fastq ${CI_PROJECT_NAME}/data/ci_data/sample1.fq --fastq_chunk 2500 --ref_genome_dir ${CI_PROJECT_NAME}/data/ci_data/10x_ref_chr21_22 --matrix_min_genes 1 --matrix_min_cells 1 --expected_cells 10 --kit 3prime:v3"
       - if: $MATRIX_NAME == "bam-input"
         variables:
           NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v2.2.0_test_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/test_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
-          NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --bam ${CI_PROJECT_NAME}/data/test_data/bam/ --fastq_chunk 2500 --single_cell_sample_sheet ${CI_PROJECT_NAME}/data/test_data/samples.test.csv --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"
+          NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --wf.merge_threads=4 --bam ${CI_PROJECT_NAME}/data/test_data/bam/ --fastq_chunk 2500 --single_cell_sample_sheet ${CI_PROJECT_NAME}/data/test_data/samples.test.csv --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"
       - if: $MATRIX_NAME == "visium"
         variables:
           NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v2.2.0_test_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/test_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
-          NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --fastq ${CI_PROJECT_NAME}/data/test_data/visium_fastq --fastq_chunk 2500 --kit visium:v1 --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCm39-2024-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"
+          NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --wf.merge_threads=4 --fastq ${CI_PROJECT_NAME}/data/test_data/visium_fastq --fastq_chunk 2500 --kit visium:v1 --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCm39-2024-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"
       - if: $MATRIX_NAME == "SNV" 
         variables:
           NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v2.5.0_test_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/test_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
