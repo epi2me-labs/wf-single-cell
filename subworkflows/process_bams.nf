@@ -277,7 +277,8 @@ process create_matrix {
         ${chr} barcodes.tsv features.tsv \
         --tsv_out summary.tsv \
         --hdf_out hdfs \
-        --stats stats.json
+        --stats stats.json \
+        --umi_length ${meta['umi_length']}
     """
 }
 

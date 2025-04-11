@@ -46,6 +46,9 @@ def argparser():
     parser.add_argument(
         "--chunk_size", type=int, default=200000,
         help="Approximate size of chunks to read in from the input tags file.")
+    parser.add_argument(
+        "--umi_length", type=int,
+        help="Expected UMI length. Discard reads with corrected UMIs not this size.")
 
     return parser
 
@@ -99,7 +102,7 @@ UMIClusterer._get_adj_list_directional = get_adj_list_directional_lev
 UMIClusterer.__call__ = umi_clusterer_call
 
 
-def cluster(umis):
+def cluster(umis, expected_umi_length):
     """Cluster UMIs.
 
     Search for UMI clusters within subsets of reads sharing the same corrected barcode
@@ -111,6 +114,7 @@ def cluster(umis):
     https://umi-tools.readthedocs.io/en/latest/the_methods.html
 
     """
+    logger = get_named_logger('CrteMatrix')
     if len(umis) == 1:  # early return
         return umis
     clusterer = UMIClusterer(cluster_method="directional")
@@ -122,7 +126,19 @@ def cluster(umis):
 
     # create list of corrections
     umi_map = dict()
+    # Each cluster is a list of UMIs that are assumed to come from the same molecule.
+    # The first entry of the cluster is the representative/correct UMI.
     for clust in clusters:
+        # If the corrected UMI is not the expected length,
+        # set all UMIs in the cluster to '-'
+        if len(clust[0]) != expected_umi_length:
+            # Single UMIs are not normally corrected,
+            # but in this case we want to set to '-'
+            if len(clust) == 1:
+                umi_map[clust[0]] = '-'
+                logger.warning
+                (f"UMI {clust[0]} is not the expected length of {expected_umi_length}")
+            clust[0] = '-'
         if len(clust) > 1:
             for umi in clust[1:]:
                 umi_map[umi] = clust[0]
@@ -143,7 +159,7 @@ def create_region_name(row, ref_interval):
     return gene
 
 
-def cluster_dataframe(df, ref_interval):
+def cluster_dataframe(df, ref_interval, umi_length):
     """Process records from tags file."""
     # Create column to keep track of non-assigned genes
     df['no_gene'] = False
@@ -160,8 +176,10 @@ def cluster_dataframe(df, ref_interval):
     df.set_index('gene_cell', inplace=True, drop=True)
     # UB: corrected UMI tag
     groups = df.groupby("gene_cell")["UR"]
-    df["UB"] = groups.transform(cluster)
+    df["UB"] = groups.transform(lambda x: cluster(x, expected_umi_length=umi_length))
     df.set_index('read_id', drop=True, inplace=True)
+    # Remove unassigned UMIs
+    df.drop(df.loc[df.UB == '-'].index, inplace=True, errors='ignore')
     # Reset unassigned genes to '-'
     df.loc[df.no_gene, 'gene'] = '-'
     df.drop(columns='no_gene', inplace=True)
@@ -278,7 +296,7 @@ def main(args):
             stats.pandas_update(df_tags)
 
         logger.info("Clustering UMIs.")
-        df_tags = cluster_dataframe(df_tags, args.ref_interval)
+        df_tags = cluster_dataframe(df_tags, args.ref_interval, args.umi_length)
 
         df_tags.rename(
             columns={v: k for k, v in BAM_TAGS.items()}, copy=False, inplace=True)
