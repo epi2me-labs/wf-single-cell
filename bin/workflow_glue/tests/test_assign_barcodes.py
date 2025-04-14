@@ -39,9 +39,9 @@ def test_calc_ed_with_allowed_barcodes(allowed_barcodes):
 def test_process_records(allowed_barcodes, use_kmer_index):
     """Test process_records.
 
-    Check if barcodes are corrected and enumerted appropriately.
+    Check if barcodes are corrected and enumerated appropriately.
     """
-    # Build some uncorrectred barcodes.
+    # Build some uncorrected barcodes.
     # The columns used in this test are read_id and CR (uncorrected barcode). The other
     # Columns can be any value for now
     header = ('read_id', 'CR', 'CY', 'UR', 'UY', 'chr', 'start', 'end', 'mapq')
@@ -82,10 +82,11 @@ def test_process_records(allowed_barcodes, use_kmer_index):
 
     assert result_tags_df.loc['read1', 'CB'] == 'AAAAAAAAAAAAAAAA'
     assert result_tags_df.loc['read2', 'CB'] == 'AAAAAAAAAAAAAAAA'
-    assert result_tags_df.loc['read3', 'CB'] == '-'
-    assert result_tags_df.loc['read4', 'CB'] == '-'
-    assert result_tags_df.loc['read5', 'CB'] == '-'
-    assert result_tags_df.loc['read6', 'CB'] == '-'
+    # Reads without a corrected barcode should not be present in the output
+    assert 'read3' not in result_tags_df.index
+    assert 'read4' not in result_tags_df.index
+    assert 'read5' not in result_tags_df.index
+    assert 'read6' not in result_tags_df.index
 
     assert dict(reasons_counter) == \
            {

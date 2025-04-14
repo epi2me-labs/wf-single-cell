@@ -183,7 +183,7 @@ def main(args):
         df_tr.loc[df_tr['class_code'].isin(['i', 'y', 'p', 's']), 'transcript'] = '-'
 
         df_tr = df_tr.merge(
-            df_genomic_mapq, how='left', left_on='read_id', right_on='read_id')
+            df_genomic_mapq, how='right', left_on='read_id', right_on='read_id')
 
         multimaped_idxs = df_tr.read_id.duplicated(keep=False)
         df_multimap = df_tr.loc[multimaped_idxs]

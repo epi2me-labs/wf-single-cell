@@ -186,13 +186,18 @@ def process_records(
                 x.CR, whitelist, whiteset, max_ed, min_ed_diff, assignment_log,
                 index),
             axis=1)
-        df_tags[output_cols].to_csv(
-            tags_output, mode='a', sep='\t', header=None, index=False)
-        barcode_counter.update(df_tags["CB"])
         total_reads += len(df_tags)
         logger.info(f"Processed {total_reads} reads.")
+        # Remove reads without a corrected barcode assigned.
+        n_records = len(df_tags)
+        df_tags.query('CB != "-"', inplace=True)
+        logger.info(
+            f"Removed {n_records - len(df_tags)} reads without a corrected barcode.")
+        if len(df_tags) != 0:
+            df_tags[output_cols].to_csv(
+                tags_output, mode='a', sep='\t', header=None, index=False)
+            barcode_counter.update(df_tags["CB"])
 
-    del barcode_counter["-"]
     return barcode_counter, assignment_log
 
 
