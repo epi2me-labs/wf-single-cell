@@ -1,4 +1,19 @@
-"""Add tags from a text file to a BAM."""
+"""Tag BAM with workflow-derived information.
+
+Tags files are TSV files containing read_id to tags mappings (such as barcodes, UMIs,
+assigned features). We iterate over the BAM file by chromosome, loading the tags for
+each chromosome individually to avoid holding all tags in memory
+at once. The records are tagged and output to a tagged BAM. This process only tags
+primary records, or supplementary records that are on the same chromosome as their
+primary record.
+
+To tag supplementary records, there is another tags file input that contains
+read_id to tag mappings for all supplementary records, formatted identically to the
+primary tags file.
+During tagging, these are all loaded into memory regardless of chromosome they map to.
+This allows supplementary records that map to a different chromosome than their
+primary alignment to be properly tagged.
+"""
 import csv
 from dataclasses import dataclass
 import itertools
@@ -32,12 +47,15 @@ def argparser():
 
     parser.add_argument(
         "out_bam", type=Path,
-        help="Path for the tagged output BAM",
-        default='-')
+        help="Path for tagged output BAM")
 
     parser.add_argument(
         "tags", type=Path,
         help="Read tags TSV")
+
+    parser.add_argument(
+        "sa_tags", type=Path,
+        help="Read supplementary tags TSV")
 
     parser.add_argument(
         "--threads", default=2, type=int,
@@ -78,9 +96,9 @@ class Tags:
 class TagStore:
     """Proxy to tag files for retrieving per-read tag information."""
 
-    def __init__(self, tags, bam=None):
+    def __init__(self, tags, bam=None, sa_tags=None):
         """Initialize an instance."""
-        self._tags = None
+        self._sa_tags = self._load_supplementary_tags(sa_tags)
         self._cur = None
         self._single = False
         if tags.is_file():
@@ -104,6 +122,19 @@ class TagStore:
             raise ValueError(
                 "`tags` should be a tags file or directory containing such files.")
 
+    def _load_supplementary_tags(self, sa_tags):
+        # Load tag info for all reads with one or more suppl. records.
+        # These are added to self._tags later regardless of chr mapping.
+        # This enures that supplementary records are tagged even if on a different
+        # chr to primary record.
+        sa_tags_files = []
+        if sa_tags is not None:
+            sa_tags_files = sa_tags.glob("*.tsv")
+        sa_tags = {}
+        for fname in sa_tags_files:
+            sa_tags.update(self._read_file(fname))
+        return sa_tags
+
     def populate(self, rname):
         """Populate the proxy for a given reference."""
         if not self._single:
@@ -111,7 +142,9 @@ class TagStore:
             try:
                 self._tags = self._read_file(self._index[self._cur])
             except KeyError:
+                # No primary records for this chr, but there may be suppl records
                 self._tags = {}
+            self._tags.update(self._sa_tags)
 
     def _read_file(self, fname, nrows=None, cols=None):
         """Read a tags file."""
@@ -154,86 +187,44 @@ class TagStore:
         return data
 
 
-def add_tags(tags, in_bam, out_bam, threads):
+def add_tags(tags, sa_tags, in_bam, out_bam, threads):
     """Add all the required tags to the BAM file."""
-    store = TagStore(tags, bam=in_bam)
+    store = TagStore(tags, bam=in_bam, sa_tags=sa_tags)
 
-    n_skipped = 0
-    n_prim_written = 0
-    n_supp_written = 0
-
-    threads = max(1, threads // 2)
-
-    b1 = pysam.AlignmentFile(in_bam, "rb", threads=threads)
-    # Uncompressed BAM if writing to stdout
-    write_mode = 'wbu' if out_bam == "-" else 'wb'
-    b2 = pysam.AlignmentFile(out_bam, write_mode, template=b1, threads=threads)
-
-    sup_tags = {}
-
-    with b1 as bam_in, b2 as bam_out:
-
-        for ref in bam_in.references:
-            logger.info(f"Processing reads from reference: {ref}.")
-            store.populate(ref)
-
-            logger.info("Tagging reads.")
-            for align in bam_in.fetch(ref):
-                read_id = align.query_name
-
-                if align.is_supplementary:
-                    # No tagging of supp. reads yet, that's done later
-                    continue
-                try:
-                    row = store._tags[read_id]
-                except KeyError:
-                    # No tags for this read
-                    n_skipped += 1
-                    continue
-
-                # If primary has tags and a supp record, save the ID and tags
-                # for later tagging.
-                try:
-                    if align.get_tag("SA"):
-                        tags = []
+    skipped = 0
+    written = 0
+    with pysam.AlignmentFile(in_bam, "rb", threads=threads) as bam_in:
+        with pysam.AlignmentFile(
+                out_bam, "wb", template=bam_in, threads=threads) as bam_out:
+            for ref in bam_in.references:
+                logger.info(f"Processing reads from reference: {ref}.")
+                # There may be no primary records for this reference, but we'll process
+                # it in case there are any supplementary records
+                store.populate(ref)
+                logger.info("Tagging reads.")
+                for align in bam_in.fetch(ref):
+                    read_id = align.query_name
+                    try:
+                        row = store._tags[read_id]
+                    except KeyError:
+                        skipped += 1
+                        continue  # don't write reads without tags
+                    else:
+                        written += 1
                         for tag in BAM_TAGS.values():
-                            tags.append(getattr(row, tag))
-                        sup_tags[read_id] = tags
-                except KeyError:
-                    pass  # No SA tag
-                n_prim_written += 1
-                for tag in BAM_TAGS.values():
-                    align.set_tag(tag, getattr(row, tag), value_type="Z")
-                bam_out.write(align)
-
-        bam_in.reset()  # reset the iterator, this time tagging supp. records
-        for record in bam_in.fetch():
-            if not record.is_supplementary:
-                continue
-            read_id = record.query_name
-            try:
-                tags = sup_tags[read_id]
-            except KeyError:
-                # No tags for this read
-                continue
-            for tag, val in zip(BAM_TAGS.values(), tags):
-                record.set_tag(tag, val, value_type="Z")
-            n_supp_written += 1
-            bam_out.write(record)
-
-        total = n_skipped + n_prim_written
-        written_pct = 0
-        skipped_pct = 0
-        if total > 0:
-            written_pct = 100 * n_prim_written / total
-            skipped_pct = 100 * n_skipped / total
-        logger.info(
-            f"Tagged primary records: {n_prim_written} ({written_pct:0.2f}%).\n"
-            f"Skipped primary records: {n_skipped} ({skipped_pct:0.2f}%).\n"
-            f"Tagged suppl. records: {n_supp_written}.")
+                            align.set_tag(tag, getattr(row, tag), value_type="Z")
+                        bam_out.write(align)
+    total = skipped + written
+    written_pct = 0
+    skipped_pct = 0
+    if total > 0:
+        written_pct = 100 * written / total
+        skipped_pct = 100 * skipped / total
+    logger.info(
+        f"Written: {written} ({written_pct:0.2f}%). "
+        f"Skipped: {skipped} ({skipped_pct:0.2f}%).")
 
 
 def main(args):
     """Entry point."""
-    add_tags(
-        args.tags, args.in_bam, args.out_bam, args.threads)
+    add_tags(args.tags, args.sa_tags, args.in_bam, args.out_bam, args.threads)

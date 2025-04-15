@@ -1,6 +1,5 @@
 """Test assign_barcodes."""
 from collections import Counter
-import tempfile
 
 import pandas as pd
 import pytest
@@ -36,7 +35,7 @@ def test_calc_ed_with_allowed_barcodes(allowed_barcodes):
 
 
 @pytest.mark.parametrize("use_kmer_index", [False, True])
-def test_process_records(allowed_barcodes, use_kmer_index):
+def test_process_records(tmp_path, allowed_barcodes, use_kmer_index):
     """Test process_records.
 
     Check if barcodes are corrected and enumerated appropriately.
@@ -62,10 +61,13 @@ def test_process_records(allowed_barcodes, use_kmer_index):
         ('read7', 'cccAAAAAAAAAAAAA', 'qual', 'umi', 'qual', 'chr', 0, 100, 20),
     ]
 
-    tags = pd.DataFrame(rows, columns=header).set_index('read_id', drop=True)
-    tags_file = tempfile.NamedTemporaryFile(mode='w', suffix='.tsv')
+    tags = (
+        pd.DataFrame(rows, columns=header)
+        .set_index('read_id', drop=True)
+        .assign(SA='True'))  # Add constant SA column (not used in the tested code)
+    tags_file = tmp_path / 'tags.tsv'
     tags.to_csv(tags_file.name, sep='\t')
-    tags_output = tempfile.NamedTemporaryFile(mode='w', suffix='.tsv')
+    tags_output = tmp_path / 'tags_out.tsv'
 
     max_ed = 2
     min_ed_diff = 2

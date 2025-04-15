@@ -266,6 +266,7 @@ process create_matrix {
         tuple val(meta), val(chr), path("features.tsv"), path(read_tags, stageAs: "barcodes.tsv")
     output:
         tuple val(meta), val(chr), path("summary.tsv"), emit: summary
+        tuple val(meta), val(chr), path("sa_summary.tsv"), emit: sa_summary
         tuple val(meta), val(chr), val("gene"), path("hdfs/*gene.hdf"), emit: gene
         tuple val(meta), val(chr), val("transcript"), path("hdfs/*transcript.hdf"), emit: transcript
         tuple val(meta), val(chr), path("stats.json"), emit: stats
@@ -276,6 +277,7 @@ process create_matrix {
     workflow-glue create_matrix \
         ${chr} barcodes.tsv features.tsv \
         --tsv_out summary.tsv \
+        --sa_tags_out sa_summary.tsv \
         --hdf_out hdfs \
         --stats stats.json \
         --umi_length ${meta['umi_length']}
@@ -410,27 +412,25 @@ process pack_images {
 
 process tag_bam {
     label "singlecell"
-    cpus params.wf.merge_threads
-    memory "16 GB"
+    cpus 4
+    memory "31 GB"
     publishDir "${params.out_dir}/${meta.alias}", mode: 'copy'
     input:
         tuple val(meta),
               path('align.bam'),
               path('align.bam.bai'),
-              path('tags/tag_*.tsv')
+              path('tags/tag_*.tsv'),
+              path('sa_tags/sa_tag_*.tsv')
     output:
          tuple val(meta),
                path("${meta.alias}.tagged.bam"),
                path("${meta.alias}.tagged.bam.bai"),
                emit: tagged_bam
     script:
-    def script_threads = Math.round(Math.max(task.cpus / 2.0, 2.0))
-    def sort_threads = Math.round(Math.max(task.cpus / 2.0, 2.0))
     """
     workflow-glue tag_bam \
-        align.bam - tags --threads ${script_threads} \
-        | samtools sort -@ ${sort_threads} - \
-            --write-index -o "${meta.alias}.tagged.bam##idx##${meta.alias}.tagged.bam.bai"
+        align.bam "${meta.alias}.tagged.bam" tags sa_tags --threads ${task.cpus}
+    samtools index "${meta.alias}.tagged.bam"
     """
 }
 
@@ -534,8 +534,10 @@ workflow process_bams {
             .map{meta, chrs, files -> [meta, files]}
         final_read_tags = combine_final_tag_files(tags_by_sample)
 
-        tag_bam(merge_bams.out.join(tags_by_sample))
-
+        tag_bam(
+            merge_bams.out.join(tags_by_sample)
+            .join(create_matrix.out.sa_summary.groupTuple()
+            .map{meta, chrs, files -> [meta, files]}))
         // UMI saturation curves
         // TODO: this save figures with matplotlib -- just output
         //       data and plot in report with bokeh

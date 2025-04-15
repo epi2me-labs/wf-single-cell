@@ -39,7 +39,7 @@ process call_adapter_scan {
     // in parallel. The resolution to that would be to make the first two steps do
     // better parallelism. The advantage here is not having to write to disk, stage files
     // and read from disk between the steps (creating a lot of big temporary files).
-    // 
+    //
     // peak RSS for aligning this data is robustly <12.4 GB with human reference. Set
     // a little more and do a retry
     memory {15.GB * task.attempt}
@@ -92,6 +92,8 @@ process call_adapter_scan {
         genome_index.mmi - \
     | samtools view -uh --no-PG - \
     | tee >(seqkit bam -s  2> bamstats.tsv ) \
+    | tee >(samtools view - -d SA \
+        | awk 'BEGIN{OFS="\t"; print "read_id", "SA"} {print \$1,"True"}' > SA_tags.tsv ) \
     | samtools view -uh -F 256 - \
     | tee >(samtools sort --write-index -o "sorted.bam"##idx##"sorted.bam.bai" --no-PG  -) \
     | seqkit bam -F - 2> bam_info.tsv
@@ -100,9 +102,17 @@ process call_adapter_scan {
     csvtk cut -tlf Read,Pos,EndPos,Ref,MapQual bam_info.tsv > bam_info_cut.tsv
     # Left join of barcode
     csvtk join -tlf 1 bam_info_cut.tsv bc_extract.tsv --left-join \
-        | csvtk rename -tl -f Read,Pos,EndPos,Ref,MapQual -n read_id,start,end,chr,mapq -o read_tags.tsv
+        | csvtk rename -tl -f Read,Pos,EndPos,Ref,MapQual -n read_id,start,end,chr,mapq -o read_tags_interim.tsv
 
-    rm bam_info.tsv bam_info_cut.tsv bc_extract.tsv
+    # Merge the SA column with the read tags on read_id
+    if [ \$(wc -l < SA_tags.tsv) -eq 1 ]; then
+        echo "No SA tags found"
+        # Add an empty SA column
+        csvtk mutate2 -t -n 'SA' -e " '' " read_tags_interim.tsv > read_tags.tsv
+    else
+        csvtk -t uniq SA_tags.tsv | csvtk join -t --left-join --fields read_id read_tags_interim.tsv - > read_tags.tsv
+    fi
+    rm bam_info.tsv bam_info_cut.tsv bc_extract.tsv read_tags_interim.tsv
     """
 }
 
@@ -134,7 +144,7 @@ workflow preprocess {
         // alignment pre-requisites
         call_paftools(ref_genes_gtf)
         build_minimap_index(ref_genome_fasta)
-        
+
         // find adapters, trim barcodes, and align
         call_adapter_scan(
             read_chunks,

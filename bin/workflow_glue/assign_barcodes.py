@@ -171,7 +171,8 @@ def process_records(
         index = build_index(whitelist, klen=kmer)
 
     output_cols = [
-        'read_id', 'CR', 'CY', 'UR', 'UY', 'chr', 'start', 'end', 'mapq', 'CB']
+        'read_id', 'CR', 'CY', 'UR', 'UY', 'chr',
+        'start', 'end', 'mapq', 'CB', 'SA']
     with open(tags_output, 'w') as fh:
         fh.write("\t".join(output_cols))
         fh.write("\n")
