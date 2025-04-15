@@ -31,7 +31,10 @@ def argparser():
     grp = parser.add_argument_group("Output")
     grp.add_argument(
         "--tsv_out", type=Path,
-        help="Output TSV containing a subset of read-tags in human-readable form")
+        help="Output TSV containing primary record read-tags in human-readable form")
+    grp.add_argument(
+        "--sa_tags_out", type=Path,
+        help="Output TSV containing supplementary read-tags in human-readable form")
     grp.add_argument(
         "--hdf_out", type=Path,
         help="Output directory for HDF matrix output. \
@@ -219,14 +222,14 @@ def chunk_reader(file_path, chunk_size):
     """
     Read TSV file in chunks, ensuring that no CB (cell barcode) is split between chunks.
 
-    :param file_path str: Path to the TSV file.
+    :param file_path str: Path to the TSV
     :param chunk_size int: Desired number of rows per chunk (approximate).
     :yields: Pandas DataFrame chunk.
     """
     reader = pd.read_csv(
         file_path, index_col='read_id', sep="\t", iterator=True,
         usecols=[
-            'read_id', 'CR', 'CY', 'UR', 'UY', 'chr', 'start', 'end', 'CB'])
+            'read_id', 'CR', 'CY', 'UR', 'UY', 'chr', 'start', 'end', 'CB', 'SA'])
     buffer = []
     last_cb = None
     current_cb = None
@@ -276,6 +279,10 @@ def main(args):
     pd.DataFrame(columns=tsv_out_cols).to_csv(
         args.tsv_out, sep='\t', header=True, index=False)
 
+    # Create header for SA tags TSV output
+    pd.DataFrame(columns=tsv_out_cols).to_csv(
+        args.sa_tags_out, sep='\t', header=True, index=False)
+
     logger.info("Reading feature information.")
     df_features = pd.read_csv(
         args.features, sep='\t', index_col=0)
@@ -302,11 +309,19 @@ def main(args):
             columns={v: k for k, v in BAM_TAGS.items()}, copy=False, inplace=True)
         df_tags['chr'] = args.chrom
         df_tags.reset_index(inplace=True, drop=False)
-        df_tags = df_tags[tsv_out_cols]
 
         if args.tsv_out:
             logger.info("Writing text output.")
-            df_tags.to_csv(args.tsv_out, sep='\t', header=False, mode='a', index=False)
+            # Write the tags file for any supplementary records.
+            df_sa = df_tags[df_tags.SA != '-']
+            df_sa.drop(columns='SA', inplace=True)
+            df_sa = df_sa[tsv_out_cols]
+            df_sa.to_csv(
+                args.sa_tags_out, sep='\t', header=False, mode='a', index=False)
+            # Write the tags file for primary records.
+            df_tags = df_tags[tsv_out_cols]
+            df_tags.to_csv(
+                args.tsv_out, sep='\t', header=False, mode='a', index=False)
 
         if args.hdf_out:
             for feature in ("gene", "transcript"):
