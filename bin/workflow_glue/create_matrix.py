@@ -193,9 +193,9 @@ class ExpressionSummary(StatsSummary):
     """Gene and transcript feature statistics."""
 
     fields = {
-        "tagged",
+        "valid_barcodes",
         "gene_tagged", "transcript_tagged",
-        "genes", "transcripts"}
+        "unique_genes", "unique_transcripts"}
 
     def __init__(self, *args, **kwargs):
         """Create summary."""
@@ -205,11 +205,11 @@ class ExpressionSummary(StatsSummary):
 
     def pandas_update(self, df):
         """Create statistics from pandas dataframe."""
-        self["tagged"] += len(df)
+        self["valid_barcodes"] += len(df[df.CB != '-'])
         self["gene_tagged"] += len(df[df.gene != '-'])
         self["transcript_tagged"] += len(df[df.transcript != '-'])
-        self.unique_genes.update(df['gene'])  # this will include "-"
-        self.unique_transcripts.update(df['transcript'])  # and this
+        self.unique_genes.update(df.loc[df.gene != '-', 'gene'])
+        self.unique_transcripts.update(df.loc[df.transcript != '-', 'transcript'])
 
     def to_json(self, fname):
         """Save to JSON. First  convert features counts to n unique."""

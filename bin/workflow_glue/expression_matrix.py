@@ -200,6 +200,16 @@ class ExpressionMatrix:
         """The mean expression of features per cell."""
         return self.matrix.mean(axis=0)
 
+    @property
+    def median_counts(self):
+        """Median counts per cell."""
+        return np.median(self.matrix.sum(axis=0))
+
+    @property
+    def median_features_per_cell(self):
+        """Median features per cell."""
+        return np.median(np.count_nonzero(self.matrix, axis=0))
+
     def normalize(self, norm_count):
         """Normalize total cell weight to fixed cell count."""
         # cell_count / cell_total = X / <norm_count>

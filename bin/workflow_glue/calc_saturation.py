@@ -1,7 +1,5 @@
 """Calculate saturation."""
 
-from matplotlib import pyplot as plt
-import pandas as pd
 import polars as pl
 
 from .util import get_named_logger, wf_parser  # noqa: ABS101
@@ -18,73 +16,15 @@ def argparser():
 
     parser.add_argument(
         "--output",
-        help="Output plot file with saturation curves [output.png]",
-        default="output.png",
+        help="Output TSV file with saturation curves."
+    )
+
+    parser.add_argument(
+        "--sample",
+        help="sample ID/alias"
     )
 
     return parser
-
-
-def plot_saturation_curves(res, args):
-    """Plot saturation curves.
-
-    Output a single file with two subplots:
-    1. Median number of unique genes per cell
-    2. Median number of unique UMIs per cell
-    3. Sequencing saturation
-    """
-    fig = plt.figure(figsize=[15, 5])
-
-    ax1 = fig.add_subplot(1, 3, 1)
-    ax1.plot(
-        res["reads_pc"],
-        res["genes_pc"],
-        marker=None,
-        color="orange",
-        linewidth=2)
-    ax1.set_xlim([0, ax1.get_xlim()[1]])
-    ax1.set_ylim([0, ax1.get_ylim()[1]])
-    ax1.set_xlabel("Median reads per cell")
-    ax1.set_ylabel("Genes per cell")
-    ax1.set_title("Gene saturation")
-
-    plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45, ha="right")
-    ax1.grid()
-
-    ax2 = fig.add_subplot(1, 3, 2)
-    ax2.plot(
-        res["reads_pc"],
-        res["umis_pc"],
-        marker=None,
-        color="purple",
-        linewidth=2)
-    ax2.set_xlim([0, ax2.get_xlim()[1]])
-    ax2.set_ylim([0, ax2.get_ylim()[1]])
-    ax2.set_xlabel("Median reads per cell")
-    ax2.set_ylabel("UMIs per cell")
-    ax2.set_title("UMI saturation")
-    plt.setp(ax2.xaxis.get_majorticklabels(), rotation=45, ha="right")
-    ax2.grid()
-
-    ax3 = fig.add_subplot(1, 3, 3)
-    ax3.plot(
-        res["reads_pc"],
-        res["umi_sat"],
-        marker=None,
-        color="blue",
-        linewidth=2)
-    ax3.axhline(y=res["umi_sat"].max(), color="k", linestyle="--", linewidth=2)
-    ax3.set_xlim([0, ax3.get_xlim()[1]])
-    ax3.set_ylim([0, 1])
-    ax3.set_xlabel("Median reads per cell")
-    ax3.set_ylabel("Sequencing saturation")
-    umi_sat = res.at[1, 'umi_sat']  # saturation at zero subsampling
-    ax3.set_title(f"Sequencing saturation: {umi_sat:.2f}")
-    plt.setp(ax3.xaxis.get_majorticklabels(), rotation=45, ha="right")
-    ax3.grid()
-
-    fig.tight_layout()
-    fig.savefig(args.output)
 
 
 def downsample_dataframe(df, fraction):
@@ -164,22 +104,23 @@ def run_jobs(args):
     for frac in fractions:
         records.append(downsample_dataframe(df, frac))
 
-    res = pd.DataFrame.from_records(
-        records,
-        columns=[
+    res = pl.from_records(
+        data=records,
+        schema=[
             "downsamp_frac",
             "downsamp_reads",
             "reads_pc",
             "genes_pc",
             "umis_pc",
             "umi_sat",
-        ],
-        index="downsamp_frac"
+        ]
     )
-    return res
+    res = res.with_columns(
+        pl.lit(args.sample).alias("sample"),
+    )
+    res.write_csv(args.output, separator="\t")
 
 
 def main(args):
     """Entry point."""
-    result = run_jobs(args)
-    plot_saturation_curves(result, args)
+    run_jobs(args)

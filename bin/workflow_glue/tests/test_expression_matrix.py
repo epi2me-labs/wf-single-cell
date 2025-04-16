@@ -2,13 +2,14 @@
 import os
 from pathlib import Path
 import tempfile
+from unittest.mock import Mock
 
 import h5py
 import numpy as np
 import pandas as pd
 import pytest
 from workflow_glue.expression_matrix import ExpressionMatrix
-from workflow_glue.process_matrix import argparser, main
+from workflow_glue.process_matrix import main
 
 
 @pytest.fixture()
@@ -224,14 +225,27 @@ def test_main(tags_df):
     with tempfile.TemporaryDirectory() as fh:
         tmp_test_dir = Path(fh)
         os.chdir(tmp_test_dir)
-        tags_file = "tsv1.tsv"
-        tags_df.to_csv(tags_file, sep='\t')
+        tags_df.to_csv('tags.tsv', sep='\t')
 
-        parser = argparser()
-        args = parser.parse_args(
-            f"{tags_file} --feature gene --min_features 1 --min_cells 2 "
-            "--max_mito 5 --mito_prefixes 'MT-' --norm_count 10 "
-            "--enable_filtering --text".split())
+        args = Mock()
+        args.input = ["tags.tsv"]
+        args.feature = 'gene'
+        args.raw = 'raw.tsv'
+        args.per_cell_mito = 'per_cell_mito.tsv'
+        args.per_cell_expr = 'per_cell_expr.tsv'
+        args.filtered_mex = 'filtered_mex.tsv'
+        args.min_features = 1
+        args.min_cells = 2
+        args.max_mito = 5
+        args.mito_prefixes = 'MT-'
+        args.norm_count = 10
+        args.stats = 'stats.tsv'
+        args.processed = 'processed.tsv'
+        args.enable_filtering = True
+        args.text = True
+        args.enable_umap = False
+        args.pcn = None
+
         main(args)
 
         counts_result_df = pd.read_csv(args.raw, sep='\t', index_col=None)

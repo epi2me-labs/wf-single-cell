@@ -1,5 +1,5 @@
 """Test adapter_scan_vsearch."""
-import tempfile
+from unittest.mock import Mock
 
 import polars as pl
 from workflow_glue.calc_saturation import (
@@ -7,20 +7,17 @@ from workflow_glue.calc_saturation import (
 )
 
 
-def test_run_jobs():
+def test_run_jobs(tmp_path):
     """Test_downsample_reads.
 
     Check for the correct number of downsampled dataframes are returned, each with
     the correct size.
     """
-
-    class Args:
-        read_tags = tempfile.NamedTemporaryFile(
-            suffix='.tsv', mode='w', delete=False).name
-        output = tempfile.NamedTemporaryFile(
-            suffix='.tsv', mode='w').name
-        threads = 2
-    args = Args()
+    args = Mock()
+    args.read_tags = tmp_path / 'read_tags.tsv'
+    args.output = tmp_path / 'output.tsv'
+    args.threads = 2
+    args.sample = 'test'
 
     # Create df with 1000 rows of fake data.
     with open(args.read_tags, 'w') as fh:
@@ -29,16 +26,16 @@ def test_run_jobs():
         for i in range(1000):
             fh.write(f'{row}\n')
 
-    result = run_jobs(args)
+    run_jobs(args)
+    result = pl.read_csv(source=args.output, separator='\t')
 
     # Simply check correct number of results are returned
-    # and that the dowsampled reads are the correct size.
+    # and that the downsampled reads are the correct size.
     assert len(result) == 16
-    for row in result.itertuples():
-        assert row.downsamp_reads == 1000 * row.Index
+    for row in result.iter_rows(named=True):
+        assert row['downsamp_reads'] == 1000 * row['downsamp_frac']
 
 
-# @pytest.mark.skip
 def test_downsample_dataframe():
     """Test calc_saturation."""
     header = ['barcode', 'umi', 'gene']
