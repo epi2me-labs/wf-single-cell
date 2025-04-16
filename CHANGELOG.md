@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Supplementary records not appearing in tagged BAM output if primary record maps to a different chromosome.
 - Major reduction in the memory usage at the expression matrix creation step.
 - Rare cases of UMIs with incorrect length breaking SNV workflow by excluding the reads from downstream analysis. 
+- "RuntimeError: cannot cache function" by setting NUMBA_CACHE_DIR to the task directory.
 
 ## [v3.0.1]
 ### Fixed
