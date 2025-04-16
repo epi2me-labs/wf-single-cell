@@ -63,9 +63,10 @@ process makeReport {
         path stats, stageAs: "stats_*"
         path 'survival.tsv'
         path expression_dirs
-        path images
         path umap_genes
         val wf_version
+        path 'saturation_curves.tsv'
+        path 'knee_plot_counts.tsv'
         path 'bam_stats.tsv'
         path visium_coords
 
@@ -85,12 +86,13 @@ process makeReport {
         --versions versions \
         --survival survival.tsv \
         --expr_dirs $expression_dirs \
-        --images $images \
         --umap_genes $umap_genes \
         --metadata metadata.json \
         --wf_version $wf_version \
         --metadata metadata.json \
         --bam_stats bam_stats.tsv \
+        --saturation_curves saturation_curves.tsv \
+        --knee_plot_counts knee_plot_counts.tsv \
         $q_filtered \
         $visium_opt
     """
@@ -146,6 +148,7 @@ process prepare_report_data {
               path('gene_mean_expression.tsv'),
               path('transcript_mean_expression.tsv'),
               path('mitochondrial_expression.tsv'),
+              path('matrix_stats.tsv'),
               path(umaps),
               path('bamstats/bam_stats*.tsv'),
               path(snv)
@@ -168,7 +171,7 @@ process prepare_report_data {
     workflow-glue prepare_report_data \
         "${meta.alias}" adapter_stats bamstats expression_stats \
         white_list.txt survival.tsv bam_stats.tsv raw_gene_expression \
-        genes_of_interest.tsv ${meta.n_seqs}
+        matrix_stats.tsv genes_of_interest.tsv ${meta.n_seqs}
 
     if [ "$opt_umap" = "true" ]; then
         echo "Adding umap data to sample directory"
@@ -180,11 +183,11 @@ process prepare_report_data {
     else
         touch "\$umd"/OPTIONAL_FILE
     fi
-    
+
     if [ "$opt_snv" = "true" ]; then
         echo "Adding snv data to sample directory"
         mv $snv \$expression_dir
-    fi  
+    fi
     """
 }
 
@@ -253,6 +256,7 @@ workflow pipeline {
             .join(process_bams.out.gene_mean_expression)
             .join(process_bams.out.transcript_mean_expression)
             .join(process_bams.out.mitochondrial_expression)
+            .join(process_bams.out.matrix_stats)
             .join(process_bams.out.umap_matrices)
             .join(preprocess.out.bam_stats.groupTuple())
             .join(top_snvs),
@@ -279,9 +283,10 @@ workflow pipeline {
             prepare_report_data.out.survival
                 .collectFile(keepHeader:true),
             prepare_report_data.out.expression_dir.collect(),
-            process_bams.out.plots,
             genes_of_interest,
             workflow.manifest.version,
+            process_bams.out.saturation_curves,
+            process_bams.out.hq_bc_counts,
             prepare_report_data.out.bam_stats
                 .collectFile(keepHeader:true),
             visium_coords)

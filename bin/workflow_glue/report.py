@@ -1,12 +1,12 @@
 """Make report."""
-import base64
 import json
+import math
 from pathlib import Path
 
-from bokeh.models import ColorBar
+from bokeh.models import ColorBar, Span
 from bokeh.models.tickers import BasicTicker
 from bokeh.transform import linear_cmap
-from dominate.tags import b, figure, img, li, p, ul
+from dominate.tags import div, h6, li, p, ul
 from dominate.util import raw
 import ezcharts
 from ezcharts.components import fastcat
@@ -109,9 +109,6 @@ def visium_spatial_plots(coords_file, sample_dirs):
 
 def umap_plots(umaps_dirs, genes_file):
     """Plot UMAPs."""
-    # Read single column gene list file
-    genes = pd.read_csv(genes_file, header=None)[0]
-
     sample_tabs = Tabs()
 
     def _plot(data, title, hue):
@@ -145,144 +142,336 @@ def umap_plots(umaps_dirs, genes_file):
             symbol='circle'))
         EZChart(plt, theme='epi2melabs')
 
-    # Get data from each sample folder
-    for d in umaps_dirs:
+    with sample_tabs.add_dropdown_menu('sample', change_header=True):
+        # Get data from each sample folder
+        for d in umaps_dirs:
 
-        sample_id = d.replace('_umap', '')
-        sample_dir = Path(d)
+            sample_id = d.replace('_umap', '')
+            sample_dir = Path(d)
 
-        with sample_tabs.add_tab(sample_id):
+            with sample_tabs.add_dropdown_tab(sample_id):
 
-            repl_tabs = Tabs()
+                repl_tabs = Tabs()
 
-            gene_umap_files = sample_dir.glob('*gene_expression_umap*.tsv')
-            transcript_umap_files = sample_dir.glob('*transcript_expression_umap*.tsv')
+                gene_umap_files = sample_dir.glob(
+                    '*gene_expression_umap*.tsv')
+                transcript_umap_files = sample_dir.glob(
+                    '*transcript_expression_umap*.tsv')
+                goi_file = sample_dir / 'raw_goi_expression.tsv'
+                goi_df = pd.read_csv(goi_file, sep='\t', index_col=0)
 
-            for i, (
-                gene_umap_file, transcript_umap_file
-            ) in enumerate(zip(gene_umap_files, transcript_umap_files)):
+                for i, (
+                    gene_umap_file, transcript_umap_file
+                ) in enumerate(zip(gene_umap_files, transcript_umap_files)):
 
-                with repl_tabs.add_tab(f'umap #{i}'):  # Tab for UMAP repeat
+                    with repl_tabs.add_tab(f'umap #{i}'):  # Tab for UMAP repeat
 
-                    gene_umap = pd.read_csv(gene_umap_file, sep='\t', index_col=0)
+                        gene_umap = pd.read_csv(gene_umap_file, sep='\t', index_col=0)
 
-                    gene_mean_expression = pd.read_csv(
-                        sample_dir / 'gene_mean_expression.tsv',
-                        sep='\t', index_col=0,
-                       )
+                        gene_mean_expression = pd.read_csv(
+                            sample_dir / 'gene_mean_expression.tsv',
+                            sep='\t', index_col=0,
+                        )
 
-                    transcript_umap = pd.read_csv(
-                        transcript_umap_file, sep='\t', index_col=0)
+                        transcript_umap = pd.read_csv(
+                            transcript_umap_file, sep='\t', index_col=0)
 
-                    transcript_mean_expression = pd.read_csv(
-                        sample_dir / 'transcript_mean_expression.tsv',
-                        sep='\t', index_col=0,
-                     )
+                        transcript_mean_expression = pd.read_csv(
+                            sample_dir / 'transcript_mean_expression.tsv',
+                            sep='\t', index_col=0,
+                        )
 
-                    mito_expression_file = sample_dir / "mitochondrial_expression.tsv"
-                    mito_expression = pd.read_csv(
-                        mito_expression_file, sep='\t', index_col=0)
+                        mito_expression_file = (
+                            sample_dir / "mitochondrial_expression.tsv")
+                        mito_expression = pd.read_csv(
+                            mito_expression_file, sep='\t', index_col=0)
 
-                    # Make the plots
-                    with Grid(columns=2):
+                        # Make the plots mean gene transcript and mito plots
+                        with Grid(columns=2):
 
-                        gdata = gene_umap.merge(
-                            gene_mean_expression, left_index=True, right_index=True)
-                        _plot(
-                            gdata, title='Gene UMAP / mean gene expression annotation',
-                            hue='mean_expression')
+                            gdata = gene_umap.merge(
+                                gene_mean_expression, left_index=True, right_index=True)
+                            _plot(
+                                gdata,
+                                title='Gene UMAP / mean gene expression annotation',
+                                hue='mean_expression')
 
-                        tdata = transcript_umap.merge(
-                            transcript_mean_expression, left_index=True,
-                            right_index=True)
-                        _plot(
-                            tdata,
-                            title='Transcript UMAP / '
-                                  'mean transcript expression annotation',
-                            hue='mean_expression')
+                            tdata = transcript_umap.merge(
+                                transcript_mean_expression, left_index=True,
+                                right_index=True)
+                            _plot(
+                                tdata,
+                                title='Transcript UMAP / '
+                                      'mean transcript expression annotation',
+                                hue='mean_expression')
 
-                        mdata = gene_umap.merge(
-                            mito_expression, left_index=True, right_index=True)
-                        _plot(
-                            mdata,
-                            title='Gene UMAP / mean mito. expression '
-                                  'annotation', hue='mito_pct')
+                            mdata = gene_umap.merge(
+                                mito_expression, left_index=True, right_index=True)
+                            _plot(
+                                mdata,
+                                title='Gene UMAP / mean mito. expression '
+                                      'annotation', hue='mito_pct')
 
-                        # Annotate with expression levels from a gene of interest.
-                        some_data = False
-                        gof_tabs = Tabs()
-                        with gof_tabs.add_dropdown_menu(
-                                'Genes expression', change_header=False):
-                            for gene in genes:
-                                if gene in gene_mean_expression.index:
-                                    some_data = True
-                                    go_data = gene_umap.merge(
-                                        gene_mean_expression.loc[gene],
-                                        left_index=True, right_index=True)
-                                    _plot(
-                                        go_data,
-                                        title=f'Gene umap / single gene expression '
-                                        f'annotation: {gene}',
-                                        hue=gene)
-                            if not some_data:
-                                plt = util.empty_plot()
-                                plt.title = {
-                                    "text": "Plotting Failed",
-                                    "subtext": "No genes."}
-                                EZChart(plt, theme='epi2melabs')
+                        # Start another grid to put in genes of interest and
+                        # optional SNV plot
+                        with Grid(columns=2):
 
-                        # If there's a dataframe of top SNVs, create a further UMAP
-                        # figure in the grid with a drop-down of SNVs for overlay
-                        snv_tabs = Tabs()
+                            # Annotate with gene of interest expression levels.
+                            # Read single column gene list file
+                            genes = pd.read_csv(genes_file, header=None)[0]
+                            goi_tabs = Tabs()
 
-                        top_snv = sample_dir / 'top_snvs.tsv'
-                        if top_snv.is_file():
-                            snv_df = pd.read_csv(
-                                top_snv, sep='\t', dtype=str, index_col=0)
-                            snv_df = snv_df.replace({
-                                '-1': 'no_data',
-                                '0': 'hom-ref',
-                                '1': 'het',
-                                '2': 'hom-alt'
-                            })
+                            with goi_tabs.add_dropdown_menu(
+                                    'Genes of interest', change_header=True):
+                                for gene in genes:
+                                    with goi_tabs.add_dropdown_tab(gene):
+                                        if gene in goi_df.index:
+                                            goi_data = gene_umap.merge(
+                                                goi_df.loc[gene],
+                                                left_index=True, right_index=True)
+                                            _plot(
+                                                goi_data,
+                                                title=f'Gene UMAP / single gene '
+                                                f'expression, annotation: {gene}',
+                                                hue=gene)
+                                        else:
+                                            with div():
+                                                p(f"No data for {gene}")
 
-                            # SNV annotation
-                            with snv_tabs.add_dropdown_menu(
-                                    'SNV', change_header=False):
-                                for i, snv in snv_df.iterrows():
-                                    with snv_tabs.add_dropdown_tab(snv.name):
-                                        gene_snv_data = gene_umap.merge(
-                                            snv, left_index=True, right_index=True)
-                                        plt = ezcharts.scatterplot(
-                                            data=gene_snv_data,
-                                            x='D1', y='D2', hue=str(snv.name), s=0.3,
-                                            fill_alpha=.4, marker=True)
-                                        plt._fig.title = (
-                                            'Gene umap / genotype '
-                                            f'annotation: {snv.name}'
-                                        )
-                                        EZChart(plt, theme='epi2melabs')
+                            # If there's a dataframe of top SNVs, create a further UMAP
+                            # figure in the grid with a drop-down of SNVs for overlay
+                            snv_tabs = Tabs()
+
+                            top_snv = sample_dir / 'top_snvs.tsv'
+                            if top_snv.is_file():
+                                snv_df = pd.read_csv(
+                                    top_snv, sep='\t', dtype=str, index_col=0)
+                                snv_df = snv_df.replace({
+                                    '-1': 'no_data',
+                                    '0': 'hom-ref',
+                                    '1': 'het',
+                                    '2': 'hom-alt'
+                                })
+
+                                # SNV annotation
+                                with snv_tabs.add_dropdown_menu(
+                                        'SNV', change_header=False):
+                                    for i, snv in snv_df.iterrows():
+                                        with snv_tabs.add_dropdown_tab(snv.name):
+                                            gene_snv_data = gene_umap.merge(
+                                                snv, left_index=True, right_index=True)
+                                            plt = ezcharts.scatterplot(
+                                                data=gene_snv_data,
+                                                x='D1', y='D2',
+                                                hue=str(snv.name), s=0.3,
+                                                fill_alpha=.4, marker=True)
+                                            plt._fig.title = (
+                                                'Gene umap / genotype '
+                                                f'annotation: {snv.name}'
+                                            )
+                                            EZChart(plt, theme='epi2melabs')
 
 
-def diagnostic_plots(img_dirs):
-    """Diagnostic plots."""
+def saturation_plots(saturation_data):
+    """Saturation plots."""
     tabs = Tabs()
 
-    for imgdir in img_dirs:
-        sample_id = imgdir.replace('images_', '')
-        with tabs.add_tab(sample_id):
-            with Grid(columns=2):
-                sample_dir = Path(imgdir)
-                knee_plot_path = next(
-                    sample_dir.glob('*kneeplot.png'))
-                saturation_plot = next(
-                    sample_dir.glob('*saturation_curves.png'))
-                for img_path, width in \
-                        [(knee_plot_path, 300), (saturation_plot, 900)]:
-                    with open(img_path, 'rb') as fh:
-                        b64img = base64.b64encode(fh.read()).decode()
-                    with figure():
-                        img(src=f'data:image/png;base64,{b64img}', width=width)
+    df_sat = pd.read_csv(saturation_data, sep='\t', index_col=0)
+    with tabs.add_dropdown_menu('sample', change_header=True):
+        for sample_id, df in df_sat.groupby('sample'):
+            df.rename(columns={
+                'reads_pc': 'Median reads per cell',
+                'genes_pc': 'Genes per cell',
+                'umis_pc': 'UMIs per cell',
+                'umi_sat': 'Sequencing saturation'},
+                inplace=True)
+            with tabs.add_dropdown_tab(sample_id):
+                with Grid(columns=3):
+                    EZChart(
+                        ezcharts.lineplot(
+                            data=df, x='Median reads per cell', y='Genes per cell',
+                            title='Gene saturation', theme='epi2melabs',
+                            color='orange', marker=False),
+                        height='350px')
+                    EZChart(
+                        ezcharts.lineplot(
+                            data=df, x='Median reads per cell', y='UMIs per cell',
+                            title='UMI saturation', theme='epi2melabs',
+                            color='purple', marker=False),
+                        height='350px')
+                    seq_sat_plt = ezcharts.lineplot(
+                        data=df, x='Median reads per cell', y='Sequencing saturation',
+                        title='Sequencing saturation', theme='epi2melabs',
+                        color='blue', marker=False)
+                    seq_sat_plt._fig.y_range.end = 1.0
+                    hline = Span(
+                        location=df['Sequencing saturation'].max(), dimension='width',
+                        line_color='black',
+                        line_width=1, line_dash='dashed')
+                    seq_sat_plt._fig.renderers.extend([hline])
+                    EZChart(seq_sat_plt, height='350px')
+
+
+# once https://nanoporetech.atlassian.net/browse/CW-5808 is released,
+# We can add sortable=False and use_header=False to the DataTables in this section
+def experiment_summary_section(report, wf_df, aln_df, cell_counts_df):
+    """Three columns experiment summary section."""
+    div_style = "padding: 20px;background-color: rgb(245, 245, 245)"
+    with report.add_section('Summary', 'Summary'):
+        tabs = Tabs()
+        with tabs.add_dropdown_menu('sample', change_header=True):
+            for sample, sample_df in wf_df.groupby('sample_id'):
+                with tabs.add_dropdown_tab(sample):
+                    with Grid(columns=3):
+                        # Column 1 - Experiment summary
+                        with div(style=div_style):
+                            h6("Experiment summary")
+                            df_col1 = pd.DataFrame.from_dict(
+                                {
+                                    'Input reads': sample_df.loc['reads', 'count'],
+                                    'Estimated cells':
+                                        sample_df.loc['cells', 'count'],
+                                    'Mean reads per cell':
+                                        sample_df.loc['mean_reads_per_cell', 'count'],
+                                    'Median UMI counts per cell':
+                                        sample_df.loc['median_umis_per_cell', 'count'],
+                                    'Median genes per cell':
+                                        sample_df.loc['median_genes_per_cell', 'count']
+                                }, orient='index')
+                            df_col1 = df_col1.apply(
+                                lambda x: x.apply(lambda y: f"{y:,.0f}"))
+                            df_col1.index.name = " "
+                            df_col1.columns = [" "]
+                            # When CW-5808 is released we can use sortable=False and
+                            # use_headers=False, the latter will mean we don't need the
+                            # previous two lines.
+                            DataTable.from_pandas(
+                                df_col1, use_index=True, paging=False, searchable=False)
+                        # column 2 - rank plot
+                        with div(style=div_style):  # barcode rankplot
+                            h6('Barcode rank plot')
+                            df_col2 = cell_counts_df[
+                                cell_counts_df['sample'] == sample]
+                            n_cells = int(sample_df.at['cells', 'count'])
+                            # Barcodes are ordered by ascending read count
+                            # Get the rank of each barcode in descending order
+                            df_col2['Cell barcode rank'] \
+                                = np.arange(0, len(df_col2))[::-1]
+                            df_col2.rename(
+                                {'count': 'Read count'}, axis=1, inplace=True)
+
+                            rank_plt = ezcharts.lineplot(
+                                data=df_col2,
+                                x='Cell barcode rank', y='Read count',
+                                theme='epi2melabs', line_width=0.5, marker=False,
+                                line_color='blue',
+                                bokeh_kwargs={
+                                    'y_axis_type': 'log', 'x_axis_type': 'log'})
+                            rank_plt._fig.y_range.start = 1
+                            vline = Span(
+                                location=n_cells, dimension='height',
+                                line_color='black',
+                                line_width=1, line_dash='dashed')
+                            rank_plt._fig.renderers.extend([vline])
+                            EZChart(rank_plt, height='300px')
+
+                        # Column 3 - Alignment summary
+                        with div(style=div_style):
+                            h6('Alignment / feature summary')
+                            aln_sample = aln_df.loc[sample]
+                            df_col3 = pd.DataFrame.from_dict(
+                                {
+                                    "Reads aligned": aln_sample['reads_aligned'],
+                                    "Reads mapping to genome": aln_sample['primary'],
+                                    "Supplementary": aln_sample['supplementary'],
+                                    "Unmapped": aln_sample['unmapped'],
+                                    'Unique genes detected':
+                                        sample_df.loc['genes', 'count'],
+                                    'Unique isoforms detected':
+                                        sample_df.loc['transcripts', 'count']
+                                }, orient='index')
+                            df_col3 = df_col3.apply(
+                                lambda x: x.apply(lambda y: f"{y:,.0f}"))
+                            df_col3.index.name = " "
+                            df_col3.columns = [" "]
+                            # CW-5328 sortable=False, use_headers=False
+                            DataTable.from_pandas(
+                                df_col3, use_index=True, paging=False, searchable=False)
+                    # Descriptiopns for the threee table columns.
+                    with Grid(columns=3):
+                        # Text for experiment summary
+                        with div(style=div_style):
+                            raw("""
+                                <ul>
+                                    <li>
+                                        <b>Input reads:</b>
+                                        The total number of reads in the input data
+                                    </li>
+                                    <li>
+                                        <b>Estimated cells: </b>
+                                        The estimated number of cells (real cells)
+                                        identified by the workflow
+                                    </li>
+                                    <li>
+                                        <b>Mean reads per cell:</b>
+                                        Total reads divided by the number of
+                                        real cells
+                                    </li>
+                                    <li>
+                                        <b>Median UMI counts per cell:</b>
+                                        The median number of UMIs in real cells
+                                    </li>
+                                    <li>
+                                        <b>Median genes per cell:</b>
+                                        The median number of unique genes identified
+                                        per real cell
+                                    </li>"""
+                                )
+                        with div(style=div_style):
+                            # Text for rank plot
+                            raw("""
+                                Cells are ranked by read count
+                                in descending order on the x-axis, and the read count
+                                for each barcode is displayed on the y-axis. Only high
+                                quality barcodes are used to generate the rank plot
+                                (min qscore 15 and 100% match to the 10x whitelist)
+                                <br><br>
+
+                                The dashed line indicates the read count threshold that
+                                was determined by the workflow. Barcodes to the left of
+                                this point are considered "real cells", and those to
+                                the right are considered as non-cell barcodes and are
+                                not included in the downstream analysis."""
+                                )
+                        with div(style=div_style):
+                            # Text for alignment summary
+                            raw("""
+                                <li>
+                                    <b>Reads aligned:</b> The total number of reads that
+                                    were aligned to the reference genome sequence.
+                                    This number excludes reads where the
+                                    expected adapters were not found.
+                                </li>
+                                <li>
+                                    <b>Reads mapping to genome:</b> The number of
+                                    primary alignments.
+                                </li>
+                                <li>
+                                    <b>Supplementary:</b> The number of supplementary
+                                    alignments can indicate fusion genes or chimeric
+                                    reads.
+                                </li>
+                                <li>
+                                    <b>Unmapped:</b> The number of reads that
+                                    were not mapped to the reference genome.
+                                </li>
+                                <li>
+                                    <b>Unique genes/isoforms detected:</b>
+                                    The total number of features identified across all
+                                    cells.
+                                </li>
+                                """
+                                )
 
 
 def main(args):
@@ -294,6 +483,28 @@ def main(args):
         'Workflow Single Cell report', 'wf-single-cell',
         args.params, args.versions, args.wf_version,
         head_resources=[*LAB_head_resources])
+
+    wf_df = pd.read_csv(args.survival, sep='\t').set_index("statistic")
+    df_aln = pd.read_csv(
+        args.bam_stats, sep='\t', index_col=0,
+        dtype={
+            "primary": int,
+            "secondary": int,
+            "supplementary": int,
+            "unmapped": int,
+            "total_reads": int,
+            "sample": str
+        })
+
+    df_aln = df_aln.rename(
+        columns={'sample': 'sample ID', "reads aligned": "reads aligned"})
+
+    df_counts = pd.read_csv(
+        args.knee_plot_counts, sep='\t',
+        usecols=['barcode', 'count', 'sample'], index_col='barcode')
+    experiment_summary_section(report, wf_df, df_aln, df_counts)
+
+    logger.info('Report writing finished')
 
     with open(args.metadata) as metadata:
         sample_details = [{
@@ -308,169 +519,135 @@ def main(args):
         if len(stats) == 1:
             stats = stats[0]
             names = names[0]
-        fastcat.SeqSummary(stats, sample_names=names)
+        fastcat.SeqSummary(
+            stats, sample_names=names, height='350px', read_length_quantile_xend=0.99)
 
     # set statistic as index column to allow for easy selection in building table.
     # For barplots we'll pull it back into a column
     survival_df = pd.read_csv(args.survival, sep='\t').set_index("statistic")
 
-    with report.add_section('Single cell sample summary', 'sc-seq summary'):
-        p(
-            """This table summarises the number of input reads,
-             and the number of cells, genes and transcripts identified within
-             each sample."""
-        )
-        reads_col = 'reads'
-        if args.q_filtered:
-            reads_col = 'reads(after quality filter)'
+    with report.add_section('Read assignment summary', 'Read assignment'):
+        tabs = Tabs()
+        with tabs.add_dropdown_menu('sample', change_header=True):
+            for sample, sample_df in survival_df.groupby('sample_id'):
+                with tabs.add_dropdown_tab(sample):
+                    with Grid(columns=2):
+                        x_name = 'Workflow stage'
 
-        table = DataTable(
-            headers=[
-                'sample ID', reads_col, 'cells', 'genes', 'transcripts'])
-        for name, grp in survival_df.groupby('sample_id'):
-            table.add_row(
-                title=name,
-                columns=[
-                    grp.loc['reads', 'count'],
-                    grp.loc['cells', 'count'],
-                    grp.loc['genes', 'count'],
-                    grp.loc['transcripts', 'count']])
+                        names = {
+                            'full_length': 'Full length',
+                            'valid_barcodes': 'Valid barcode',
+                            'gene_tagged': 'Gene assigned',
+                            'transcript_tagged': 'Transcript assigned'
+                        }
 
-    with report.add_section('Alignment summary', 'Alignment'):
-        p("""Summaries of genome read alignment per sample.""")
-        raw("""Note that <i>reads aligned</i> may be less than the total number of
-        input reads if non-full-length reads were filtered.
-        see option: <i>full_length_only</i>.""")
+                        sample_df = sample_df.rename(index=names)
+                        order = names.values()
+                        data = sample_df.reset_index(names=x_name)
+                        data = data[data[x_name].isin(order)]
+                        data = data.drop(columns=['pct_of_input_reads', 'sample_id'])
+                        data = data.set_index('Workflow stage', drop=True)
+                        data['count'] = data['count'].apply(lambda x: f"{int(x):,}")
+                        data['pct_of_fl_reads'] =\
+                            data['pct_of_fl_reads'].apply(lambda x: f"{x:.2f}")
+                        data = data.transpose()
+                        data.index = ['Reads', '% of_FL']
+                        data.index.name = " "
+                        data = data[order]
 
-        dtypes = {
-            "primary": int,
-            "secondary": int,
-            "supplementary": int,
-            "unmapped": int,
-            "total_reads": int,
-            "sample": str
-        }
-        df_aln = pd.read_csv(args.bam_stats, sep='\t', index_col=0, dtype=dtypes)
-        df_aln = df_aln.rename(
-            columns={'sample': 'sample ID', "reads aligned": "reads aligned"})
-        DataTable.from_pandas(df_aln, use_index=True)
+                        DataTable.from_pandas(
+                            data, use_index=True, paging=False, searchable=False)
 
-    with report.add_section('Read survival by stage', 'Attrition'):
-        p(
-            """These plots detail the number of remaining reads at different
-            stages of the workflow.""")
+                        with div():
+                            raw("""
+                                <ul>
+                                <li><b>Full length:</b> Proportion of reads containing
+                                adapters in the
+                                expected configuration. Full-length reads are carried
+                                forward in the workflow to attempt to assign.
+                                barcode/UMI</li>
+                                <li><b>Valid barcodes:</b> Proportion of reads that have
+                                been assigned corrected cell barcodes and UMIs.
+                                All reads with valid barcodes
+                                are used in the subsequent stages of the
+                                workflow.</li>
+                                <li><b>Gene assigned:</b> Proportion of reads
+                                unambiguously assigned to a gene.</li>
+                                <li><b>Transcript assigned:</b> Proportion of reads
+                                unambiguously assigned a transcript.""")
 
-        # Stage descriptions
-        ul(
-            li("""full length: Proportion of reads containing adapters in
-            expected configurations."""),
-            li("""total tagged: Proportion of reads that have been assigned
-            corrected UMIs and barcodes."""),
-            li("""gene tagged: Proportion of reads assigned to a gene."""),
-            li("""transcripts tagged: Proportion of reads assigned a
-            transcript.""")
-        )
-
-        # pull statistic column into column, rename, and build barplot
-        x_name = 'Workflow stage'
-        y_name = 'Proportion of reads [%]'
-        order = [
-            'full_length', 'tagged', 'gene_tagged', 'transcript_tagged']
-        data = survival_df.reset_index(names=x_name)
-        data = data[data[x_name].isin(order)]
-
-        EZChart(
-            ezcharts.barplot(
-                data=data, x=x_name, y=y_name, hue='sample_id', order=order),
-            theme='epi2melabs')
-
-    with report.add_section('Primer configuration', 'Primers'):
-        p(
-            """Full length reads are identified by locating read segments
-            flanked by known primers in expected orientations:
-            adapter1---full_length_read---adapter2.""")
-
-        p(
-            """These full length reads can then be
-            oriented in the same way and are used in the next stages of the
-            workflow.""")
-        p(
-            """Every library prep will contain some level of artifact reads
-            including mis-primed reads and those without adapters.
-            These are identified by non-standard primer
-            configurations, and are not used for subsequent stages of the
-            workflow. The plots here show the proportions of different primer
-            configurations within each sample, which can help diagnosing
-            library preparation issues.
-            The majority of reads should be full_length.""")
-
-        p(
-            """The primers used to identify read segments vary slightly
-            between the supported kits. They are:
-            """
-        )
-        p("3prime, multiome and visium kits:")
-        ul(
-            li("Adapter1: Read1"),
-            li("Adapter2: TSO")
-        )
-        p("5prime kit:")
-        ul(
-            li("Adapter1: Read1"),
-            li("Adapter2: Non-Poly(dT) RT primer")
-        )
-
-        # pull statistic column into column, rename and build barplot
+    with report.add_section('Adapter configuration', 'Adapter configuration'):
         order = [
             'full_length',
             'single_adapter1', 'double_adapter1',
             'single_adapter2', 'double_adapter2',
             'no_adapters', 'other']
         x_name = 'Primer configuration'
-        y_name = 'Proportion of reads [%]'
+        y_name = 'pct_of_input_reads'
         data = survival_df.reset_index(names=x_name)
         data = data[data[x_name].isin(order)]
 
-        EZChart(
-            ezcharts.barplot(
-                data=data, x=x_name, y=y_name, hue='sample_id', order=order),
-            theme='epi2melabs')
+        with Grid(columns=2):
 
-    with report.add_section('Diagnostic plots', 'Diagnostic plots'):
+            plt = ezcharts.barplot(
+                data=data, x=x_name, y=y_name, hue='sample_id', order=order)
+            plt._fig.xaxis.major_label_orientation = 45 * (math.pi / 180)
+            EZChart(plt, theme='epi2melabs')
 
-        b('Knee plot')
-        p(
-            """The knee plot is a quality control for RNA-seq data and
-            illustrates the procedure used to filter invalid cells.
-            The X-axis represents cells ranked by number of reads
-            and the Y-axis reads per barcode. The
-            vertical dashed line shows the cutoff. Cells to the right
-            of this are assumed to be invalid cells, including dead cells and
-            background from empty droplets."""
-        )
+            with div():
+                raw(
+                    """<br><br>Full length reads are defined as those flanked
+                    by primers/adapters in the expected orientations:
+                    <i> adapter1---cDNA---adapter2</i>.""")
 
-        b('Saturation plots')
-        p(
-            """Sequencing saturation provides a view of the amount of library
-            complexity that has been captured in the experiment.
-            As read depth increases,
-            the number of genes and distinct UMIs identified will increase at a
-            rate that is dependent on the complexity of the input library.
-            A steep slope indicates that new genes or UMIs could still be
-            identified by increasing the read coverage. A slope which
-            flattens towards higher read coverage indicates that the full
-            library complexity is being well captured."""
-        )
-        ul(
-            li("Gene saturation: Genes per cell as a function of depth."),
-            li("UMI saturation: UMIs per cell as a function of read depth."),
-            li("""Sequencing saturation:  This metric is a measure of the
+                p(
+                    """These full length reads can then be
+                    oriented in the same way and are used in the next stages of the
+                    workflow. If `full_length_only` is set to `false` reads with all
+                    primer configurations are analysed. """)
+                p(
+                    """Every library prep will contain some level of non-standard
+                    adapter configuration artifacts. These are not used for subsequent
+                    stages of the workflow. These plots show the proportions of
+                    different adapter configurations within each sample,
+                    which can help in diagnosing library preparation issues.
+                    For most applications, the majority of reads should be
+                    full_length.""")
+
+                p(
+                    """The adapters used to identify read segments vary slightly
+                    between the supported kits. They are:
+                    """
+                )
+                p("3prime, multiome and visium kits:")
+                ul(
+                    li("Adapter1: Read1"),
+                    li("Adapter2: TSO")
+                )
+                p("5prime kit:")
+                ul(
+                    li("Adapter1: Read1"),
+                    li("Adapter2: Non-Poly(dT) RT primer")
+                )
+
+    with report.add_section('Saturation', 'Saturation'):
+
+        p("""Sequencing saturation is an indication of how well the diversity of a
+        library has been captured in an experiment. As sequencing depth increases,
+        the number of detected genes and unique molecular identifiers (UMIs) will also
+        increase at a rate that depends on the complexity of the input library.
+        The curve gradient indicates the rate at which new genes or UMIs are being
+        recovered; as saturation increases the the curve flattens""")
+        raw("""
+            <ul>
+            <li><b>Gene saturation:</b> Genes per cell as a function of read depth.</li>
+            <li><b>UMI saturation:</b> UMIs per cell as a function of read depth.</li>
+            <li><b>Sequencing saturation:</b>  This metric is a measure of the
             proportion of reads that come from a previously observed UMI,
             and is calculated with the following formula:
-             1 - (number of unique UMIs / number of reads).""")
-        )
+             1 - (number of unique UMIs / number of reads).</li></ul>""")
 
-        diagnostic_plots(args.images)
+        saturation_plots(args.saturation_curves)
 
     with report.add_section('UMAP projections', 'UMAP'):
         p(
@@ -507,9 +684,6 @@ def argparser():
         "--stats", nargs='+',
         help="Fastcat per-read stats, ordered as per entries in --metadata.")
     parser.add_argument(
-        "--images", nargs='+',
-        help="Sample directories containing various images to put in report")
-    parser.add_argument(
         "--survival",
         help="Read survival data in TSV format")
     parser.add_argument(
@@ -523,7 +697,7 @@ def argparser():
         "--expr_dirs", nargs='+',
         help="Sample directories containing umap and gene expression files")
     parser.add_argument(
-        "--umap_genes", help="File containing list of genes to annnotate UMAPs")
+        "--umap_genes", help="File containing list of genes to annotate UMAPs")
     parser.add_argument(
         "--metadata", default='metadata.json', required=True,
         help="sample metadata")
@@ -536,4 +710,8 @@ def argparser():
     parser.add_argument(
         "--q_filtered", action='store_true',
         help="True if the input reads were subject to min read quality filtering.")
+    parser.add_argument(
+        "--saturation_curves", type=Path)
+    parser.add_argument(
+        "--knee_plot_counts", type=Path)
     return parser

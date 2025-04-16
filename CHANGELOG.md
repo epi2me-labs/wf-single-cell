@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Changed
 - Reconciled workflow with wf-template v5.5.0.
+### Changed
+- Updated workflow report layout, and added new summary statistics.
 ### Fixed
 - Supplementary records not appearing in tagged BAM output if primary record maps to a different chromosome.
 - Major reduction in the memory usage at the expression matrix creation step.

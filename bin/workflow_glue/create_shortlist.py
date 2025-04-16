@@ -5,7 +5,6 @@ import functools
 import itertools
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
 import numpy.matlib as npm
 import pandas as pd
@@ -30,6 +29,11 @@ def argparser():
     parser.add_argument(
         "summary", type=Path,
         help="Output filepath for TSV summary file.")
+
+    parser.add_argument(
+        "sample",
+        help="sample ID/alias"
+    )
 
     grp = parser.add_mutually_exclusive_group(required=True)
     grp.add_argument(
@@ -56,9 +60,6 @@ def argparser():
         help="Used with 'abundance' method to pick cells using minimum read count.")
 
     grp = parser.add_argument_group("Optional outputs.")
-    parser.add_argument(
-        "--plot", type=Path,
-        help="Knee plot filename")
     parser.add_argument(
         "--counts_out", type=Path,
         help="Barcode counts TSV file.")
@@ -150,39 +151,6 @@ def get_knee_distance(values):
     # knee/elbow is the point with max distance value
     idx = np.argmax(dist_to_line)
     return idx
-
-
-def make_kneeplot(
-        counts, n_cells, output, no_threshold_line=False, title=None, max_points=10000):
-    """Make kneeplot.
-
-    :param counts: sorted counts of cells.
-    :param n_cells: selection point to demarcate.
-    :param output: output filepath.
-    :param max_points: maximum number of points to plot.
-    :param no_threshold_line: If true do not plot vertical threshold (Visium data)
-    """
-    # plot is done on logscale from most to least abundant
-    x = np.arange(0, len(counts))
-    y = counts[::-1]
-
-    x_label = "Barcode rank" if no_threshold_line else "Cell barcode rank"
-
-    fig = plt.figure(figsize=[6, 6])
-    ax1 = fig.add_subplot(111)
-    ax1.scatter(x, y, color="k", alpha=0.1, s=5)
-    ax1.set_xscale("log")
-    ax1.set_yscale("log")
-    ax1.set_xlim([1, 100000])
-    ax1.set_xlabel(x_label)
-    ax1.set_ylabel("Read count")
-    ymax = ax1.get_ylim()[1]
-    if not no_threshold_line:
-        ax1.vlines(n_cells, ymin=1, ymax=ymax, linestyle="--", color="k")
-    ax1.set_title(f"Barcodes above cutoff: {n_cells}")
-    fig.tight_layout()
-    fig.savefig(output)
-    return None
 
 
 def _filter_barcodes(fnames, whitelist, min_qv=15):
@@ -309,15 +277,14 @@ def main(args):
         hq_reads_remaining = sum(hq_bcs["count"].iloc[threshold_index:])
         logger.info(f"Outputting {n_cells} with more than {threshold} reads.")
 
+    # Write final barcode shortlist
     with open(args.output, "wt") as f:
         f.write("\n".join(shortlist[::-1]))  # most common first
         f.write("\n")
 
-    if args.plot is not None:
-        logger.info(f"Generating knee plot: {args.plot}")
-        make_kneeplot(
-            hq_bcs["count"], n_cells, args.plot,
-            no_threshold_line=args.no_cell_filter)
+    # Write high quality barcode counts
+    hq_bcs["sample"] = args.sample
+    hq_bcs.to_csv(args.counts_out, sep='\t', index=True)
 
     (
         pd.DataFrame.from_dict(

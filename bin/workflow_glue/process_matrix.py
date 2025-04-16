@@ -32,7 +32,9 @@ def argparser():
         help="Output TSV for per-cell mean expression level.")
     parser.add_argument(
         "--per_cell_mito", default="expression.mito-per-cell.tsv", type=Path,
-        help="Output TSV for per-cell mean expression level.")
+        help="Output TSV for per-cell mean mito expression level.")
+    parser.add_argument(
+        "--stats", type=Path, help="Output path for stats TSV.")
     parser.add_argument(
         "--text", action="store_true", help=argparse.SUPPRESS)
 
@@ -107,6 +109,17 @@ def main(args):
             This may indicate an issue with data quality or volume.
             Incorrectly specified 10x kits/versions and reference data can also lead to
             to removal of all data at this point.""")
+
+    # Generate statistics from the assembled matrix before any filtering.
+    stats = {}
+    stats['median_umis_per_cell'] = matrix.median_counts
+    stats['median_genes_per_cell'] = matrix.median_features_per_cell
+
+    with open(args.stats, 'w') as fh:
+        for k, v in stats.items():
+            fh.write(f'{k}\t{v}\n')
+
+    # Begin filtering
     matrix.remove_unknown()
 
     logger.info("Writing raw counts to file.")

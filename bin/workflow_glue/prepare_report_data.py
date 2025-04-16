@@ -42,6 +42,9 @@ def argparser():
         "raw_gene_expression", type=Path,
         help="Sparse data in MEX format.")
     parser.add_argument(
+        "matrix_stats", type=Path,
+        help="TSV file with matrix sumary stats.")
+    parser.add_argument(
         "genes_of_interest", type=Path,
         help="TSV file of file names.")
     parser.add_argument(
@@ -122,16 +125,20 @@ def get_genes_of_interest_expression(mex_dir, genes):
     barcodes = barcodes[0].str.split('-', expand=True)[0]
     features = pd.read_csv(mex_dir / 'features.tsv.gz', sep='\t', header=None)[1]
     rows = []
-    for g in genes_to_plot:
+    for gene in genes_to_plot:
         try:
-            feature_idx = features[features == g].index[0]
-            rows.append(np.array(matrix.getrow(feature_idx).todense()).flatten())
+            feature_idx = features[features == gene].index[0]
+            rows.append(
+                [gene, np.array(matrix.getrow(feature_idx).todense()).flatten()])
         except IndexError:
-            rows.append([np.nan] * len(barcodes))
-
-    return (
-        pd.DataFrame.from_records(rows, index=genes_to_plot, columns=barcodes)
-    )
+            continue  # no data
+    if len(rows) > 0:
+        return (
+            pd.DataFrame.from_records(
+                [i[1] for i in rows], index=[j[0] for j in rows], columns=barcodes)
+        )
+    else:
+        return pd.DataFrame()
 
 
 def main(args):
@@ -145,15 +152,23 @@ def main(args):
     # n seqs after any read quality filtering
     n_input_reads = args.n_input_seqs
     stats.update({'reads': n_input_reads})
+    matstats = pd.read_csv(
+        args.matrix_stats, sep='\t', header=None, names=['stat', 'val'])
+    for _, row in matstats.iterrows():
+        stats[row['stat']] = row['val']
+    stats['mean_reads_per_cell'] = stats['reads'] / stats['cells']
 
     survival = (
         pd.DataFrame.from_dict(stats, orient="index", columns=['count'])
         .reset_index(names="statistic"))
 
     # this is a little nonsensical for some stats
-    survival['Proportion of reads [%]'] = 100 * survival['count'] / n_input_reads
+    survival['pct_of_input_reads'] = 100 * survival['count'] / n_input_reads
+    survival['pct_of_fl_reads'] = 100 * survival['count'] / stats['full_length']
     survival['sample_id'] = args.sample_id
-    survival.to_csv(args.survival_out, sep='\t', index=False)
+
+    survival.set_index('statistic', inplace=True, drop=True)
+    survival.to_csv(args.survival_out, sep='\t', index=True)
 
     aln_stats = combine_bam_stats(args.bam_stats, args.sample_id)
     aln_stats.to_csv(args.bam_stats_out, sep='\t', index=False)

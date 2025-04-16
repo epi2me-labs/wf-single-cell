@@ -31,9 +31,8 @@ process generate_whitelist{
         tuple val(meta),
               path("${meta.alias}.whitelist.tsv"),
               emit: whitelist
-        tuple val(meta),
-              path("kneeplot.png"),
-              emit: kneeplot
+        path "high_qual_bc_counts.tsv",
+              emit: hq_counts
         tuple val(meta),
               path("shortlist_summary.tsv"),
               emit: shortlist_summary
@@ -46,11 +45,10 @@ process generate_whitelist{
     def method_opt = params.estimate_cell_count ? "--method quantile" : "--method fixed"
     """
     workflow-glue create_shortlist \
-        barcodes "${meta.alias}.whitelist.tsv" shortlist_summary.tsv   \
+        barcodes "${meta.alias}.whitelist.tsv" shortlist_summary.tsv "${meta.alias}" \
         --counts \
         ${method_opt} \
         ${exp_cells_opt} \
-        --plot "kneeplot.png" \
         --counts_out "high_qual_bc_counts.tsv" \
         --threads ${task.cpus} \
         ${no_thresholding_opt}
@@ -298,6 +296,7 @@ process process_matrix {
         tuple val(meta), val(feature), path("${meta.alias}.${feature}_raw_feature_bc_matrix"), emit: raw
         tuple val(meta), val(feature), path("${meta.alias}.${feature}_processed_feature_bc_matrix"), emit: processed
         tuple val(meta), val(feature), path("${meta.alias}.${feature}_expression_mean_per_cell.tsv"), emit: meancell
+        tuple val(meta), val(feature), path("${meta.alias}.${feature}_matrix_stats.tsv"), emit: stats
         // mito per cell makes sense only for feature=gene for now.
         tuple val(meta), val(feature), path("${meta.alias}.gene_expression_mito_per_cell.tsv"), emit: mitocell, optional: true
         tuple val(meta), val(feature), path("${meta.alias}.${feature}_expression_umap*.tsv"), emit: umap
@@ -313,6 +312,7 @@ process process_matrix {
         --per_cell_mito "${meta.alias}.${feature}_expression_mito_per_cell.tsv" \
         --per_cell_expr "${meta.alias}.${feature}_expression_mean_per_cell.tsv" \
         --umap_tsv "${meta.alias}.${feature}_expression_umap_REPEAT.tsv" \
+        --stats "${meta.alias}.${feature}_matrix_stats.tsv" \
         --enable_filtering \
         --min_features $params.matrix_min_genes \
         --min_cells $params.matrix_min_cells \
@@ -379,16 +379,16 @@ process umi_gene_saturation {
         tuple val(meta),
               path("read_tags.tsv")
     output:
-        tuple val(meta),
-              path("saturation_curves.png"),
+        path("saturation_curves.tsv"),
               emit: saturation_curve
     script:
     """
     export POLARS_MAX_THREADS=$task.cpus
 
     workflow-glue calc_saturation \
-        --output "saturation_curves.png" \
-        --read_tags read_tags.tsv
+        --output "saturation_curves.tsv" \
+        --read_tags read_tags.tsv \
+        --sample "${meta.alias}"
     """
 }
 
@@ -543,15 +543,6 @@ workflow process_bams {
         //       data and plot in report with bokeh
         umi_gene_saturation(final_read_tags)
 
-        // TODO: see above:
-        //       i) we shouldn't be making ugly static images
-        //       ii) this process simply stages images under a common folder
-        //           that could just be done in output directly
-        pack_images(
-            generate_whitelist.out.kneeplot
-                .concat(umi_gene_saturation.out.saturation_curve)
-                .groupTuple())
-
     emit:
 
         // Emit sperately for use in the report
@@ -559,8 +550,13 @@ workflow process_bams {
         //       instead just collate everything possible per sample
         final_read_tags = final_read_tags
         tagged_bam = tag_bam.out.tagged_bam
-        plots = pack_images.out.collect{it -> it[1]}.collect()
         white_list = generate_whitelist.out.whitelist
+        matrix_stats = process_matrix.out.stats
+            .filter{it[1] == "gene"}
+            .map{it->[it[0], it[2]]}
+        gene_expression = process_matrix.out.processed
+            .filter{it[1] == "gene"}
+            .map{it->[it[0], it[2]]}
         gene_mean_expression = process_matrix.out.meancell
             .filter{it[1] == "gene"}
             .map{it->[it[0], it[2]]}
@@ -577,6 +573,9 @@ workflow process_bams {
             .map{it->[it[0], it[2]]}
             .groupTuple(size:2)
             .map{key, files -> [key, files.flatten()]}
+        saturation_curves = umi_gene_saturation.out.saturation_curve
+            .collectFile(keepHeader: true)
+        hq_bc_counts = generate_whitelist.out.hq_counts.collectFile(keepHeader: true)
         // per chromosome expression statistics
         expression_stats = create_matrix.out.stats
 }
