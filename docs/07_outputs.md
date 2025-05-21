@@ -31,3 +31,6 @@ Output files may be aggregated including information for all samples or provided
 | Genotype matrix | {{ alias }}/{{ alias }}.genotype_matrix/matrix.mtx.gz | Sparse MEX format matrix file. | per-sample |
 | Genotype matrix barcodes | {{ alias }}/{{ alias }}.genotype_matrix/barcodes.tsv.gz | Sparse MEX format barcode (columns) file. | per-sample |
 | Genotype matrix features | {{ alias }}/{{ alias }}.genotype_matrix/features.tsv.gz | Sparse MEX format SNV ID (rows) file. | per-sample |
+| Per-read fusion info | {{ alias }}/fusions/{{ alias }}.ctat-LR-fusion.fusion_predictions_per-read.tsv | TSV file with per-read fusion information, including gene fusion pairs and cell/UMI barcodes. | per-sample |
+| Fusion summary | {{ alias }}/fusions/{{ alias }}.ctat-LR-fusion.fusion_predictions_per-fusion.tsv | Summary of each prediciton fusion gene. | per-sample |
+| ctat-LR-fusion output | {{ alias }}/fusions/{{ alias }}.ctat-LR-fusion.tar.gz | The complete output of ctat-LR-fusion. | per-sample |

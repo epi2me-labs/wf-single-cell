@@ -89,8 +89,25 @@ The next stage is to align the preprocessed reads to the reference genome. This 
 read assignment in downstream steps.
 
 The stranded and trimmed FASTQ reads are mapped to the reference genome using minimap2.  
-The parameter `resources_mm2_max_threads int` controls the threads given to an alignment process.
-Other optional parameters can be supplied to minimap2 using `resources_mm2_flags` (for example `--resources_mm2_flags="-I 16GB"`).
+
+The reference data can be supplied one of two ways:
+1. as a local path to a folder with `--ref_genome_dir`.
+Either use a 10x reference bundle (https://www.10xgenomics.com/support/software/cell-ranger/downloads#References) 
+or ensure that the reference directory contains the following files in the same folder structure
+```
+├── refdata
+│   ├── fasta
+│   │   ├── genome.fa
+│   │   └── genome.fa.fai
+│   └── genes
+│       └── genes.gtf
+```
+2. `--epi2me_resource_bundle`: Select this option to use a prebuilt 10x resource directory.
+This will be downloaded automatically by the workflow and stored in `store-dir`;
+subsequent runs from the same directory will reuse the reference data stored there.  
+There are currently prebuilt resource bundles for the 10x Human reference (GRCh38) - 2024-A
+reference bundle (https://www.10xgenomics.com/support/software/cell-ranger/downloads).
+
 
 
 
@@ -237,6 +254,31 @@ Some of these candidate variants may represent variants that were not detected a
       * homozygous REF : 0
       * heterozygous ALT/REF 1
       * homozygous ALT: 2
+
+
+### 12. Fusion transcript calling
+Fusion transcript calling can be enabled using [ctat-LR-fusion](https://github.com/TrinityCTAT/CTAT-LR-fusion),
+allowing reads derived from fusion transcripts to be identified and assigned to cells. 
+This part of the workflow can be enabled with `--call_fusions`.
+
+The taqged BAM output from the workflow, containing cell and UMI barcode tags, is used as
+input to ctat-LR-fusion. 
+
+ctat-LR-fusion requires a resource directory containing reference sequence and annotation information. It is important that the ctat-LR-fusion resource is built against the same
+reference data as is used elsewhere in the workflow. For example, if the `ref_genome_dir`
+contains sequence from hg38 and Gencode44 annotations, then the ctat-LR-fusion resource directory should be built against these.
+
+There are two ways to supply the ctat-LR-fusion resource directory:
+
+1.  `--ctat_resource_dir`: A path to a local copy of the resource directory.
+Prebuilt resource directories can be found here:  https://data.broadinstitute.org/Trinity/CTAT_RESOURCE_LIB/.
+2. `--epi2me_resource_bundle`: Select this option to use a prebuilt ctat-LR-fusion resource bundle and the corresponding 10x reference data,
+which will be automatically downloaded from the cloud.
+Currently we have prebuilt bundles for the 10x human reference (GRCh38) - 2024-A
+reference bundle (https://www.10xgenomics.com/support/software/cell-ranger/downloads).
+
+The main output is a per read summary file where each read called as a fusion
+by ctat-LR-fusion is associated with a cell barcode/UMI and gene/transcript assignments. 
 
 
 ### 12. Make UMAP plots
