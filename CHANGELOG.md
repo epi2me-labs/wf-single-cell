@@ -4,7 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v3.2.0]
+### Added 
+- Fusion gene detection is now supported using ctat-LR-fusion (with option `call_fusions`). See the workflow pipeline overview for more information. 
+- `epi2me_resource_bundle` option for the automatic download of 10x and ctat-LR-fusion resources.
+
 ### Changed
 - Updated to wf-template v5.6.1, changing:
     - Reduce verbosity of debug logging from fastcat which can occasionally occlude errors found in FASTQ files during ingress.

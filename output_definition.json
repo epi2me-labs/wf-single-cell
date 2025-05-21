@@ -231,6 +231,30 @@
       "mime-type": "application/gzip",
       "optional": true,
       "type": "per-sample"
+    },
+    "per_read_fusion_info": {
+      "filepath": "{{ alias }}/fusions/{{ alias }}.ctat-LR-fusion.fusion_predictions_per-read.tsv",
+      "title": "Per-read fusion info",
+      "description": "TSV file with per-read fusion information, including gene fusion pairs and cell/UMI barcodes.",
+      "mime-type": "text/tab-separated-values",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "fusion_summary": {
+      "filepath": "{{ alias }}/fusions/{{ alias }}.ctat-LR-fusion.fusion_predictions_per-fusion.tsv",
+      "title": "Fusion summary",
+      "description": "Summary of each prediciton fusion gene.",
+      "mime-type": "text/tab-separated-values",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "ctat_lr_fusion_output": {
+      "filepath": "{{ alias }}/fusions/{{ alias }}.ctat-LR-fusion.tar.gz",
+      "title": "ctat-LR-fusion output",
+      "description": "The complete output of ctat-LR-fusion.",
+      "mime-type": "application/gzip",
+      "optional": true,
+      "type": "per-sample"
     }
   }
 }

@@ -6,8 +6,8 @@ from pathlib import Path
 from bokeh.models import ColorBar, Span
 from bokeh.models.tickers import BasicTicker
 from bokeh.transform import linear_cmap
-from dominate.tags import div, h6, li, p, ul
-from dominate.util import raw
+from dominate.tags import a, b, div, h6, li, p, ul
+from dominate.util import raw, text
 import ezcharts
 from ezcharts.components import fastcat
 from ezcharts.components.ezchart import EZChart
@@ -340,13 +340,12 @@ def experiment_summary_section(report, wf_df, aln_df, cell_counts_df):
                                 }, orient='index')
                             df_col1 = df_col1.apply(
                                 lambda x: x.apply(lambda y: f"{y:,.0f}"))
-                            df_col1.index.name = " "
-                            df_col1.columns = [" "]
                             # When CW-5808 is released we can use sortable=False and
                             # use_headers=False, the latter will mean we don't need the
                             # previous two lines.
                             DataTable.from_pandas(
-                                df_col1, use_index=True, paging=False, searchable=False)
+                                df_col1, use_index=True, paging=False,
+                                searchable=False, sortable=False, use_headers=False)
                         # column 2 - rank plot
                         with div(style=div_style):  # barcode rankplot
                             h6('Barcode rank plot')
@@ -392,40 +391,37 @@ def experiment_summary_section(report, wf_df, aln_df, cell_counts_df):
                                 }, orient='index')
                             df_col3 = df_col3.apply(
                                 lambda x: x.apply(lambda y: f"{y:,.0f}"))
-                            df_col3.index.name = " "
-                            df_col3.columns = [" "]
                             # CW-5328 sortable=False, use_headers=False
                             DataTable.from_pandas(
-                                df_col3, use_index=True, paging=False, searchable=False)
+                                df_col3, use_index=True, paging=False, searchable=False,
+                                sortable=False, use_headers=False)
                     # Descriptiopns for the threee table columns.
                     with Grid(columns=3):
                         # Text for experiment summary
                         with div(style=div_style):
-                            raw("""
-                                <ul>
-                                    <li>
-                                        <b>Input reads:</b>
-                                        The total number of reads in the input data
-                                    </li>
-                                    <li>
-                                        <b>Estimated cells: </b>
-                                        The estimated number of cells (real cells)
-                                        identified by the workflow
-                                    </li>
-                                    <li>
-                                        <b>Mean reads per cell:</b>
-                                        Total reads divided by the number of
-                                        real cells
-                                    </li>
-                                    <li>
-                                        <b>Median UMI counts per cell:</b>
-                                        The median number of UMIs in real cells
-                                    </li>
-                                    <li>
-                                        <b>Median genes per cell:</b>
-                                        The median number of unique genes identified
-                                        per real cell
-                                    </li>"""
+                            with ul():
+                                li(
+                                    b("Input reads: "),
+                                    "The total number of reads in the input data."
+                                )
+                                li(
+                                    b("Estimated cells: "),
+                                    """The estimated number of real cells identified by
+                                    the workflow."""
+                                )
+                                li(
+                                    b("Mean reads per cell: "),
+                                    "The average number of reads per real cell."
+                                )
+                                li(
+                                    b("Median UMI counts per cell: "),
+                                    """The median number of unique molecular
+                                    identifiers (UMIs) per real cell."""
+                                )
+                                li(
+                                    b("Median genes per cell: "),
+                                    """The median number of unique genes identified per
+                                    real cell."""
                                 )
                         with div(style=div_style):
                             # Text for rank plot
@@ -445,33 +441,139 @@ def experiment_summary_section(report, wf_df, aln_df, cell_counts_df):
                                 )
                         with div(style=div_style):
                             # Text for alignment summary
-                            raw("""
-                                <li>
-                                    <b>Reads aligned:</b> The total number of reads that
-                                    were aligned to the reference genome sequence.
-                                    This number excludes reads where the
-                                    expected adapters were not found.
-                                </li>
-                                <li>
-                                    <b>Reads mapping to genome:</b> The number of
-                                    primary alignments.
-                                </li>
-                                <li>
-                                    <b>Supplementary:</b> The number of supplementary
-                                    alignments can indicate fusion genes or chimeric
-                                    reads.
-                                </li>
-                                <li>
-                                    <b>Unmapped:</b> The number of reads that
-                                    were not mapped to the reference genome.
-                                </li>
-                                <li>
-                                    <b>Unique genes/isoforms detected:</b>
-                                    The total number of features identified across all
-                                    cells.
-                                </li>
-                                """
+                            with ul():
+                                li(
+                                    b("Reads aligned: "),
+                                    """The total number of reads that were aligned to
+                                    the reference genome sequence. This number excludes
+                                    reads where the expected adapters were not found."""
                                 )
+                                li(
+                                    b("Reads mapping to genome: "),
+                                    "The number of primary alignments."
+                                )
+                                li(
+                                    b("Supplementary: "),
+                                    """The number of supplementary alignments. These can
+                                    be indicative of fusion genes or chimeric reads."""
+                                )
+                                li(
+                                    b("Unmapped: "),
+                                    """The number of reads that were not mapped to the
+                                    reference genome."""
+                                )
+                                li(
+                                    b("Unique genes/isoforms detected: "),
+                                    """The total number of features identified across
+                                    all cells."""
+                                )
+
+
+def fusion_section(report, fusion_results_dir):
+    """Make gene fusion report section."""
+    per_fusion_file = fusion_results_dir / 'fusion_summary.tsv'
+    summary_file = fusion_results_dir / 'fusion_per_sample_summary.tsv'
+
+    try:
+        fusion_summary_df = (
+            pd.read_csv(per_fusion_file, sep='\t', index_col=None)
+            .rename(
+                columns=lambda col: col[0].upper() + col.replace('_', ' ')[1:]
+                if col != 'UMIs' else col)
+        )
+    except pd.errors.EmptyDataError:
+        fusion_summary_df = None
+
+    fusion_sample_df = (
+        pd.read_csv(summary_file, sep='\t', index_col=None)
+        .rename(columns=lambda x:  x[0].upper() + x.replace('_', ' ')[1:])
+    )
+    digit_group_cols = ['Cells with fusions', 'Reads', 'Unique fusions']
+    round_cols = ['Mean unique fusions per cell', 'Mean fusion reads per cell']
+    fusion_sample_df[digit_group_cols] = \
+        fusion_sample_df[digit_group_cols].applymap(lambda x: f'{int(x):,}')
+    fusion_sample_df[round_cols] = \
+        fusion_sample_df[round_cols].applymap(lambda x: f'{float(x):.1f}')
+
+    with report.add_section('Fusion transcripts', 'Fusion transcripts'):
+
+        with p():
+            text("Fusion transcript detection has been performed using")
+            a('ctat-LR-fusion', href='https://github.com/TrinityCTAT/CTAT-LR-fusion')
+            text(". Only reads with valid barcodes are included in these results.")
+
+        with ul():
+            li(
+                b("Cells with fusions:"),
+                " Number of valid cells with at least one assigned fusion")
+            li(b("Unique fusions:"), " Total fusions detected")
+            li(b("Reads:"), " The total number of fusion-supporting reads")
+            li(
+                b("Mean fusion reads per cell:"),
+                " The mean number of fusion-supporting reads per cell")
+            li(
+                b("Mean unique fusions per cell:"),
+                " The mean number of unique fusion transcripts per cell")
+
+        DataTable.from_pandas(
+            fusion_sample_df, use_index=False, paging=False, searchable=False)
+
+        tabs = Tabs()
+        if fusion_summary_df is None or fusion_summary_df.empty:
+            return
+        with tabs.add_dropdown_menu('sample', change_header=True):
+            for sample, sample_df in fusion_summary_df.groupby('Sample ID'):
+
+                if sample_df.empty:
+                    h6(f"No fusions detected for {sample}")
+                    continue
+                fusion_summary_df['UMIs'] = \
+                    fusion_summary_df['UMIs'].apply(lambda x: f"{float(x):.2f}")
+
+                if fusion_summary_df.empty:
+                    p(f"No fusions detected for {sample}")
+                    continue
+
+                with tabs.add_dropdown_tab(sample):
+                    with div():
+                        p(
+                            """The following table summarises fusion transcripts
+                            identified in each sample. Each fusion is defined by gene
+                            pair partners and the breakpoint locations.""")
+                        with div():
+                            with ul():
+                                li(
+                                    b("Left breakpoint: "),
+                                    "Breakpoint location of the first gene"
+                                )
+                                li(
+                                    b("Right breakpoint: "),
+                                    "Breakpoint location of the second gene"
+                                )
+                                with li():
+                                    b("Splice type:")
+                                    with ul():
+                                        li(
+                                            b("ONLY_REF_SPLICE: "),
+                                            "Breakpoint occurs at annotated junction"
+                                        )
+                                        li(
+                                            b("INCL_NON_REF_SPLICE: "),
+                                            "Breakpoint is not at an annotated junction"
+                                        )
+                                li(
+                                    b("Cells: "),
+                                    "Numnber of cells containing this fusion"
+                                )
+                                li(
+                                    b("UMIs: "),
+                                    """Number of deduplicated reads supporting this
+                                    fusion site"""
+                                )
+
+                    DataTable.from_pandas(
+                        sample_df.drop(columns=['Sample ID']),
+                        use_index=False, paging=False, searchable=False)
 
 
 def main(args):
@@ -559,22 +661,34 @@ def main(args):
                             data, use_index=True, paging=False, searchable=False)
 
                         with div():
-                            raw("""
-                                <ul>
-                                <li><b>Full length:</b> Proportion of reads containing
-                                adapters in the
-                                expected configuration. Full-length reads are carried
-                                forward in the workflow to attempt to assign.
-                                barcode/UMI</li>
-                                <li><b>Valid barcodes:</b> Proportion of reads that have
-                                been assigned corrected cell barcodes and UMIs.
-                                All reads with valid barcodes
-                                are used in the subsequent stages of the
-                                workflow.</li>
-                                <li><b>Gene assigned:</b> Proportion of reads
-                                unambiguously assigned to a gene.</li>
-                                <li><b>Transcript assigned:</b> Proportion of reads
-                                unambiguously assigned a transcript.""")
+                            with ul():
+                                li(
+                                    b("Full length: "),
+                                    """ Proportion of reads containing adapters in the
+                                    expected configuration. Full-length reads are
+                                    carried forward in the workflow to attempt to
+                                    assign barcode/UMI."""
+                                )
+                                li(
+                                    b("Valid barcodes: "),
+                                    """ Proportion of reads that have been assigned
+                                    corrected cell barcodes and UMIs. All reads with
+                                    valid barcodes are used in the subsequent stages
+                                    of the workflow."""
+                                )
+                                li(
+                                    b("Gene assigned: "),
+                                    """Proportion of reads unambiguously assigned to a
+                                    gene."""
+                                )
+                                li(
+                                    b("Transcript assigned: "),
+                                    """Proportion of reads unambiguously assigned a
+                                    transcript."""
+                                )
+
+    if args.fusion_results_dir:
+        fusion_section(report, args.fusion_results_dir)
 
     with report.add_section('Adapter configuration', 'Adapter configuration'):
         order = [
@@ -620,15 +734,13 @@ def main(args):
                     """
                 )
                 p("3prime, multiome and visium kits:")
-                ul(
-                    li("Adapter1: Read1"),
+                with ul():
+                    li("Adapter1: Read1")
                     li("Adapter2: TSO")
-                )
                 p("5prime kit:")
-                ul(
-                    li("Adapter1: Read1"),
+                with ul():
+                    li("Adapter1: Read1")
                     li("Adapter2: Non-Poly(dT) RT primer")
-                )
 
     with report.add_section('Saturation', 'Saturation'):
 
@@ -638,14 +750,15 @@ def main(args):
         increase at a rate that depends on the complexity of the input library.
         The curve gradient indicates the rate at which new genes or UMIs are being
         recovered; as saturation increases the the curve flattens""")
-        raw("""
-            <ul>
-            <li><b>Gene saturation:</b> Genes per cell as a function of read depth.</li>
-            <li><b>UMI saturation:</b> UMIs per cell as a function of read depth.</li>
-            <li><b>Sequencing saturation:</b>  This metric is a measure of the
-            proportion of reads that come from a previously observed UMI,
-            and is calculated with the following formula:
-             1 - (number of unique UMIs / number of reads).</li></ul>""")
+        with ul():
+            li(b("Gene saturation:"), " Genes per cell as a function of read depth.")
+            li(b("UMI saturation:"), " UMIs per cell as a function of read depth.")
+            li(
+                b("Sequencing saturation:"),
+                """ This metric is a measure of the proportion of reads that come
+                from a previously observed UMI, and is calculated with the
+                following formula: 1 - (number of unique UMIs / number of reads)."""
+            )
 
         saturation_plots(args.saturation_curves)
 
@@ -714,4 +827,7 @@ def argparser():
         "--saturation_curves", type=Path)
     parser.add_argument(
         "--knee_plot_counts", type=Path)
+    parser.add_argument(
+        '--fusion_results_dir', type=Path, default=None,
+        help="Fusion summary directory")
     return parser

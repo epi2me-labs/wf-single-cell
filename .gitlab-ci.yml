@@ -21,14 +21,18 @@ docker-run:
       matrix:
         - MATRIX_NAME: [
           "standard",
+          "cloud_10x_resource",
           "fixed_cell_count",
           "no_fl_filtering",
           "integration-test",
           "bam-input",
           "visium",
-          "SNV"
-
+          "SNV",
+          "fusion",
+          "fusion_cloud_resource",
+          "fusion_multisample_with_negative"
         ]
+
     rules:
       # NOTE As we're overriding the rules block for the included docker-run
       #   we must redefine this CI_COMMIT_BRANCH rule to prevent docker-run
@@ -37,34 +41,189 @@ docker-run:
         when: never
       - if: $MATRIX_NAME == 'standard'
         variables:
-          NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v2.2.0_test_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/test_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
           NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --wf.merge_threads=4 --genes_of_interest  ${CI_PROJECT_NAME}/data/test_data/genes_of_interest.csv --fastq ${CI_PROJECT_NAME}/data/test_data/fastq/ --fastq_chunk 2500 --single_cell_sample_sheet ${CI_PROJECT_NAME}/data/test_data/samples.test.csv --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"
-      
+          NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
+      - if: $MATRIX_NAME == 'cloud_10x_resource'
+        variables:
+          NF_WORKFLOW_OPTS: >
+            -executor.\$$local.memory 32GB
+            --threads 4 --wf.merge_threads=4
+            --genes_of_interest  ${CI_PROJECT_NAME}/data/test_data/genes_of_interest.csv
+            --fastq ${CI_PROJECT_NAME}/data/test_data/fastq/
+            --fastq_chunk 2500
+            --single_cell_sample_sheet ${CI_PROJECT_NAME}/data/test_data/samples.test.csv
+            --epi2me_resource_bundle gex-GRCh38-2024-A_chr_20-21
+            --matrix_min_genes 1
+            --matrix_min_cells 1
+            --matrix_max_mito 100
+          NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
       - if: $MATRIX_NAME == 'fixed_cell_count'
         variables:
-          NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v2.2.0_test_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/test_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
           NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --wf.merge_threads=4 --fastq ${CI_PROJECT_NAME}/data/test_data/fastq/ --estimate_cell_count=false --fastq_chunk 2500 --single_cell_sample_sheet ${CI_PROJECT_NAME}/data/test_data/samples.test.csv --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"  
+          NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
       - if: $MATRIX_NAME == 'no_fl_filtering'
         variables:
-          NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v2.2.0_test_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/test_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
           NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --wf.merge_threads=4 --fastq ${CI_PROJECT_NAME}/data/test_data/fastq/ --fastq_chunk 2500 --full_length_only=false --single_cell_sample_sheet ${CI_PROJECT_NAME}/data/test_data/samples.test.csv --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"
-
+          NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
       - if: $MATRIX_NAME == "integration-test"
         variables:
           NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/ci_data.tar.gz https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/ci_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/ci_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
           NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --wf.merge_threads=4 --fastq ${CI_PROJECT_NAME}/data/ci_data/sample1.fq --fastq_chunk 2500 --ref_genome_dir ${CI_PROJECT_NAME}/data/ci_data/10x_ref_chr21_22 --matrix_min_genes 1 --matrix_min_cells 1 --expected_cells 10 --kit 3prime:v3"
+          NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
       - if: $MATRIX_NAME == "bam-input"
         variables:
-          NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v2.2.0_test_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/test_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
           NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --wf.merge_threads=4 --bam ${CI_PROJECT_NAME}/data/test_data/bam/ --fastq_chunk 2500 --single_cell_sample_sheet ${CI_PROJECT_NAME}/data/test_data/samples.test.csv --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"
+          NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
       - if: $MATRIX_NAME == "visium"
         variables:
-          NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v2.2.0_test_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/test_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
           NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --wf.merge_threads=4 --fastq ${CI_PROJECT_NAME}/data/test_data/visium_fastq --fastq_chunk 2500 --kit visium:v1 --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCm39-2024-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"
+          NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
       - if: $MATRIX_NAME == "SNV" 
         variables:
           NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v2.5.0_test_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/test_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
           NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 32GB --threads 4 --wf.merge_threads=2 --fastq ${CI_PROJECT_NAME}/data/test_data/variant_data/colo829_10_cells.fq.gz --call_variants=true --fastq_chunk 2500 --kit 3prime:v4 --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100 --expected_cells 10 --estimate_cell_count=false"
+          NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
+      - if: $MATRIX_NAME == "fusion"
+        variables:
+          CTATLIB: ctat_resource_chr20-21_UyHq1cFI
+          NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ &&
+            wget https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/refdata-gex-GRCh38-2024-A_chr20_21.tar.gz \
+                -O ${CI_PROJECT_NAME}/data/refdata-gex-GRCh38-2024-A_chr20_21.tar.gz &&
+              tar -xzvf ${CI_PROJECT_NAME}/data/refdata-gex-GRCh38-2024-A_chr20_21.tar.gz -C ${CI_PROJECT_NAME}/data/ &&
+            wget -O ${CI_PROJECT_NAME}/data/${CTATLIB}.tar.gz \
+                https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/${CTATLIB}.tar.gz &&
+              tar -xzvf ${CI_PROJECT_NAME}/data/${CTATLIB}.tar.gz -C ${CI_PROJECT_NAME}/data/ &&
+            wget -O ${CI_PROJECT_NAME}/data/fusion_ci_reads.tar.gz \
+                https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/fusion_ci_reads.tar.gz  &&
+              tar -xzvf ${CI_PROJECT_NAME}/data/fusion_ci_reads.tar.gz  -C ${CI_PROJECT_NAME}/data/"
+          NF_WORKFLOW_OPTS: > 
+              -executor.\$$local.memory 32GB 
+              --threads 4 
+              --wf.fusion_threads=2
+              --fastq ${CI_PROJECT_NAME}/data/fusion_ci_reads/fusion_positive/3pv4_chr20-21_synth_fusions.fq.gz
+              --call_fusions=true 
+              --fastq_chunk 2500 
+              --kit 3prime:v4
+              --ref_genome_dir ${CI_PROJECT_NAME}/data/refdata-gex-GRCh38-2024-A_chr20_21
+              --ctat_resources ${CI_PROJECT_NAME}/data/${CTATLIB}
+              --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100
+              --expected_cells 10
+          NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
+      - if: $MATRIX_NAME == "fusion_cloud_resource"
+        variables:
+          NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ &&
+           wget -O ${CI_PROJECT_NAME}/data/fusion_ci_reads.tar.gz \
+                https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/fusion_ci_reads.tar.gz
+            && tar -xzvf ${CI_PROJECT_NAME}/data/fusion_ci_reads.tar.gz  -C ${CI_PROJECT_NAME}/data/"
+          NF_WORKFLOW_OPTS: >
+              -executor.\$$local.memory 32GB 
+              --threads 4
+              --wf.fusion_threads=2
+              --fastq ${CI_PROJECT_NAME}/data/fusion_ci_reads/fusion_positive/3pv4_chr20-21_synth_fusions.fq.gz
+              --call_fusions=true
+              --fastq_chunk 2500
+              --kit 3prime:v4
+              --epi2me_resource_bundle gex-GRCh38-2024-A_chr_20-21
+              --matrix_min_genes 1
+              --matrix_min_cells 1
+              --matrix_max_mito 100
+              --expected_cells 10
+          NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
+      - if: $MATRIX_NAME == "fusion_multisample_with_negative"
+        variables:
+          CTATLIB: ctat_resource_chr20-21_UyHq1cFI
+          NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ &&
+            wget https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/refdata-gex-GRCh38-2024-A_chr20_21.tar.gz \
+                -O ${CI_PROJECT_NAME}/data/refdata-gex-GRCh38-2024-A_chr20_21.tar.gz &&
+              tar -xzvf ${CI_PROJECT_NAME}/data/refdata-gex-GRCh38-2024-A_chr20_21.tar.gz -C ${CI_PROJECT_NAME}/data/ &&
+            wget -O ${CI_PROJECT_NAME}/data/${CTATLIB}.tar.gz \
+                https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/${CTATLIB}.tar.gz &&
+              tar -xzvf ${CI_PROJECT_NAME}/data/${CTATLIB}.tar.gz -C ${CI_PROJECT_NAME}/data/ &&
+            wget -O ${CI_PROJECT_NAME}/data/fusion_ci_reads.tar.gz \
+                https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/fusion_ci_reads.tar.gz  &&
+              tar -xzvf ${CI_PROJECT_NAME}/data/fusion_ci_reads.tar.gz  -C ${CI_PROJECT_NAME}/data/"
+          NF_WORKFLOW_OPTS: > 
+              -executor.\$$local.memory 32GB 
+              --threads 4 
+              --wf.fusion_threads=2
+              --fastq ${CI_PROJECT_NAME}/data/fusion_ci_reads/
+              --call_fusions=true 
+              --fastq_chunk 2500 
+              --kit 3prime:v4
+              --ref_genome_dir ${CI_PROJECT_NAME}/data/refdata-gex-GRCh38-2024-A_chr20_21
+              --ctat_resources ${CI_PROJECT_NAME}/data/${CTATLIB}
+              --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100
+              --expected_cells 10
+          NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
+
+aws-run:
+    stage: test
+    artifacts:
+        when: always
+        paths:
+            - ${CI_PROJECT_NAME}
+            - .nextflow.log
+    variables:
+        CWG_AWS_ENV_NAME: "stack"
+    parallel:
+        matrix:
+            - MATRIX_NAME: [
+                "fusion-aws-local-resource",
+                "fusion-aws-cloud-resource",
+              ]
+    rules:
+        # NOTE As we're overriding the rules block for the included docker-run
+        #   we must redefine this CI_COMMIT_BRANCH rule to prevent docker-run
+        #   being incorrectly scheduled for "detached merge request pipelines" etc.
+        - if: ($CI_COMMIT_BRANCH == null || $CI_COMMIT_BRANCH == "dev-template")
+          when: never
+        - if: $MATRIX_NAME == "fusion-aws-local-resource"
+          variables:
+            CTATLIB: ctat_resource_chr20-21_UyHq1cFI
+            NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ &&
+              wget https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/refdata-gex-GRCh38-2024-A_chr20_21.tar.gz \
+                  -O ${CI_PROJECT_NAME}/data/refdata-gex-GRCh38-2024-A_chr20_21.tar.gz &&
+                tar -xzvf ${CI_PROJECT_NAME}/data/refdata-gex-GRCh38-2024-A_chr20_21.tar.gz -C ${CI_PROJECT_NAME}/data/ &&
+              wget -O ${CI_PROJECT_NAME}/data/${CTATLIB}.tar.gz \
+                  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/${CTATLIB}.tar.gz &&
+                tar -xzvf ${CI_PROJECT_NAME}/data/${CTATLIB}.tar.gz -C ${CI_PROJECT_NAME}/data/ &&
+              wget -O ${CI_PROJECT_NAME}/data/fusion_ci_reads.tar.gz \
+                  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/fusion_ci_reads.tar.gz  &&
+                tar -xzvf ${CI_PROJECT_NAME}/data/fusion_ci_reads.tar.gz  -C ${CI_PROJECT_NAME}/data/"
+            NF_WORKFLOW_OPTS: > 
+                -executor.\$$local.memory 32GB 
+                --threads 4 
+                --wf.fusion_threads=2
+                --fastq ${CI_PROJECT_NAME}/data/fusion_ci_reads/fusion_positive/3pv4_chr20-21_synth_fusions.fq.gz
+                --call_fusions=true 
+                --fastq_chunk 2500 
+                --kit 3prime:v4
+                --ref_genome_dir ${CI_PROJECT_NAME}/data/refdata-gex-GRCh38-2024-A_chr20_21
+                --ctat_resources ${CI_PROJECT_NAME}/data/${CTATLIB}
+                --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100
+                --expected_cells 10
+            NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
+        - if: $MATRIX_NAME == "fusion-aws-cloud-resource"
+          variables:
+            NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ &&
+              wget -O ${CI_PROJECT_NAME}/data/fusion_ci_reads.tar.gz \
+              https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/fusion_ci_reads.tar.gz
+              && tar -xzvf ${CI_PROJECT_NAME}/data/fusion_ci_reads.tar.gz  -C ${CI_PROJECT_NAME}/data/"
+            NF_WORKFLOW_OPTS: >
+                -executor.\$$local.memory 32GB 
+                --threads 4
+                --wf.fusion_threads=2
+                --fastq ${CI_PROJECT_NAME}/data/fusion_ci_reads/fusion_positive/3pv4_chr20-21_synth_fusions.fq.gz
+                --call_fusions=true
+                --fastq_chunk 2500
+                --kit 3prime:v4
+                --epi2me_resource_bundle gex-GRCh38-2024-A_chr_20-21
+                --matrix_min_genes 1
+                --matrix_min_cells 1
+                --matrix_max_mito 100
+                --expected_cells 10
+            NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
+
 
 
 macos-run:

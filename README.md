@@ -162,13 +162,16 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 |--------------------------|------|-------------|------|---------|
 | fastq | string | FASTQ files to use in the analysis. | This accepts one of three cases: (i) the path to a single FASTQ file; (ii) the path to a top-level directory containing FASTQ files; (iii) the path to a directory containing one level of sub-directories which in turn contain FASTQ files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`. |  |
 | bam | string | BAM or unaligned BAM (uBAM) files to use in the analysis. | This accepts one of three cases: (i) the path to a single BAM file; (ii) the path to a top-level directory containing BAM files; (iii) the path to a directory containing one level of sub-directories which in turn contain BAM files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`. |  |
-| ref_genome_dir | string | The path to the 10x reference directory | Human reference data can be downloaded from 10x [here](https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2020-A.tar.gz). Instructions for preparing reference data can be found [here](https://www.10xgenomics.com/support/software/cell-ranger/tutorials/cr-tutorial-mr#overview) |  |
+| epi2me_resource_bundle | string | Reference genome resource bundle to automatically download. | If selected, a prebuilt 10x reference genome bundle will be automatically downloaded from the EPI2ME AWS cloud. If `call_fusions` is selected, a matched ctat-LR-fusion resource directory will also be downloaded. This overrides `ref_genome_dir`, and `ctat_resourses`. The selected resources will be automatically downloaded, on the first run, into the directory defined by the `store_dir` parameter (default `wf-single-cell_resources`). Subsequent workflow runs will use the pre-downloaded resources. |  |
+| ref_genome_dir | string | A local path to the 10x reference directory. | The workflow requires a 10x reference directory containing sequence and annotation data. The folder should contain these files: `genes/genes.gtf`, `fasta/genome.fa`, and `fasta/genome.fa.fai` as per the 10x reference folder format. 10x reference folders can be downloaded from https://www.10xgenomics.com/support/software/cell-ranger/downloads. Alternatively, the workflow can download a limited set of prebuilt 10x references using the `epi2me_resource_bundle` parameter |  |
+| ctat_resources | string | For fusion transcript calling. A local path to ctat-LR-fusion resource directory. | The ctat-LR-fusion resource bundle must be built against the same reference genome data as is given with `ref_genome_dir`. Resource bundles can be downloaded from https://data.broadinstitute.org/Trinity/CTAT_RESOURCE_LIB/, and instructions for building your own resources bundle can be found here: https://github.com/TrinityCTAT/ctat-genome-lib-builder. Alternatively see the `epi2me_resource_bundle` option |  |
 | kit | string | The 10x kit and version separated by a colon (eg: 3prime:v3) | 10x kits can be released with different versions, each requiring a specific whitelist that is looked-up by the workflow. If `single_cell_sample_sheet` is not defined, the 10x kit is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied. |  |
 | expected_cells | integer | Number of expected cells in the sample. | The number of expected cells. If `single_cell_sample_sheet` is not defined, `expected_cells` is applied to all samples. This parameter is ignored if `single_cell_sample_sheet` is supplied. |  |
 | estimate_cell_count | boolean | Estimate cell count from the data. | If set to true, the cell count will be estimated from the read count distribution. If set to false, the top `expected_cells` cells with highest read support will be selected. | True |
 | single_cell_sample_sheet | string | An optional CSV file used to assign library metadata per sample. If all samples have the same library metadata, this can be supplied instead by using the `--kit` and `--expected_cells` parameters. | Columns should be: [sample_id, kit, exp_cells]. This must not be confused with the MinKNOW sample_sheet. `sample_id` should correspond to `sample_name` which is defined either in the `sample_sheet`, given by the `sample` parameter (for single sample runs) or if no `sample_sheet` or `sample` is given, is derived from the folder name containing the FASTQ files. |  |
 | full_length_only | boolean | Only process full length reads. | If set to true, only process reads or subreads that are classified as full length (read segments flanked by compatible adapters in the expected orientation). | True |
 | min_read_qual | number | Specify read quality lower limit. | Any reads with a quality lower than this limit will not be included in the analysis. |  |
+| call_fusions | boolean | Use ctat-LR-fusion to call fusion reads. | ctat-LR-fusion is a tool for calling fusions from long reads. | False |
 
 
 ### Sample Options
@@ -249,6 +252,9 @@ Output files may be aggregated including information for all samples or provided
 | Genotype matrix | {{ alias }}/{{ alias }}.genotype_matrix/matrix.mtx.gz | Sparse MEX format matrix file. | per-sample |
 | Genotype matrix barcodes | {{ alias }}/{{ alias }}.genotype_matrix/barcodes.tsv.gz | Sparse MEX format barcode (columns) file. | per-sample |
 | Genotype matrix features | {{ alias }}/{{ alias }}.genotype_matrix/features.tsv.gz | Sparse MEX format SNV ID (rows) file. | per-sample |
+| Per-read fusion info | {{ alias }}/fusions/{{ alias }}.ctat-LR-fusion.fusion_predictions_per-read.tsv | TSV file with per-read fusion information, including gene fusion pairs and cell/UMI barcodes. | per-sample |
+| Fusion summary | {{ alias }}/fusions/{{ alias }}.ctat-LR-fusion.fusion_predictions_per-fusion.tsv | Summary of each prediciton fusion gene. | per-sample |
+| ctat-LR-fusion output | {{ alias }}/fusions/{{ alias }}.ctat-LR-fusion.tar.gz | The complete output of ctat-LR-fusion. | per-sample |
 
 
 
@@ -346,8 +352,25 @@ The next stage is to align the preprocessed reads to the reference genome. This 
 read assignment in downstream steps.
 
 The stranded and trimmed FASTQ reads are mapped to the reference genome using minimap2.  
-The parameter `resources_mm2_max_threads int` controls the threads given to an alignment process.
-Other optional parameters can be supplied to minimap2 using `resources_mm2_flags` (for example `--resources_mm2_flags="-I 16GB"`).
+
+The reference data can be supplied one of two ways:
+1. as a local path to a folder with `--ref_genome_dir`.
+Either use a 10x reference bundle (https://www.10xgenomics.com/support/software/cell-ranger/downloads#References) 
+or ensure that the reference directory contains the following files in the same folder structure
+```
+├── refdata
+│   ├── fasta
+│   │   ├── genome.fa
+│   │   └── genome.fa.fai
+│   └── genes
+│       └── genes.gtf
+```
+2. `--epi2me_resource_bundle`: Select this option to use a prebuilt 10x resource directory.
+This will be downloaded automatically by the workflow and stored in `store-dir`;
+subsequent runs from the same directory will reuse the reference data stored there.  
+There are currently prebuilt resource bundles for the 10x Human reference (GRCh38) - 2024-A
+reference bundle (https://www.10xgenomics.com/support/software/cell-ranger/downloads).
+
 
 
 
@@ -494,6 +517,31 @@ Some of these candidate variants may represent variants that were not detected a
       * homozygous REF : 0
       * heterozygous ALT/REF 1
       * homozygous ALT: 2
+
+
+### 12. Fusion transcript calling
+Fusion transcript calling can be enabled using [ctat-LR-fusion](https://github.com/TrinityCTAT/CTAT-LR-fusion),
+allowing reads derived from fusion transcripts to be identified and assigned to cells. 
+This part of the workflow can be enabled with `--call_fusions`.
+
+The taqged BAM output from the workflow, containing cell and UMI barcode tags, is used as
+input to ctat-LR-fusion. 
+
+ctat-LR-fusion requires a resource directory containing reference sequence and annotation information. It is important that the ctat-LR-fusion resource is built against the same
+reference data as is used elsewhere in the workflow. For example, if the `ref_genome_dir`
+contains sequence from hg38 and Gencode44 annotations, then the ctat-LR-fusion resource directory should be built against these.
+
+There are two ways to supply the ctat-LR-fusion resource directory:
+
+1.  `--ctat_resource_dir`: A path to a local copy of the resource directory.
+Prebuilt resource directories can be found here:  https://data.broadinstitute.org/Trinity/CTAT_RESOURCE_LIB/.
+2. `--epi2me_resource_bundle`: Select this option to use a prebuilt ctat-LR-fusion resource bundle and the corresponding 10x reference data,
+which will be automatically downloaded from the cloud.
+Currently we have prebuilt bundles for the 10x human reference (GRCh38) - 2024-A
+reference bundle (https://www.10xgenomics.com/support/software/cell-ranger/downloads).
+
+The main output is a per read summary file where each read called as a fusion
+by ctat-LR-fusion is associated with a cell barcode/UMI and gene/transcript assignments. 
 
 
 ### 12. Make UMAP plots

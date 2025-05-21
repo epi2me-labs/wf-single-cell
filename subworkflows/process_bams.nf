@@ -447,7 +447,7 @@ workflow process_bams {
         // Split the GTF by chromosome
         chr_gtf = split_gtf_by_chroms(gtf)
             .flatten()
-            .map {fname -> tuple(fname.baseName, fname)}  // [chr, gtf]
+            .map {fname -> tuple(fname.baseName, fname)} // [chr, gtf]
 
         generate_whitelist(high_qual_bc_counts)
 
