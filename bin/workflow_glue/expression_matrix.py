@@ -15,7 +15,7 @@ class ExpressionMatrix:
 
     def __init__(
             self, matrix=None, features=None, cells=None,
-            fname=None, cache=False, dtype=int):
+            fname=None, cache=False, dtype=int, sparse=False):
         """Create a matrix.
 
         Do not use the constructor directly.
@@ -43,9 +43,9 @@ class ExpressionMatrix:
             self._fh.close()
 
     @classmethod
-    def from_hdf(cls, name, cache=True, dtype=int):
+    def from_hdf(cls, name, cache=True, dtype=int, sparse=False):
         """Load a matrix from HDF file."""
-        ma = cls(fname=name, cache=cache, dtype=dtype)
+        ma = cls(fname=name, cache=cache, dtype=dtype, sparse=sparse)
         return ma
 
     @classmethod
@@ -73,10 +73,10 @@ class ExpressionMatrix:
             dtype=int)
 
     @classmethod
-    def aggregate_hdfs(cls, fnames, dtype=int):
+    def aggregate_hdfs(cls, fnames, dtype=int, sparse=False):
         """Aggregate a set of matrices stored in HDF."""
         if len(fnames) == 1:
-            return cls.from_hdf(fnames[0], dtype=dtype)
+            return cls.from_hdf(fnames[0], dtype=dtype, sparse=sparse)
         features = set()
         cells = set()
         for fname in fnames:
@@ -90,7 +90,7 @@ class ExpressionMatrix:
             cells=np.array(sorted(cells), dtype=bytes),
             dtype=dtype)
         for fname in fnames:
-            ma = cls.from_hdf(fname, dtype=dtype)
+            ma = cls.from_hdf(fname, dtype=dtype, sparse=sparse)
             full_matrix + ma
         return full_matrix
 
@@ -339,6 +339,7 @@ class ExpressionMatrix:
                     self._matrix[i, :] = self._matrix[x, :]
                 self._matrix = self._matrix[:i+1]
                 self._features = self._features[feat_mask]
+                self._s_features = np.argsort(self._features)
 
         if cell_mask is not None:
             sum_mask = sum(cell_mask)
@@ -350,5 +351,6 @@ class ExpressionMatrix:
                     self._matrix[:, j] = self.matrix[:, x].squeeze()
                 self._matrix = self._matrix[:, :j+1]
                 self._cells = self._cells[cell_mask]
+                self._s_cells = np.argsort(self._cells)
 
         return self._matrix

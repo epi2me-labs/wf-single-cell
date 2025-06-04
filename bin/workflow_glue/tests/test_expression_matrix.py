@@ -12,6 +12,37 @@ from workflow_glue.expression_matrix import ExpressionMatrix
 from workflow_glue.process_matrix import main
 
 
+@pytest.fixture(params=[False], ids=["dense"])
+def matrix_mode(request):
+    # This is a stub, backported from the other branch
+    """Fixture to provide matrix mode (dense or sparse)."""
+    return request.param
+
+
+@pytest.fixture
+def empty_matrix(matrix_mode):
+    """Create an empty ExpressionMatrix."""
+    matrix = ExpressionMatrix(
+        matrix=np.ndarray(shape=(0, 0)),
+        features=np.array([]),
+        cells=np.array([]),
+        sparse=matrix_mode
+    )
+    return matrix
+
+
+@pytest.fixture
+def small_matrix(matrix_mode):
+    """Create a 2x2 ExpressionMatrix."""
+    matrix = ExpressionMatrix(
+        matrix=np.array([2, 2, 2, 2]).reshape((2, 2)),
+        features=np.array(['gene1', 'gene2'], dtype=bytes),
+        cells=np.array(['cell1', 'cell2'], dtype=bytes),
+        sparse=matrix_mode
+    )
+    return matrix
+
+
 @pytest.fixture()
 def tags_df():
     """Make read tag dataframe."""
@@ -47,39 +78,18 @@ def tags_df():
     return df, expected_raw_result, expected_processed_result
 
 
-def test_empty_matrix():
+def test_empty_matrix(matrix_mode):
     """Test instantiating ExpressionMatrix with empty data."""
     em = ExpressionMatrix(
-        matrix=np.ndarray(shape=(0, 2)),
+        matrix=np.ndarray(shape=(0, 0)),
         features=np.array([], dtype=bytes),
-        cells=np.array([], dtype=bytes)
+        cells=np.array([], dtype=bytes),
+        sparse=matrix_mode
     )
 
-    assert em.matrix.shape == (0, 2)
+    assert em.matrix.shape == (0, 0)
     assert em.features.shape == (0,)
     assert em.cells.shape == (0,)
-
-
-@pytest.fixture
-def empty_matrix():
-    """Create an empty ExpressionMatrix."""
-    matrix = ExpressionMatrix(
-        matrix=np.ndarray(shape=(0, 2)),
-        features=np.array([]),
-        cells=np.array([])
-    )
-    return matrix
-
-
-@pytest.fixture
-def small_matrix():
-    """Create a 2x2 ExpressionMatrix."""
-    matrix = ExpressionMatrix(
-        matrix=np.array([2, 2, 2, 2]).reshape((2, 2)),
-        features=np.array(['gene1', 'gene2'], dtype=bytes),
-        cells=np.array(['cell1', 'cell2'], dtype=bytes)
-    )
-    return matrix
 
 
 def test_normalize_empty_matrix(empty_matrix):
@@ -182,7 +192,7 @@ def test_remove_unknown_becomes_empty():
         matrix.remove_unknown('-')
 
 
-def test_aggregate_hdfs():
+def test_aggregate_hdfs(matrix_mode):
     """Test the creation of an ExpressionMatrix from multiple HDF inputs."""
     hdf1 = tempfile.NamedTemporaryFile(suffix='.hdf5', mode='w')
     with h5py.File(hdf1.name, 'w') as fh1:
@@ -206,21 +216,162 @@ def test_aggregate_hdfs():
         fh3['features'] = []
         fh3['matrix'] = np.ndarray(shape=(0, 0))
 
-    em = ExpressionMatrix.aggregate_hdfs((hdf1.name, hdf2.name, hdf3.name))
+    em = ExpressionMatrix.aggregate_hdfs(
+        (hdf1.name, hdf2.name, hdf3.name), sparse=matrix_mode)
+    mat = em.matrix.toarray() if matrix_mode else em.matrix
 
     np.testing.assert_array_equal(em.tcells, np.array(['cell1', 'cell2', 'cell3']))
     np.testing.assert_array_equal(em.tfeatures, np.array(['f1', 'f2']))
     np.testing.assert_array_equal(
-        em.matrix,  np.array([[5, 2, 2], [5, 4, 1]])
+        mat,  np.array([[5, 2, 2], [5, 4, 1]])
     )
 
 
-def test_main(tags_df):
-    """Test the main function.
+def test_remove_cells_and_features(matrix_mode):
+    """Test removing cells and features from ExpressionMatrix."""
+    em = ExpressionMatrix(
+        matrix=np.array([[0, 5, 0], [1, 1, 1]]),
+        features=np.array(['f1', 'f2'], dtype=bytes),
+        cells=np.array(['c1', 'c2', 'c3'], dtype=bytes),
+        sparse=matrix_mode,
+    )
 
-    :param tags_df: fixture with input test file and expected result pd.DataFrame.
-    :return:
-    """
+    em.remove_cells(threshold=1)  # no cells should be removed
+    em.remove_features(threshold=2)  # only the 5 remains
+
+    np.testing.assert_array_equal(em.tfeatures, np.array(['f2']))
+    np.testing.assert_array_equal(em.tcells, np.array(['c1', 'c2', 'c3']))
+
+
+def test_remove_features_and_cells(matrix_mode):
+    """Test removing features and cells from ExpressionMatrix."""
+    em = ExpressionMatrix(
+        matrix=np.array([[0, 5, 0], [1, 1, 1]]),
+        features=np.array(['f1', 'f2'], dtype=bytes),
+        cells=np.array(['c1', 'c2', 'c3'], dtype=bytes),
+        sparse=matrix_mode,
+    )
+
+    em.remove_features(threshold=2)  # only the 5 remains
+    em.remove_cells(threshold=1)  # no cells should be removed
+
+    np.testing.assert_array_equal(em.tfeatures, np.array(['f2']))
+    np.testing.assert_array_equal(em.tcells, np.array(['c1', 'c2', 'c3']))
+
+
+def test_remove_cells_then_features_order_sensitive(matrix_mode):
+    """Test order-sensitive removal: remove cells first, then features."""
+    em = ExpressionMatrix(
+        matrix=np.array([
+            [1, 0, 0],  # f1
+            [1, 1, 0],  # f2
+            [0, 1, 1],  # f3
+        ]),
+        features=np.array(['f1', 'f2', 'f3'], dtype=bytes),
+        cells=np.array(['c1', 'c2', 'c3'], dtype=bytes),
+        sparse=matrix_mode,
+    )
+
+    em.remove_cells(threshold=2)
+    em.remove_features(threshold=2)
+
+    np.testing.assert_array_equal(em.tfeatures, np.array(['f2']))
+    np.testing.assert_array_equal(em.tcells, np.array(['c1', 'c2']))
+
+
+def test_remove_features_then_cells_order_sensitive(matrix_mode):
+    """Test order-sensitive removal: remove features first, then cells."""
+    em = ExpressionMatrix(
+        matrix=np.array([
+            [1, 0, 0],  # f1
+            [1, 1, 0],  # f2
+            [0, 1, 1],  # f3
+        ]),
+        features=np.array(['f1', 'f2', 'f3'], dtype=bytes),
+        cells=np.array(['c1', 'c2', 'c3'], dtype=bytes),
+        sparse=matrix_mode,
+    )
+
+    em.remove_features(threshold=2)
+    em.remove_cells(threshold=2)
+
+    np.testing.assert_array_equal(em.tfeatures, np.array(['f2', 'f3']))
+    np.testing.assert_array_equal(em.tcells, np.array(['c2']))
+
+
+def test_normalize_and_log_transform(matrix_mode):
+    """Test normalization and log transformation of ExpressionMatrix."""
+    em = ExpressionMatrix(
+        matrix=np.array([[10, 20], [30, 40]], dtype=float),
+        features=np.array(['f1', 'f2'], dtype=bytes),
+        cells=np.array(['c1', 'c2'], dtype=bytes),
+        sparse=matrix_mode,
+    )
+
+    em.normalize(100).log_transform()
+    mat = em.matrix.toarray() if matrix_mode else em.matrix
+
+    exp = np.array([
+        [1.41497335, 1.53571597],
+        [1.88081359, 1.83037478]
+    ])
+    np.testing.assert_allclose(mat, exp, rtol=1e-5)
+
+
+def test_mean_and_median_stats(matrix_mode):
+    """Test mean and median statistics of ExpressionMatrix."""
+    em = ExpressionMatrix(
+        matrix=np.array([
+            [0, 1, 2],
+            [0, 3, 0]
+        ]),
+        features=np.array(['f1', 'f2'], dtype=bytes),
+        cells=np.array(['c1', 'c2', 'c3'], dtype=bytes),
+        sparse=matrix_mode,
+    )
+
+    # the mean value per cell
+    np.testing.assert_array_equal(em.mean_expression, np.array([0, 2, 1]))
+    # find total count per cell [0, 4, 2], then take median
+    np.testing.assert_array_equal(em.median_counts, np.array([2.]))
+    # find non-zero entries per cell [0, 2, 1], then take median
+    np.testing.assert_array_equal(em.median_features_per_cell, np.array([1]))
+
+
+def test_feature_sort(matrix_mode):
+    """Test sorting helper attributes are kept up to date."""
+    em = ExpressionMatrix(
+        matrix=np.array([[0, 2], [3, 4]]),
+        features=np.array(['z_gene', 'a_gene'], dtype=bytes),
+        cells=np.array(['c2', 'c1'], bytes),
+        sparse=matrix_mode,
+    )
+    assert np.array_equal(em._s_features, [1, 0])
+    assert np.array_equal(em._s_cells, [1, 0])
+
+    em.remove_features(threshold=2)
+    assert np.array_equal(em._s_cells, [1, 0])
+    assert np.array_equal(em._s_features, [0])  # f1 is removed, but f2 renumbered
+
+
+def test_cell_sort(matrix_mode):
+    """Test sorting helper attributes are kept up to date."""
+    em = ExpressionMatrix(
+        matrix=np.array([[0, 2], [3, 4]]),
+        features=np.array(['z_gene', 'a_gene'], dtype=bytes),
+        cells=np.array(['c2', 'c1'], bytes),
+        sparse=matrix_mode,
+    )
+    assert np.array_equal(em._s_features, [1, 0])
+    assert np.array_equal(em._s_cells, [1, 0])
+
+    em.remove_cells(threshold=2)
+    assert np.array_equal(em._s_cells, [0])
+    assert np.array_equal(em._s_features, [1, 0])
+
+
+def test_main(tags_df):
+    """Test the main function of the expression matrix module."""
     tags_df, expected_raw_result, expected_processed_result = tags_df
     with tempfile.TemporaryDirectory() as fh:
         tmp_test_dir = Path(fh)
@@ -250,13 +401,15 @@ def test_main(tags_df):
 
         counts_result_df = pd.read_csv(args.raw, sep='\t', index_col=None)
         pd.testing.assert_frame_equal(
-            expected_raw_result, counts_result_df, check_like=True, check_dtype=False)
+            expected_raw_result, counts_result_df,
+            check_like=True, check_dtype=False)
 
         procs_result_df = pd.read_csv(args.processed, sep='\t', index_col=None)
         pd.testing.assert_frame_equal(
             expected_processed_result,
             procs_result_df, check_like=True, check_dtype=False)
 
-        mito_results_df = pd.read_csv(args.per_cell_mito, sep='\t', index_col=None)
+        mito_results_df = pd.read_csv(
+            args.per_cell_mito, sep='\t', index_col=None)
         assert "CB" in mito_results_df.columns
         assert "mito_pct" in mito_results_df.columns
