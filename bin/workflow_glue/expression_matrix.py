@@ -1,6 +1,9 @@
 """Expression counts matrix construction."""
+from collections import defaultdict
+import gc
 import gzip
 import os
+import re
 
 import h5py
 import numpy as np
@@ -9,33 +12,58 @@ import polars as pl
 import scipy.io
 import scipy.sparse
 
+from .util import get_named_logger  # noqa: ABS101
+
+
+VISIUM_HD_REGEX = re.compile(rb"^s_002um_\d{5}_\d{5}-1$")
+
 
 class ExpressionMatrix:
     """Representation of expression matrices."""
 
     def __init__(
             self, matrix=None, features=None, cells=None,
-            fname=None, cache=False, dtype=int, sparse=False):
+            fname=None, dtype=int, sparse=False):
         """Create a matrix.
 
         Do not use the constructor directly.
         """
+        self.logger = get_named_logger("ExpressionMatrix")
         self._matrix = matrix
         self._features = features
         self._cells = cells
+        self._dtype = dtype
+        self._sparse = sparse
+        self._s_features = None
+        self._s_cells = None
 
         if fname is not None:
             self._fh = h5py.File(fname, 'r')
-        self._cache = cache
-        self._dtype = dtype
+        else:
+            if any(x is None for x in (features, cells)):
+                raise ValueError(
+                    "Either fname or features, and cells must be provided.")
+            if matrix is None:
+                # make an empty matrix
+                if not sparse:
+                    matrix = np.zeros((len(features), len(cells)), dtype=dtype)
+                else:
+                    matrix = scipy.sparse.csr_matrix(
+                        (len(features), len(cells)), dtype=dtype)
+            else:
+                if not scipy.sparse.issparse(matrix) and sparse:
+                    matrix = scipy.sparse.csr_matrix(
+                        matrix, shape=(len(features), len(cells)), dtype=dtype)
 
-        if features is not None and cells is not None and matrix is None:
-            self._matrix = np.zeros((len(features), len(cells)), dtype=self._dtype)
-
-        if features is not None:
+            self._matrix = matrix
+            self._features = features
+            self._cells = cells
             self._s_features = np.argsort(features)
-        if cells is not None:
             self._s_cells = np.argsort(cells)
+            if self._matrix.shape[0] != len(features):
+                raise ValueError("Matrix row count does not match number of features.")
+            if self._matrix.shape[1] != len(cells):
+                raise ValueError("Matrix column count does not match number of cells.")
 
     def __exit__(self):
         """Cleanup."""
@@ -45,7 +73,7 @@ class ExpressionMatrix:
     @classmethod
     def from_hdf(cls, name, cache=True, dtype=int, sparse=False):
         """Load a matrix from HDF file."""
-        ma = cls(fname=name, cache=cache, dtype=dtype, sparse=sparse)
+        ma = cls(fname=name, dtype=dtype, sparse=sparse)
         return ma
 
     @classmethod
@@ -73,25 +101,37 @@ class ExpressionMatrix:
             dtype=int)
 
     @classmethod
-    def aggregate_hdfs(cls, fnames, dtype=int, sparse=False):
+    def aggregate_hdfs(cls, fnames, dtype=int, sparse=None):
         """Aggregate a set of matrices stored in HDF."""
-        if len(fnames) == 1:
-            return cls.from_hdf(fnames[0], dtype=dtype, sparse=sparse)
+        logger = get_named_logger("ExpressionMatrix")
         features = set()
         cells = set()
         for fname in fnames:
-            ma = cls.from_hdf(fname)
+            ma = cls.from_hdf(fname, dtype=dtype)
             features.update(ma.features)
             cells.update(ma.cells)
+
+        # use sparse if specified, otherwise force use if matrix >8 Gb
+        estimated_bytes = len(features) * len(cells) * np.dtype(dtype).itemsize
+        if sparse is not None:
+            use_sparse = sparse
+        else:
+            use_sparse = estimated_bytes > 8 * (1024 ** 3)
+        logger.info(
+            f"Aggregating {len(fnames)} matrices, "
+            f"estimated size: {estimated_bytes / (1024 ** 3):.2f} Gb, "
+            f"sparse: {use_sparse}.")
 
         # sort by names, just to be nice, doesn't guarantee matrices can be compared
         full_matrix = cls(
             features=np.array(sorted(features), dtype=bytes),
             cells=np.array(sorted(cells), dtype=bytes),
-            dtype=dtype)
+            dtype=dtype, sparse=use_sparse)
         for fname in fnames:
-            ma = cls.from_hdf(fname, dtype=dtype, sparse=sparse)
-            full_matrix + ma
+            ma = cls.from_hdf(fname, dtype=dtype, sparse=use_sparse)
+            full_matrix += ma
+        if use_sparse:
+            full_matrix._matrix = full_matrix.matrix.tocsr()
         return full_matrix
 
     @classmethod
@@ -149,26 +189,54 @@ class ExpressionMatrix:
         """An array of feature names."""
         if self._features is not None:
             return self._features
-        elif self._fh is not None:
-            features = self._fh['features'][()].astype(bytes)
-            if self._cache:
-                self._features = features
-            return features
+
+        if self._fh is not None:
+            self._features = self._fh['features'][()].astype(bytes)
+            self._s_features = np.argsort(self._features)
         else:
-            raise RuntimeError("Matrix not initialized.")
+            raise RuntimeError("Features not initialized.")
+        return self._features
 
     @property
     def cells(self):
         """An array of cell names."""
         if self._cells is not None:
             return self._cells
-        elif self._fh is not None:
-            cells = self._fh['cells'][()].astype(bytes)
-            if self._cache:
-                self._cells = cells
-            return cells
+        if self._fh is not None:
+            self._cells = self._fh['cells'][()].astype(bytes)
+            self._s_cells = np.argsort(self._cells)
+        else:
+            raise RuntimeError("Cells not initialized.")
+        return self._cells
+
+    @property
+    def matrix(self):
+        """Expression matrix array."""
+        if self._matrix is not None:
+            return self._matrix
+
+        if self._fh is not None:
+            matrix = self._fh['matrix'].astype(self._dtype)[()]
+            if self._sparse:
+                matrix = scipy.sparse.csr_matrix(
+                    matrix, shape=(len(self.features), len(self.cells)))
+            self._matrix = matrix
         else:
             raise RuntimeError("Matrix not initialized.")
+        return self._matrix
+
+    @property
+    def sparse(self):
+        """Return True if this is a sparse matrix."""
+        return scipy.sparse.issparse(self._matrix)
+
+    @property
+    def is_visium_hd(self):
+        """Return True if this is a Visium HD matrix."""
+        if VISIUM_HD_REGEX.match(self._cells[0]):
+            return True
+        else:
+            return False
 
     @property
     def tcells(self):
@@ -183,40 +251,39 @@ class ExpressionMatrix:
             [x.decode() for x in self.features], dtype=str)
 
     @property
-    def matrix(self):
-        """Expression matrix array."""
-        if self._matrix is not None:
-            return self._matrix
-        elif self._fh is not None:
-            matrix = self._fh['matrix'].astype(self._dtype)[()]
-            if self._cache:
-                self._matrix = matrix
-            return matrix
-        else:
-            raise RuntimeError("Matrix not initialized.")
-
-    @property
     def mean_expression(self):
         """The mean expression of features per cell."""
-        return self.matrix.mean(axis=0)
+        if self.sparse:
+            sums = np.asarray(self.matrix.sum(axis=0)).flatten()
+            mean = sums / self.matrix.shape[0]
+        else:
+            mean = self.matrix.mean(axis=0)
+        return mean
 
     @property
     def median_counts(self):
         """Median counts per cell."""
-        return np.median(self.matrix.sum(axis=0))
+        if self.sparse:
+            counts = np.asarray(self.matrix.sum(axis=0)).flatten()
+        else:
+            counts = self.matrix.sum(axis=0)
+        return np.median(counts)
 
     @property
     def median_features_per_cell(self):
         """Median features per cell."""
-        return np.median(np.count_nonzero(self.matrix, axis=0))
+        if self.sparse:
+            nonzero = np.diff(self.matrix.tocsc().indptr)
+        else:
+            nonzero = np.count_nonzero(self.matrix, axis=0)
+        return np.median(nonzero)
 
     def normalize(self, norm_count):
         """Normalize total cell weight to fixed cell count."""
-        # cell_count / cell_total = X / <norm_count>
-        total_per_cell = np.sum(self.matrix, axis=0, dtype=float)
+        total_per_cell = np.asarray(self.matrix.sum(axis=0)).flatten()
         scaling = norm_count / total_per_cell
-        if np.issubdtype(self._dtype, float):
-            self._matrix *= scaling
+        if self.sparse:
+            self._matrix = self.matrix.multiply(scaling)
         else:
             self._matrix = np.multiply(self.matrix, scaling, dtype=float)
         return self
@@ -225,8 +292,16 @@ class ExpressionMatrix:
         """Remove cells with few features present."""
         if self.matrix.size == 0:
             raise ValueError("Matrix is zero-sized on entry to `remove_cells`.")
-        n_features = np.count_nonzero(self.matrix, axis=0)
+
+        if self.sparse:
+            n_features = self.matrix.getnnz(axis=0)
+        else:
+            n_features = np.count_nonzero(self.matrix, axis=0)
+
         mask = n_features >= threshold
+        if np.count_nonzero(mask) == 0:
+            raise ValueError(
+                "All cells would be removed, try altering filter thresholds.")
         self._remove_elements(cell_mask=mask)
         return self
 
@@ -234,8 +309,16 @@ class ExpressionMatrix:
         """Remove features that are present in few cells."""
         if self.matrix.size == 0:
             raise ValueError("Matrix is zero-sized on entry to `remove_features`.")
-        n_cells = np.count_nonzero(self.matrix, axis=1)
+
+        if self.sparse:
+            n_cells = self.matrix.getnnz(axis=1)
+        else:
+            n_cells = np.count_nonzero(self.matrix, axis=1)
+
         mask = n_cells >= threshold
+        if np.count_nonzero(mask) == 0:
+            raise ValueError(
+                "All features would be removed, try altering filter thresholds.")
         self._remove_elements(feat_mask=mask)
         return self
 
@@ -249,12 +332,16 @@ class ExpressionMatrix:
         if self.matrix.size == 0:
             raise ValueError(
                 "Matrix is zero-sized on entry to `remove_cells_and_features`.")
-        n_features = np.count_nonzero(self.matrix, axis=0)
+
+        if self.sparse:
+            n_features = self.matrix.getnnz(axis=0)
+            n_cells = self.matrix.getnnz(axis=1)
+        else:
+            n_features = np.count_nonzero(self.matrix, axis=0)
+            n_cells = np.count_nonzero(self.matrix, axis=1)
+
         cell_mask = n_features >= cell_thresh
-
-        n_cells = np.count_nonzero(self.matrix, axis=1)
         feat_mask = n_cells >= feature_thresh
-
         self._remove_elements(feat_mask=feat_mask, cell_mask=cell_mask)
 
         return self
@@ -262,13 +349,16 @@ class ExpressionMatrix:
     def remove_skewed_cells(self, threshold, prefixes, fname=None, label=None):
         """Remove cells with overabundance of feature class."""
         if self.matrix.size == 0:
-            raise ValueError("Matrix is zero-sized on entry to `remove_skewed_cells`.")
+            raise ValueError(
+                "Matrix is zero-sized on entry to `remove_skewed_cells`.")
         sel = self.find_features(prefixes)
         sel_total = self.matrix[sel].sum(axis=0, dtype=float)
         total = self.matrix.sum(axis=0, dtype=float)
         sel_total /= total
         mask = sel_total <= threshold
         if fname is not None:
+            # providing prefixes is a small list, this won't be too much data
+            self.logger.info("Writing skewed cell percentages to %s", fname)
             self.write_matrix(
                 fname, 100 * sel_total, self.tcells, [label], index_name="CB")
         self._remove_elements(cell_mask=mask)
@@ -293,44 +383,74 @@ class ExpressionMatrix:
 
     def log_transform(self):
         """Transform expression matrix to log scale."""
-        np.log1p(self.matrix, out=self.matrix)
-        self._matrix /= np.log(10)
+        m = self._matrix.data if self.sparse else self._matrix
+        np.log1p(m, out=m)
+        m /= np.log(10)
         return self
 
     @staticmethod
     def write_matrix(fname, matrix, index, col_names, index_name="feature"):
-        """Write a matrix (or vector) to TSV.
+        """Write a matrix (or vector) to TSV."""
+        # Ensure matrix is dense! This might be bad
+        if scipy.sparse.issparse(matrix):
+            matrix = matrix.toarray()
+        matrix = np.atleast_2d(matrix)
 
-        :param fname: filename.
-        :param matrix: matrix to write.
-        :param index: index column.
-        :param col_names: names for matrix columns.
-        :param index_name: name for index column.
-        """
-        # ok, this is kinda horrible, but its fast
-        # I don't think this is actually zero-copy because data is
-        # C-contiguous not F-contiguous.
+        # transpose if the shape doesn't match expected dimensions
+        if matrix.shape[0] != len(index):
+            if matrix.shape[1] == len(index) and matrix.shape[0] == len(col_names):
+                matrix = matrix.T
+            else:
+                raise ValueError(
+                    f"Shape of matrix {matrix.shape} is incompatible with "
+                    f"index (len {len(index)}) and columns (len {len(col_names)})."
+                )
         df = pd.DataFrame(matrix, copy=False, columns=col_names, index=index)
         df.index.rename(index_name, inplace=True)
         df = pl.from_pandas(df, include_index=True)
         df.write_csv(fname, separator="\t")
+        del df
+        gc.collect()
 
     def __add__(self, other):
         """Add a second matrix to this matrix."""
-        cols = self._s_features[
+        # note: we don't check that the cells and features match,
+        #       the other matrix must have a subset of self for this to be safe.
+        #       This method is intended only to be used in the aggregate_hdfs
+        #       method which first computes the full set of features and cells.
+        feature_rows = self._s_features[
             np.searchsorted(self.features, other.features, sorter=self._s_features)]
-        rows = self._s_cells[
+        cell_cols = self._s_cells[
             np.searchsorted(self.cells, other.cells, sorter=self._s_cells)]
-        self.matrix[
-            np.repeat(cols, len(rows)),
-            np.tile(rows, len(cols))] += other.matrix.flatten()
+
+        if self.sparse:
+            # convert other.matrix to COO if not already
+            sub = other.matrix.tocoo()
+
+            # remap row and col indices to self index space
+            global_row = feature_rows[sub.row]
+            global_col = cell_cols[sub.col]
+            update = scipy.sparse.coo_matrix(
+                (sub.data, (global_row, global_col)),
+                shape=self.matrix.shape)
+
+            self._matrix = self.matrix + update
+        else:
+            self.matrix[
+                np.repeat(feature_rows, len(cell_cols)),
+                np.tile(cell_cols, len(feature_rows))] += other.matrix.flatten()
+
+        return self
 
     def _remove_elements(self, feat_mask=None, cell_mask=None):
         """Remove matrix elements using masks and inplace copies."""
+        if self.sparse:
+            return self._remove_elements_sparse(feat_mask, cell_mask)
+
         # shuffle the rows (columns) we want to the front, then take a view.
         # Don't bother doing anything if the mask is everything
         if feat_mask is not None:
-            sum_mask = sum(feat_mask)
+            sum_mask = np.count_nonzero(feat_mask)
             if sum_mask == 0:
                 raise ValueError(
                     "All features would be removed, try altering filter thresholds.")
@@ -342,7 +462,7 @@ class ExpressionMatrix:
                 self._s_features = np.argsort(self._features)
 
         if cell_mask is not None:
-            sum_mask = sum(cell_mask)
+            sum_mask = np.count_nonzero(cell_mask)
             if sum_mask == 0:
                 raise ValueError(
                     "All cells would be removed, try altering filter thresholds.")
@@ -354,3 +474,139 @@ class ExpressionMatrix:
                 self._s_cells = np.argsort(self._cells)
 
         return self._matrix
+
+    def _remove_elements_sparse(self, feat_mask=None, cell_mask=None):
+        """Sparse-safe version of _remove_elements."""
+        if feat_mask is not None:
+            feat_mask = np.asarray(feat_mask).ravel()
+            if feat_mask.ndim != 1 or feat_mask.shape[0] != len(self.features):
+                raise ValueError("Invalid feature mask shape.")
+            if not feat_mask.any():
+                raise ValueError(
+                    "All features would be removed, try altering filter thresholds.")
+
+        if cell_mask is not None:
+            cell_mask = np.asarray(cell_mask).ravel()
+            if cell_mask.ndim != 1 or cell_mask.shape[0] != len(self.cells):
+                raise ValueError("Invalid cell mask shape.")
+            if not cell_mask.any():
+                raise ValueError(
+                    "All cells would be removed, try altering filter thresholds.")
+
+        if feat_mask is not None and \
+                np.count_nonzero(feat_mask) != len(self.features):
+            self._matrix = self._matrix[feat_mask, :]
+            self._features = self._features[feat_mask]
+            self._s_features = np.argsort(self._features)
+
+        if cell_mask is not None and \
+                np.count_nonzero(cell_mask) != len(self.cells):
+            self._matrix = self._matrix[:, cell_mask]
+            self._cells = self._cells[cell_mask]
+            self._s_cells = np.argsort(self._cells)
+
+        return self._matrix
+
+    def bin_cells_by_coordinates(self, bin_size=4, inplace=False):
+        """Aggregate expression data across spatial bins."""
+        if not self.is_visium_hd:
+            raise ValueError(
+                "This method is only applicable to Visium HD matrices with "
+                "coordinates in the cell names.")
+        self.logger.info("Binning cells by coordinates with bin size %d.", bin_size)
+        self.logger.info(f"Cell barcodes look like: '{self._cells[0]}'.")
+
+        pattern = re.compile(rb".*_(\d+)_(\d+)-1")
+        match = pattern.match(self._cells[0])
+        if not match:
+            raise ValueError(f"Unexpected cell format: {self._cells[0]}")
+
+        # extract coordinates, assume format at this point as we already
+        # have checked one with regex
+        coords = np.array([
+            (int(cell[8:13]), int(cell[14:19]))
+            for cell in self._cells
+        ])
+        binned_coords = coords // bin_size
+
+        # group cell indices by (bx, by)
+        bin_to_cells = defaultdict(list)
+        for cell_idx, (bx, by) in enumerate(binned_coords):
+            bin_to_cells[(bx, by)].append(cell_idx)
+
+        # sort bin keys and assign column indices, this means the output
+        # 'cell' list will always be a row major (in space)
+        sorted_bins = sorted(bin_to_cells.keys())
+        new_cell_names = [f"bin_{bx}_{by}".encode() for (bx, by) in sorted_bins]
+        bin_key_to_column = {bin_key: i for i, bin_key in enumerate(sorted_bins)}
+
+        # construct new matrix as COO. This is the fastest way to
+        # aggregate the data. Where's the sum? Turns out that one of the
+        # features of COO is that duplicate (row, col) pairs are summed
+        # lazily when the matrix is operated on
+        self.logger.info("Aggregating expression data across bins.")
+
+        if self.sparse:
+            # TODO: this may not be necessary, it was done because a previous
+            #       implementation was slicing a lot along columns (e.g. selecting
+            #       ranges of cells)
+            self.logger.info("Converting to CSC")
+            self._matrix = self.matrix.tocsc()
+            self.logger.info("Matrix converted to CSC format.")
+
+            row, col, data = [], [], []
+            for bin_key, cell_indices in bin_to_cells.items():
+                col_idx = bin_key_to_column[bin_key]
+                for cell_idx in cell_indices:
+                    start, end = (
+                        self.matrix.indptr[cell_idx], self.matrix.indptr[cell_idx + 1])
+                    rows = self.matrix.indices[start:end]
+                    vals = self.matrix.data[start:end]
+                    row.extend(rows)
+                    col.extend([col_idx] * len(rows))
+                    data.extend(vals)
+
+            # pull together information into a sparse matrix
+            binned_matrix = scipy.sparse.coo_matrix(
+                (data, (row, col)),
+                shape=(self.matrix.shape[0], len(sorted_bins))
+            ).tocsr()
+        else:
+            # dense matrix, we can just sum the values
+            binned_matrix = np.zeros(
+                (self.matrix.shape[0], len(sorted_bins)), dtype=self._dtype)
+            for bin_key, cell_indices in bin_to_cells.items():
+                col_idx = bin_key_to_column[bin_key]
+                binned_matrix[:, col_idx] = self.matrix[
+                    :, cell_indices].sum(axis=1, dtype=self._dtype)
+
+        self.logger.info("Finished binning cells by coordinates.")
+        self.logger.info(
+            f"Shape converted from {self._matrix.shape} to {binned_matrix.shape}")
+
+        # just check these, because sparse matrices drive me crazy
+        if binned_matrix.shape[0] != len(self.features):
+            raise ValueError(
+                f"Row mismatch: {binned_matrix.shape[0]} vs {len(self.features)}")
+        if binned_matrix.shape[1] != len(new_cell_names):
+            raise ValueError(
+                f"Column mismatch: {binned_matrix.shape[1]} vs {len(new_cell_names)}")
+
+        rtn = None
+        if inplace:
+            rtn = self
+            self._matrix = binned_matrix
+            self._cells = np.array(new_cell_names, dtype=bytes)
+            # we've defined this to be true
+            self._s_cells = np.arange(len(self._cells), dtype=int)
+            # features remains the same
+            self._fh = None
+        else:
+            rtn = ExpressionMatrix(
+                matrix=binned_matrix,
+                features=self.features,
+                cells=np.array(new_cell_names, dtype=bytes),
+                sparse=scipy.sparse.issparse(binned_matrix),
+                dtype=self._dtype
+            )
+        return rtn

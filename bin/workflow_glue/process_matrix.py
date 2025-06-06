@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, TruncatedSVD
 import umap
 
 from .expression_matrix import ExpressionMatrix  # noqa: ABS101
@@ -80,6 +80,11 @@ def argparser():
         "--pcn", type=int, default=100,
         help="Number of principal components to generate prior to UMAP")
     grp.add_argument(
+        "--max_umap_cells", type=int, default=30000,
+        help="Maximum number of cells/spots to use for UMAP. "
+             "If the matrix has more cells, a random subset is used."
+             "After this all cells are projected into the UMAP space.")
+    grp.add_argument(
         "--dimensions", type=int, default=2,
         help="Number of dimensions in UMAP embedding")
     grp.add_argument(
@@ -109,6 +114,11 @@ def main(args):
             This may indicate an issue with data quality or volume.
             Incorrectly specified 10x kits/versions and reference data can also lead to
             to removal of all data at this point.""")
+
+    if matrix.is_visium_hd:
+        logger.info(
+            "Converting Visium HD matrix to 8um binning.")
+        matrix.bin_cells_by_coordinates(bin_size=4, inplace=True)
 
     # Generate statistics from the assembled matrix before any filtering.
     stats = {}
@@ -154,24 +164,45 @@ def main(args):
         matrix.mean_expression, matrix.tcells, ['mean_expression'], index_name='CB')
 
     if args.enable_umap:
+        logger.info(f"Performing PCA on matrix of shape: {matrix.matrix.shape}")
+        pcn = min(args.pcn, *matrix._matrix.shape)
+        if matrix.sparse:
+            logger.info("Using TruncatedSVD for PCA.")
+            model = TruncatedSVD(n_components=pcn)
+        else:
+            logger.info("Matrix is dense, using PCA for PCA.")
+            model = PCA(n_components=pcn, copy=False)
+
         # note, we're going to do things in place so ExpressionMatrix will
         # become modified (trimmed on feature axis, and transposed)
         mat = matrix._matrix
-        pcn = min(args.pcn, *mat.shape)
-        matrix._features = np.array([f"pca_{i}" for i in range(pcn)])
-        logger.info(f"Performing PCA on matrix of shape: {matrix.matrix.shape}")
-        model = PCA(n_components=pcn, copy=False)
-        mat = model.fit_transform(mat.transpose())  # warning!
+        mat = model.fit_transform(mat.transpose())
+
         logger.info(f"PCA output matrix has shape: {mat.shape}")
+        # as we've done PCS in place, we should update the features
+        matrix._features = np.array([f"pca_{i}" for i in range(pcn)])
+        matrix._s_features = np.arange(pcn)
 
         for replicate in range(args.replicates):
             logger.info(f"Performing UMAP replicate {replicate + 1}.")
+            if mat.shape[0] > args.max_umap_cells:  # cells is now first dim ;)
+                logger.warning(
+                    f"Downsampling to {args.max_umap_cells} cells/spots for UMAP. ")
+                rng = np.random.default_rng(seed=replicate)
+                subset_indices = rng.choice(
+                    mat.shape[0], size=args.max_umap_cells, replace=False)
+                fit_data = mat[subset_indices, :]
+            else:
+                fit_data = mat
+
             mapper = umap.UMAP(
                 n_neighbors=args.n_neighbors,
                 min_dist=args.min_dist,
-                n_components=args.dimensions,
-                verbose=0)
-            embedding = mapper.fit_transform(mat)
+                n_components=args.dimensions)
+            logger.info("Fitting UMAP model.")
+            mapper.fit(fit_data)
+            logger.info("Transforming matrix to UMAP embedding.")
+            embedding = mapper.transform(mat)
             logger.info(f"UMAP Embedding has shape: {embedding.shape}")
 
             # would be nice to avoid a copy here, but the array is fairly small
