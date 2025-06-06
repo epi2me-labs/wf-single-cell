@@ -8,13 +8,13 @@ import h5py
 import numpy as np
 import pandas as pd
 import pytest
+import scipy.sparse
 from workflow_glue.expression_matrix import ExpressionMatrix
 from workflow_glue.process_matrix import main
 
 
-@pytest.fixture(params=[False], ids=["dense"])
+@pytest.fixture(params=[False, True], ids=["dense", "sparse"])
 def matrix_mode(request):
-    # This is a stub, backported from the other branch
     """Fixture to provide matrix mode (dense or sparse)."""
     return request.param
 
@@ -220,8 +220,10 @@ def test_aggregate_hdfs(matrix_mode):
         (hdf1.name, hdf2.name, hdf3.name), sparse=matrix_mode)
     mat = em.matrix.toarray() if matrix_mode else em.matrix
 
-    np.testing.assert_array_equal(em.tcells, np.array(['cell1', 'cell2', 'cell3']))
-    np.testing.assert_array_equal(em.tfeatures, np.array(['f1', 'f2']))
+    np.testing.assert_array_equal(
+        em.tcells, np.array(['cell1', 'cell2', 'cell3']))
+    np.testing.assert_array_equal(
+        em.tfeatures, np.array(['f1', 'f2']))
     np.testing.assert_array_equal(
         mat,  np.array([[5, 2, 2], [5, 4, 1]])
     )
@@ -351,7 +353,8 @@ def test_feature_sort(matrix_mode):
 
     em.remove_features(threshold=2)
     assert np.array_equal(em._s_cells, [1, 0])
-    assert np.array_equal(em._s_features, [0])  # f1 is removed, but f2 renumbered
+    # f1 is removed, but f2 renumbered
+    assert np.array_equal(em._s_features, [0])
 
 
 def test_cell_sort(matrix_mode):
@@ -413,3 +416,108 @@ def test_main(tags_df):
             args.per_cell_mito, sep='\t', index_col=None)
         assert "CB" in mito_results_df.columns
         assert "mito_pct" in mito_results_df.columns
+
+
+def test_bin_cells_by_coordinates_wrong_cell_names(matrix_mode):
+    """Test function raises error on wrong cell names."""
+    features = np.array([b"gene1", b"gene2"])
+    coords = [(x, y) for x in range(2) for y in range(2)]
+    cell_names = [f"b_{x}_{y}".encode() for (x, y) in coords]
+    matrix_data = np.array([
+        [1, 2, 3, 4],   # gene1
+        [5, 6, 7, 8]    # gene2
+    ])
+
+    if matrix_mode:
+        matrix_data = scipy.sparse.csr_matrix(matrix_data)
+    em = ExpressionMatrix(
+        matrix=matrix_data, features=features, cells=cell_names, sparse=matrix_mode)
+
+    with pytest.raises(ValueError):
+        em.bin_cells_by_coordinates(bin_size=3)
+
+
+def test_bin_cells_by_coordinates_simple(matrix_mode):
+    """Test binning cells by coordinates with a simple example."""
+    features = np.array([b"gene1", b"gene2"])
+    coords = [(x, y) for x in range(2) for y in range(2)]
+    cell_names = [f"s_002um_{x:05d}_{y:05d}-1".encode() for (x, y) in coords]
+    matrix_data = np.array([
+        [1, 2, 3, 4],   # gene1
+        [5, 6, 7, 8]    # gene2
+    ])
+
+    if matrix_mode:
+        matrix_data = scipy.sparse.csr_matrix(matrix_data)
+    em = ExpressionMatrix(
+        matrix=matrix_data, features=features, cells=cell_names, sparse=matrix_mode)
+
+    # bin size 2 means all four cells fall into a single bin: (0,0)
+    binned = em.bin_cells_by_coordinates(bin_size=2)
+    assert binned.matrix.shape == (2, 1)  # 2 genes, 1 bin
+    assert binned.sparse == matrix_mode, "Should preserve sparse mode"
+    np.testing.assert_array_equal(binned.cells, [b"bin_0_0"])
+    expected = matrix_data.sum(axis=1).reshape(2, 1)  # sum all cells
+    if matrix_mode:
+        binned._matrix = binned.matrix.toarray()
+    np.testing.assert_array_equal(binned.matrix, expected)
+
+
+standard_order = list(range(16))  # simple case, no shuffling
+permuted_order = [
+    5, 2, 14, 0,
+    7, 3, 13, 1,
+    10, 6, 15, 4,
+    11, 8, 9, 12
+]
+
+
+@pytest.fixture(
+    params=[standard_order, permuted_order], ids=["standard", "permuted"])
+def permution_order(request):
+    """Fixture to provide matrix mode (dense or sparse)."""
+    return request.param
+
+
+def test_bin_cells_by_coordinates_complex(permution_order, matrix_mode):
+    """Test binning cells by coordinates with a complex example."""
+    # Construct a 4x4 grid of coordinates
+    coords = [(x, y) for x in range(4) for y in range(4)]
+    cell_names = [f"s_002um_{x:05d}_{y:05d}-1".encode() for (x, y) in coords]
+
+    shuffled_cells = np.array(cell_names)[permution_order]
+
+    # lets create a grid where we expect each resultant to be a sum of
+    # 4 original cells with the new cell id. We row-major cell coordinates
+    # in the cells name vector, it looks like:
+    feature0 = np.array([
+        1, 1, 2, 2,
+        1, 1, 2, 2,
+        3, 3, 4, 4,
+        3, 3, 4, 4])[permution_order]  # row major, permuted (maybe)
+    matrix = np.array([feature0, feature0 * 10])  # second feature is scaled
+    if matrix_mode:
+        matrix = scipy.sparse.csr_matrix(matrix)
+
+    em = ExpressionMatrix(
+        matrix=matrix,
+        features=np.array([b'f1', b'f2']),
+        cells=shuffled_cells,
+        sparse=matrix_mode
+    )
+    binned = em.bin_cells_by_coordinates(bin_size=2)
+
+    assert binned.matrix.shape == (2, 4), "Should have 2 features, 4 binned cells"
+    assert len(binned.cells) == 4, "Should produce exactly 4 meta-cell bins"
+    assert binned.sparse == matrix_mode, "Should preserve sparse mode"
+
+    # the expected matrix is not a function of the permution order,
+    # since the binning implicitely reorders the cells by coordinates
+    # to always give us back the same
+    exp_mat = np.array([
+        [4, 8, 12, 16],
+        [40, 80, 120, 160]
+    ])
+    if matrix_mode:
+        binned._matrix = binned.matrix.toarray()
+    np.testing.assert_array_equal(binned.matrix, exp_mat)
