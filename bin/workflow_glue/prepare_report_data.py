@@ -1,7 +1,6 @@
 """Prepare data for the report."""
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 from scipy.io import mmread
 
@@ -20,9 +19,6 @@ def argparser():
     parser.add_argument(
         "sample_id",
         help="ID of the sample being processed")
-    parser.add_argument(
-        "adapter_stats", type=Path,
-        help="Workflow summary statistics")
     parser.add_argument(
         "bam_stats", type=Path,
         help="Alignment summary statistics")
@@ -50,6 +46,9 @@ def argparser():
     parser.add_argument(
         "n_input_seqs", type=int,
         help="Number of seqs input to the workflow after read quality filtering.")
+    parser.add_argument(
+        "adapter_stats", type=Path,
+        help="Workflow summary statistics")
     return parser
 
 
@@ -116,7 +115,7 @@ def get_genes_of_interest_expression(mex_dir, genes):
     """Get a subset of the expression data.
 
     Given a list of genes, extract corresponding expression data from the MEX format
-    matrix.
+    matrix, write TSV of X,Y, <genes ...>.  skipping zero values
     """
     genes_to_plot = pd.read_csv(genes, header=None)[0]
     matrix = mmread(mex_dir / 'matrix.mtx.gz')
@@ -124,18 +123,25 @@ def get_genes_of_interest_expression(mex_dir, genes):
     # Remove '-1' suffix from barcodes
     barcodes = barcodes[0].str.split('-', expand=True)[0]
     features = pd.read_csv(mex_dir / 'features.tsv.gz', sep='\t', header=None)[1]
-    rows = []
+    sparse_gene_data = []
     for gene in genes_to_plot:
         try:
             feature_idx = features[features == gene].index[0]
-            rows.append(
-                [gene, np.array(matrix.getrow(feature_idx).todense()).flatten()])
+            mask = matrix.row == feature_idx
+            # Extract matching entries
+            col_indices = matrix.col[mask]
+            barcodes_for_gene = barcodes[col_indices].values
+
+            values = matrix.data[mask]
+            single_gene = [
+                (gene, bc, val) for bc, val in zip(barcodes_for_gene, values)]
+            sparse_gene_data.extend(single_gene)
         except IndexError:
             continue  # no data
-    if len(rows) > 0:
+    if len(sparse_gene_data) > 0:
         return (
             pd.DataFrame.from_records(
-                [i[1] for i in rows], index=[j[0] for j in rows], columns=barcodes)
+                sparse_gene_data, columns=['gene', 'barcode', 'count'])
         )
     else:
         return pd.DataFrame()
@@ -147,6 +153,7 @@ def main(args):
     logger.info('Preparing report data.')
     stats = dict()
     stats.update(combine_expression_stats(args.expression_stats))
+    # temp. We need to get adapter stats from the original script
     stats.update(combine_adapter_stats(args.adapter_stats))
     stats.update(get_total_cells(args.white_list))
     # n seqs after any read quality filtering
@@ -173,6 +180,8 @@ def main(args):
     aln_stats = combine_bam_stats(args.bam_stats, args.sample_id)
     aln_stats.to_csv(args.bam_stats_out, sep='\t', index=False)
 
+    # If we are given adapter_stats, then this is visium_hd data
+    logger.info("Gtetting genes of interest expression data.")
     goi_df = get_genes_of_interest_expression(
         args.raw_gene_expression, args.genes_of_interest)
     goi_df.to_csv(

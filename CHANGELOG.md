@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v3.3.0]
+### Added
+- Support for 10x visium HD v1. For details on how to preprocess this data, see https://git.oxfordnanolabs.local/epi2melabs/percula.
+
+### Changed
+- `process_matrix` process to be more memory efficient.
+- `assign_features` process is now more time-efficient. 
+
 ## [v3.2.0]
 ### Added 
 - Fusion gene detection is now supported using ctat-LR-fusion (with option `call_fusions`). See the workflow pipeline overview for more information. 

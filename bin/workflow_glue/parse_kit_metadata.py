@@ -30,6 +30,11 @@ def argparser():
         type=Path,
         required=True
     )
+    parent_parser.add_argument(
+        "--spaceranger_bam",
+        help="premade demultiplex tags CSV",
+        default=None
+    )
 
     subparsers = parser.add_subparsers(help='commands', dest="cmd")
 
@@ -59,6 +64,11 @@ def argparser():
         help="Number of expected cells",
         required=True
     )
+    parser_cli.add_argument(
+        "--adapter_configs",
+        help="premade demultiplex tags CSV",
+        default=None
+    )
 
     return parser
 
@@ -78,14 +88,23 @@ def main(args):
         # No per-sample single-cell sample sheet given by user, so we will use the
         # individual CLI parameters to build a CSV and apply the same parameters to
         # each sample
-        entries = [
-            [sid.strip(), args.kit, args.expected_cells]
-            for sid in sample_ids
-        ]
+        if args.spaceranger_bam:
+            sc_sample_sheet_header.extend(['spaceranger_bam', 'adapter_configs'])
+        entries = []
+        for sid in sample_ids:
+            entry = [sid.strip(), args.kit, args.expected_cells]
+            if args.spaceranger_bam:
+                entry.extend([args.spaceranger_bam, args.adapter_configs])
+            entries.append(entry)
         user_df = pd.DataFrame.from_records(
             entries, columns=sc_sample_sheet_header
         )
+
     elif args.cmd == 'from_sheet':
+        if args.spaceranger_bam:
+            raise NotImplementedError("""
+                --single_cell_sample_sheet is not currently compatible
+                with --spaceranger_bam""")
         user_df = pd.read_csv(args.user_config)
 
         # Validate sample sheet header

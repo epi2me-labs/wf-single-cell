@@ -1,34 +1,4 @@
-process call_paftools {
-    label "singlecell"
-    memory "2 GB"
-    cpus 1
-    input:
-        path "ref_genes.gtf"
-    output:
-        path "ref_genes.bed", emit: ref_genes_bed
-    """
-    paftools.js gff2bed -j ref_genes.gtf > ref_genes.bed
-    """
-}
-
-
-process build_minimap_index {
-    /*
-    Build minimap index from reference genome
-    */
-    label "singlecell"
-    cpus params.threads
-    memory '16 GB'
-    input:
-        path "reference.fa"
-    output:
-        path "genome_index.mmi", emit: index
-    script:
-    """
-    minimap2 -t ${task.cpus} -I 16G -d "genome_index.mmi" "reference.fa"
-    """
-}
-
+include { call_paftools; build_minimap_index} from '../modules/local/common'
 
 process call_adapter_scan {
     label "singlecell"
@@ -117,17 +87,23 @@ process call_adapter_scan {
 }
 
 
-process summarize_adapter_table {
-    label "singlecell"
-    publishDir "${params.out_dir}/${meta.alias}", mode: 'copy'
-    cpus 1
-    memory "1 GB"
+process merge_bams {
+    // Combine all BAMs derived from the initial chunking into per sample files
+    label "wf_common"
+    cpus params.threads
+    memory "8 GB"
     input:
-        tuple val(meta), path("inputs/summary*.json")
+        tuple val(meta),
+            path('bams/*aln.bam'),
+            path('bams/*aln.bam.bai')
     output:
-        tuple val(meta), path("${meta.alias}.config_stats.json"), emit: config_stats
+        tuple val(meta),
+              path("merged.sorted.bam"),
+              path("merged.sorted.bam.bai"),
+              emit: merged_bam
+    script:
     """
-    workflow-glue summarise_adapters inputs "${meta.alias}.config_stats.json"
+    samtools merge -@ ${task.cpus -1} --write-index -o "merged.sorted.bam##idx##merged.sorted.bam.bai" bams/*.bam
     """
 }
 
@@ -138,28 +114,24 @@ workflow preprocess {
         read_chunks
         bc_longlist_dir
         ref_genome_fasta
-        ref_genome_idx
         ref_genes_gtf
     main:
         // alignment pre-requisites
-        call_paftools(ref_genes_gtf)
-        build_minimap_index(ref_genome_fasta)
+        index_mmi = build_minimap_index(ref_genome_fasta)
+        ref_genes_bed = call_paftools(ref_genes_gtf)
+
 
         // find adapters, trim barcodes, and align
         call_adapter_scan(
             read_chunks,
             bc_longlist_dir,
             build_minimap_index.out.index,
-            call_paftools.out.ref_genes_bed)
-
-        // TODO: we don't necessarily need to merge these, they
-        //       could just be given to the final reporting
-        //       without pre-aggregating
-        summarize_adapter_table(
-           call_adapter_scan.out.adapter_summary.groupTuple())
+            ref_genes_bed)
+        
+        merged_bam = merge_bams(call_adapter_scan.out.bam_sort.groupTuple())
 
     emit:
-        bam_sort = call_adapter_scan.out.bam_sort
+        merged_bam = merged_bam
         bam_stats = call_adapter_scan.out.bam_stats
         read_tags = call_adapter_scan.out.read_tags
         high_qual_bc_counts = call_adapter_scan.out.barcode_counts

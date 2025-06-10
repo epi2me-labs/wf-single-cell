@@ -301,3 +301,6 @@ In order to have some confidence in the observed results, it can be useful to ru
 The number of repeated projections can be set with `umap_n_repeats` (default 3)
 
 
+### 13 Visium HD support
+Visium HD support is supported. ONT reads must first be processed by space ranger. 
+Please see the instructions at https://epi2me.nanoporetech.com/epi2me-docs/tools/percula/. 
