@@ -9,6 +9,9 @@ include { preprocess } from './subworkflows/preprocess'
 include { process_bams } from './subworkflows/process_bams'
 include { longshot as snv } from './subworkflows/snv'
 include { ctat_lr_fusion as fusions; get_ctat_data} from './subworkflows/fusions'
+include { correct_10x_barcodes } from './subworkflows/barcode_correction'
+include { assign_features_with_stringtie } from './subworkflows/assign_features'
+include { spaceranger} from './subworkflows/process_spaceranger'
 include { getParams } from './lib/common'
 
 OPTIONAL_FILE = file("$projectDir/data/OPTIONAL_FILE")
@@ -60,6 +63,7 @@ process get_10x_data {
 process makeReport {
     label "wf_common"
     cpus 1
+    cache false
     memory "31 GB"
     publishDir "${params.out_dir}", mode: 'copy', pattern: "wf-single-cell-report.html"
     input:
@@ -75,14 +79,15 @@ process makeReport {
         path 'knee_plot_counts.tsv'
         path 'bam_stats.tsv'
         path 'fusion_results_dir/*'
-        path visium_coords
+        path visium_non_hd_coords
 
     output:
         path "wf-single-cell-*.html"
     script:
         String report_name = "wf-single-cell-report.html"
         String metadata = new JsonBuilder(metadata).toPrettyString()
-        String visium_opt = visium_coords.fileName.name != OPTIONAL_FILE.name ? '--visium_spatial_coords ' + visium_coords : ""
+        String visium_opt = visium_non_hd_coords.fileName.name != OPTIONAL_FILE.name ? '--visium_spatial_coords ' + visium_non_hd_coords : ""
+        String visium_hd_opt =  params.spaceranger_bam ? '--visium_hd' : ""
         String q_filtered = params.min_read_qual ? "--q_filtered": ""
         String fusion_opt = params.call_fusions ? "--fusion_results_dir fusion_results_dir" : ""
     """
@@ -103,7 +108,8 @@ process makeReport {
         --knee_plot_counts knee_plot_counts.tsv \
         $fusion_opt \
         $q_filtered \
-        $visium_opt
+        $visium_opt \
+        $visium_hd_opt
     """
 }
 
@@ -111,6 +117,7 @@ process makeReport {
 process parse_kit_metadata {
     label "singlecell"
     cpus 1
+    cache false
     memory "1 GB"
     input:
         path 'sample_ids'
@@ -129,7 +136,7 @@ process parse_kit_metadata {
         """
     }else{
         // A visium barcode is a tissue coordinate not a cell, so we don't need expected cells.
-        if (params.kit.split(':')[0] != "visium" & params.expected_cells == null ){
+        if (!params.kit.startsWith("visium") & params.expected_cells == null ){
             throw new Exception("expected_cells should be provided for 10x kits other than Visium")
         }
         """
@@ -137,6 +144,8 @@ process parse_kit_metadata {
             --kit_config kit_config.csv \
             --kit "$params.kit" \
             --expected_cells $params.expected_cells \
+            --spaceranger_bam $params.spaceranger_bam \
+            --adapter_configs $params.adapter_configs \
             --sample_ids $sample_ids \
             --output merged.csv
         """
@@ -147,7 +156,8 @@ process parse_kit_metadata {
 process prepare_report_data {
     label "singlecell"
     cpus 1
-    memory "1 GB"
+   // cache false
+    memory "16 GB"
     input:
         tuple val(meta),
               path('adapter_stats/stats*.json'),
@@ -178,9 +188,10 @@ process prepare_report_data {
     mkdir \$expression_dir
     echo \$expression_dir
     workflow-glue prepare_report_data \
-        "${meta.alias}" adapter_stats bamstats expression_stats \
+        "${meta.alias}" bamstats expression_stats \
         white_list.txt survival.tsv bam_stats.tsv raw_gene_expression \
-        matrix_stats.tsv genes_of_interest.tsv ${meta.n_seqs}
+        matrix_stats.tsv genes_of_interest.tsv ${meta.n_seqs} \
+        adapter_stats 
 
     if [ "$opt_umap" = "true" ]; then
         echo "Adding umap data to sample directory"
@@ -218,32 +229,54 @@ workflow pipeline {
                 "please use --profile standard (Docker) " +
                 "or --profile singularity.")
         }
-
         software_versions = getVersions()
         workflow_params = getParams()
 
         bc_longlist_dir = file("${projectDir}/data", checkIfExists: true)
         if (params.kit == 'visium:v1'){
-            visium_coords = file("${bc_longlist_dir}/visium-v1_coordinates.txt", checkIfExists: true)
+            visium_non_hd_coords = file("${bc_longlist_dir}/visium-v1_coordinates.txt", checkIfExists: true)
         }
         else {
-             visium_coords = OPTIONAL_FILE
+             visium_non_hd_coords = OPTIONAL_FILE
         }
 
-        preprocess(
-            chunks.map{meta, fastq, stats -> [meta, fastq]},
-            bc_longlist_dir,
-            ref_genome_fasta,
-            ref_genome_idx,
-            ref_genes_gtf)
+        if (!params.spaceranger_bam) {
+            preprocess(
+                chunks.map{meta, fastq, _stats -> [meta, fastq]},
+                bc_longlist_dir,
+                ref_genome_fasta,
+                ref_genes_gtf)
+            correct_10x_barcodes(
+                preprocess.out.read_tags,
+                preprocess.out.high_qual_bc_counts.groupTuple())
+            merged_bam = preprocess.out.merged_bam
+            chr_tags = correct_10x_barcodes.out.chr_tags
+        } else {
+            // If --spaceranger_bam, we alread have a BAM spatial barcode and UMI
+            // tags. Currently deealing with single sample. 
+            // THIS WILL CAUSE ENEXPECTED RESULTS if multiple samples are provided
+            spaceranger(
+                chunks.map{meta, fastq, _stats -> [meta, fastq]},
+                ref_genome_fasta,
+                ref_genes_gtf)
+            chr_tags = spaceranger.out.chr_tags
+            merged_bam = spaceranger.out.merged_bam
+        }
 
-        process_bams(
-            preprocess.out.bam_sort,
-            preprocess.out.read_tags,
-            preprocess.out.high_qual_bc_counts.groupTuple(),
+        assign_features_with_stringtie(
+            merged_bam,
+            chr_tags,
             ref_genes_gtf,
             ref_genome_fasta,
-            ref_genome_idx)
+            ref_genome_idx,
+        )
+
+        process_bams(
+            merged_bam,
+            assign_features_with_stringtie.out.feaure_assignmnets,
+            assign_features_with_stringtie.out.annotation,
+            chr_tags,
+            assign_features_with_stringtie.out.read_to_transcript_map)
 
         if (params.call_variants) {
             snv(
@@ -253,7 +286,7 @@ workflow pipeline {
             top_snvs = snv.out.top_snvs
         }
         else {
-            top_snvs = process_bams.out.tagged_bam.map {meta, bam, bai -> [meta, OPTIONAL_FILE] }
+            top_snvs = process_bams.out.tagged_bam.map {meta, _bam, _bai -> [meta, OPTIONAL_FILE] }
         }
 
         if (params.call_fusions) {
@@ -262,17 +295,17 @@ workflow pipeline {
                 ctat_resource_dir)
             
             fusion_summary = fusions.out.fusion_summary
-                .map {meta, fusion_summary -> fusion_summary}
+                .map {_meta, fusion_summary -> fusion_summary}
                 .flatten()
                 .collectFile(keepHeader:true, name: 'fusion_summary.tsv')
             
             fusion_read_summary = fusions.out.read_summary
-                .map {meta, read_summary -> read_summary}
+                .map {_meta, read_summary -> read_summary}
                 .flatten()
                 .collectFile(keepHeader:true, name: 'fusion_per_read_info.tsv')
             
             fusion_cell_summary = fusions.out.cell_summary
-                .map {meta, cell_summary -> cell_summary}
+                .map {_meta, cell_summary -> cell_summary}
                 .flatten()
                 .collectFile(keepHeader:true, name: 'fusion_per_sample_summary.tsv')
             
@@ -283,29 +316,46 @@ workflow pipeline {
             fusion_data = OPTIONAL_FILE
             log.info("Skipping ctat fusion calling")
         }
-       
 
-       prepare_report_data(
-            preprocess.out.adapter_summary.groupTuple()
-            .join(process_bams.out.expression_stats
-                .groupTuple()
-                .map{meta, chrs, stats -> [meta, stats]})
-            .join(process_bams.out.white_list)
+        if (!params.spaceranger_bam) {
+            adapter_summary = preprocess.out.adapter_summary.groupTuple() // groupTuple?
+            bam_stats = preprocess.out.bam_stats.groupTuple()
+            whitelist = correct_10x_barcodes.out.white_list
+            hq_barcode_counts = correct_10x_barcodes.out.hq_bc_counts
+            visium_hd_spatial = OPTIONAL_FILE
+        } else {
+            adapter_summary = spaceranger.out.adapter_summary.groupTuple()
+            bam_stats = spaceranger.out.bam_stats.groupTuple()
+            whitelist = spaceranger.out.barcode_list
+            // Note: for visium HD, these are all the barcodes called by spaceranger
+            hq_barcode_counts = spaceranger.out.barcode_counts
+            visium_hd_spatial = process_bams.out.visium_hd       
+        }
+
+        expression_stats = process_bams.out.expression_stats
+            .groupTuple()
+            .map{meta, _chrs, stats -> [meta, stats]}
+
+        prepare_report_data(
+            adapter_summary
+            .join(expression_stats)
+            .join(whitelist)
             .join(process_bams.out.raw_gene_expression)
             .join(process_bams.out.gene_mean_expression)
             .join(process_bams.out.transcript_mean_expression)
             .join(process_bams.out.mitochondrial_expression)
             .join(process_bams.out.matrix_stats)
             .join(process_bams.out.umap_matrices)
-            .join(preprocess.out.bam_stats.groupTuple())
+            .join(bam_stats)
             .join(top_snvs),
             genes_of_interest)
+
 
 
         // Get the metadata and stats for the report
         chunks
             .groupTuple()
-            .multiMap{ meta, chunk, stats ->
+            .multiMap{ meta, _chunk, stats->
                 meta: meta
                 stats: stats[0]
             }.set { for_report }
@@ -325,11 +375,11 @@ workflow pipeline {
             genes_of_interest,
             workflow.manifest.version,
             process_bams.out.saturation_curves,
-            process_bams.out.hq_bc_counts,
+            hq_barcode_counts,
             prepare_report_data.out.bam_stats
                 .collectFile(keepHeader:true),
             fusion_data,
-            visium_coords)
+            visium_non_hd_coords)
 }
 
 
@@ -407,8 +457,8 @@ workflow {
                 "fastcat_extra_args": fastcat_extra_args.join(" ")])
     } else {
         samples = xam_ingress([
-                "input":params.bam,
-                "sample":params.sample,
+                "input": params.bam ? params.bam : params.spaceranger_bam,
+                "sample": params.sample,
                 "sample_sheet":params.sample_sheet,
                 "fastq_chunk": params.fastq_chunk,
                 "keep_unaligned": true,

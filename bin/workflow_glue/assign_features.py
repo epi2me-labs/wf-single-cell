@@ -3,6 +3,7 @@ from pathlib import Path as Path
 import re
 
 import pandas as pd
+import polars as pl
 from pysam import AlignmentFile
 
 from .util import get_named_logger, wf_parser  # noqa: ABS101
@@ -137,7 +138,7 @@ def main(args):
 
     logger.info("Loading mapping quality from genomic alignment.")
     df_genomic_mapq = pd.read_csv(
-        args.tags, sep='\t', index_col=0, usecols=['read_id', 'mapq'])
+        args.tags, sep='\t', index_col='read_id', usecols=['read_id', 'mapq'])
     df_genomic_mapq.rename(columns={'mapq': 'genome_mapq'}, inplace=True)
 
     # Load gffcompare output that maps query transcript to reference transcript
@@ -153,8 +154,9 @@ def main(args):
         columns=['gene', 'transcript']).to_csv(
         args.output, sep='\t', header=True)
 
-    logger.info("Processing BAM.")
+    logger.info(f"Processing BAM with chunks size {args.chunksize}.")
     total_alignments = 0
+
     for df in parse_bam(args.transcriptome_bam, args.chunksize):
         total_alignments += len(df)
 
@@ -182,8 +184,18 @@ def main(args):
         # https://ccb.jhu.edu/software/stringtie/gffcompare.shtml
         df_tr.loc[df_tr['class_code'].isin(['i', 'y', 'p', 's']), 'transcript'] = '-'
 
-        df_tr = df_tr.merge(
-            df_genomic_mapq, how='right', left_on='read_id', right_on='read_id')
+        # ----> PD inner mergevs right goes from ~ 100k reads/s -> 1160k reads/s
+        # --> inner join about 50% fater - this does not affect the results
+        #  Reads must have a trascript assignemnt and a genomic mapq score
+
+        pl_tr = pl.from_pandas(df_tr)
+        # reset_index to make 'read_id' a column
+        pl_mapq = pl.from_pandas(df_genomic_mapq.reset_index())
+        # Perform the join using Polars
+        pl_merged = pl_tr.join(pl_mapq, on='read_id', how='inner')
+
+        # Convert back to pandas
+        df_tr = pl_merged.to_pandas()
 
         multimaped_idxs = df_tr.read_id.duplicated(keep=False)
         df_multimap = df_tr.loc[multimaped_idxs]
@@ -260,5 +272,6 @@ def main(args):
         df_assigned.set_index('read_id', drop=True, inplace=True)
         df_assigned = df_assigned.fillna('-')[['gene', 'transcript']]
         df_assigned.to_csv(args.output, mode='a', sep='\t', header=False)
+
         logger.info(f"Processed {total_alignments} alignments.")
     logger.info("Finished.")

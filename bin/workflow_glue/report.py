@@ -29,46 +29,67 @@ REPORT_TITLE = f'{WORKFLOW_NAME} report'
 Colors = util.Colors
 
 
-def visium_spatial_plots(coords_file, sample_dirs):
+def visium_spatial_plots(non_hd_coords, sample_dirs, hd=False):
     """
     Plot visium spatial expression.
 
     :param coords_file: path to 10x barcode coordinate file
     :param sample_dirs: per-sample directories containing gene expression data.
     """
-    # Read barcode coordinates
-    xy_df = pd.read_csv(
-        coords_file,
-        delimiter="\t",
-        names=["barcode", "X", "Y"]
-    ).set_index("barcode")
-
     raw(
         """These plots display the raw, UMI deduplicated, expression levels of the
         genes listed in the <i>genes_of_interest</i> file.
         Each point represents a spot on the 10x Visium expression slide.""")
     tabs = Tabs()
 
+    # Add visium message
+
     for d in sample_dirs:
         sample_id = d.replace('_expression', '')
         sample_dir = Path(d)
+
         goi_file = sample_dir / 'raw_goi_expression.tsv'
 
-        goi_df = pd.read_csv(goi_file, sep='\t', index_col=0)
-        goi_df = goi_df.sort_index()
+        try:
+            goi_df = pd.read_csv(
+                goi_file, sep='\t',
+                index_col=None, usecols=['gene', 'barcode', 'count'])
+        except (pd.errors.EmptyDataError, ValueError):
+            goi_df = None
+        if goi_df is None or goi_df.empty:
+            raw("No data available for the selected genes of interest")
+            return
+        goi_df = goi_df.sort_index()  # Not needed
+
+        if hd:  # Merge xy for non-HD
+            # Get a mapping of barcodes to X and Y coordinates form the barcodes
+            goi_df[['X', 'Y']] = (
+                goi_df['barcode'].str.extract(r'(\d*)_(\d*)$').astype(int)
+            )
+        else:
+            # Merge the pre-defined coordinates with the expression data
+            xy_df = pd.read_csv(
+                non_hd_coords,
+                delimiter="\t",
+                names=["barcode", "X", "Y"]
+            ).set_index("barcode")
+
+            goi_df = goi_df.merge(
+                xy_df, left_on='barcode', right_index=True, how='left')
 
         no_data = goi_df.loc[~goi_df.any(axis=1)]
         goi_df = goi_df.loc[goi_df.any(axis=1)]
 
+        genes = goi_df['gene'].unique()
+
         with tabs.add_dropdown_menu(sample_id, change_header=False):
-            for i in range(0, len(goi_df), 2):
-                df_subset = goi_df.iloc[i: i+2]
-                genes = "; ".join(df_subset.index.tolist())
+            for gene_pairs in [genes[i:i+2] for i in range(0, len(genes), 2)]:
+                genes = "; ".join(gene_pairs)
 
                 with tabs.add_dropdown_tab(genes):
                     with Grid(columns=2):
-                        for gene_name, gene_data in df_subset.iterrows():
-                            df = xy_df.copy().assign(gene=gene_data)
+                        for gene_name in gene_pairs:
+                            df = goi_df.query('gene == @gene_name')
                             plt = BokehPlot(toolbar_location='right')
 
                             mpl_cmap = (
@@ -83,16 +104,15 @@ def visium_spatial_plots(coords_file, sample_dirs):
                                         '#960000'
                                     ])
                             )
-                            # Set zeros to NAN as these can be individually set a color
-                            df.replace(0, np.nan, inplace=True)
                             pallete = [
                                 matplotlib.colors.rgb2hex(mpl_cmap(c))
                                 for c in range(mpl_cmap.N)]
                             cmap = linear_cmap(
-                                field_name='gene',
+                                field_name='count',
                                 palette=pallete,
                                 low=0,
-                                high=np.nanmax(gene_data), nan_color=(50, 50, 50, 0.1))
+                                high=np.nanmax(
+                                    df['count']), nan_color=(50, 50, 50, 0.1))
                             plt._fig.scatter(
                                 x='X', y='Y', source=df, fill_color=cmap,
                                 line_alpha=0.0, radius=1.0)
@@ -120,21 +140,24 @@ def umap_plots(umaps_dirs, genes_file):
         plt.add_dataset(dict(
             source=data.values))
 
-        plt.visualMap = [
-            {
-                'show': True,
-                'text': [str(round(max(data[hue]), 2)), str(round(min(data[hue]), 2))],
-                'left': 'right',
-                'type': "continuous",
-                'min': min(data[hue]),
-                'max': max(data[hue]),
-                'inRange': {
-                    'color': ['blue', 'green', 'yellow',  'red'],
-                    'opacity': 0.7,
-
-                },
-                'dimension': 2
-            }]
+        try:
+            plt.visualMap = [
+                {
+                    'show': True,
+                    'text': [
+                        str(round(max(data[hue]), 2)), str(round(min(data[hue]), 2))],
+                    'left': 'right',
+                    'type': "continuous",
+                    'min': min(data[hue]),
+                    'max': max(data[hue]),
+                    'inRange': {
+                        'color': ['blue', 'green', 'yellow',  'red'],
+                        'opacity': 0.7,
+                    },
+                    'dimension': 2
+                }]
+        except Exception:
+            raise
         plt.add_series(dict(
             type='scatter',
             datasetIndex=0,
@@ -158,8 +181,12 @@ def umap_plots(umaps_dirs, genes_file):
                 transcript_umap_files = sample_dir.glob(
                     '*transcript_expression_umap*.tsv')
                 goi_file = sample_dir / 'raw_goi_expression.tsv'
-                goi_df = pd.read_csv(goi_file, sep='\t', index_col=0)
-
+                try:
+                    goi_df = pd.read_csv(
+                        goi_file, sep='\t', index_col='barcode',
+                        usecols=['gene', 'barcode', 'count'])
+                except (pd.errors.EmptyDataError, ValueError):
+                    goi_df = None
                 for i, (
                     gene_umap_file, transcript_umap_file
                 ) in enumerate(zip(gene_umap_files, transcript_umap_files)):
@@ -187,30 +214,30 @@ def umap_plots(umaps_dirs, genes_file):
                             mito_expression_file, sep='\t', index_col=0)
 
                         # Make the plots mean gene transcript and mito plots
-                        with Grid(columns=2):
+                        # with Grid(columns=2):
 
-                            gdata = gene_umap.merge(
-                                gene_mean_expression, left_index=True, right_index=True)
-                            _plot(
-                                gdata,
-                                title='Gene UMAP / mean gene expression annotation',
-                                hue='mean_expression')
+                        gdata = gene_umap.merge(
+                            gene_mean_expression, left_index=True, right_index=True)
+                        _plot(
+                            gdata,
+                            title='Gene UMAP / mean gene expression annotation',
+                            hue='mean_expression')
 
-                            tdata = transcript_umap.merge(
-                                transcript_mean_expression, left_index=True,
-                                right_index=True)
-                            _plot(
-                                tdata,
-                                title='Transcript UMAP / '
-                                      'mean transcript expression annotation',
-                                hue='mean_expression')
+                        tdata = transcript_umap.merge(
+                            transcript_mean_expression, left_index=True,
+                            right_index=True)
+                        _plot(
+                            tdata,
+                            title='Transcript UMAP / '
+                                  'mean transcript expression annotation',
+                            hue='mean_expression')
 
-                            mdata = gene_umap.merge(
-                                mito_expression, left_index=True, right_index=True)
-                            _plot(
-                                mdata,
-                                title='Gene UMAP / mean mito. expression '
-                                      'annotation', hue='mito_pct')
+                        mdata = gene_umap.merge(
+                            mito_expression, left_index=True, right_index=True)
+                        _plot(
+                            mdata,
+                            title='Gene UMAP / mean mito. expression '
+                                  'annotation', hue='mito_pct')
 
                         # Start another grid to put in genes of interest and
                         # optional SNV plot
@@ -223,20 +250,27 @@ def umap_plots(umaps_dirs, genes_file):
 
                             with goi_tabs.add_dropdown_menu(
                                     'Genes of interest', change_header=True):
-                                for gene in genes:
-                                    with goi_tabs.add_dropdown_tab(gene):
-                                        if gene in goi_df.index:
-                                            goi_data = gene_umap.merge(
-                                                goi_df.loc[gene],
-                                                left_index=True, right_index=True)
-                                            _plot(
-                                                goi_data,
-                                                title=f'Gene UMAP / single gene '
-                                                f'expression, annotation: {gene}',
-                                                hue=gene)
-                                        else:
-                                            with div():
-                                                p(f"No data for {gene}")
+                                if goi_df is None:
+                                    raw("No genes of interest data available")
+                                else:
+                                    for gene in genes:
+                                        with goi_tabs.add_dropdown_tab(gene):
+                                            gene_df = goi_df.query('gene == @gene')
+                                            if not gene_df.empty:
+                                                goi_data = gene_umap.merge(
+                                                    gene_df,
+                                                    left_index=True, right_index=True)
+                                                # raise ValueError(goi_data)
+                                                if goi_data.empty:
+                                                    continue
+                                                _plot(
+                                                    goi_data,
+                                                    title=f'Gene UMAP / single gene '
+                                                    f'expression, annotation: {gene}',
+                                                    hue='count')
+                                            else:
+                                                with div():
+                                                    p(f"No data for {gene}")
 
                             # If there's a dataframe of top SNVs, create a further UMAP
                             # figure in the grid with a drop-down of SNVs for overlay
@@ -314,7 +348,7 @@ def saturation_plots(saturation_data):
 
 # once https://nanoporetech.atlassian.net/browse/CW-5808 is released,
 # We can add sortable=False and use_header=False to the DataTables in this section
-def experiment_summary_section(report, wf_df, aln_df, cell_counts_df):
+def experiment_summary_section(report, wf_df, aln_df, cell_counts_df, is_visium):
     """Three columns experiment summary section."""
     div_style = "padding: 20px;background-color: rgb(245, 245, 245)"
     with report.add_section('Summary', 'Summary'):
@@ -425,20 +459,30 @@ def experiment_summary_section(report, wf_df, aln_df, cell_counts_df):
                                 )
                         with div(style=div_style):
                             # Text for rank plot
-                            raw("""
-                                Cells are ranked by read count
-                                in descending order on the x-axis, and the read count
-                                for each barcode is displayed on the y-axis. Only high
-                                quality barcodes are used to generate the rank plot
-                                (min qscore 15 and 100% match to the 10x whitelist)
-                                <br><br>
+                            if is_visium:
+                                raw("""Cells are ranked by read count
+                                    in descending order on the x-axis, and the read
+                                    count for each barcode is displayed on the y-axis.
+                                    Unlike with singele cell data, no filtering of the
+                                    barcodes is applied.
+                                    <br><br>""")
+                            else:
+                                raw("""
+                                    Cells are ranked by read count
+                                    in descending order on the x-axis, and the read
+                                    count for each barcode is displayed on the y-axis.
+                                    Only high quality barcodes are used to generate the
+                                    rank plot
+                                    (min qscore 15 and 100% match to the 10x whitelist)
+                                    <br><br>
 
-                                The dashed line indicates the read count threshold that
-                                was determined by the workflow. Barcodes to the left of
-                                this point are considered "real cells", and those to
-                                the right are considered as non-cell barcodes and are
-                                not included in the downstream analysis."""
-                                )
+                                    The dashed line indicates the read count threshold
+                                    that was determined by the workflow. Barcodes to
+                                    the left of this point are considered "real cells",
+                                    and those to the right are considered as
+                                    non-cell barcodes and are not included in the
+                                    downstream analysis."""
+                                    )
                         with div(style=div_style):
                             # Text for alignment summary
                             with ul():
@@ -581,6 +625,8 @@ def main(args):
     logger = get_named_logger("Report")
     logger.info('Building report')
 
+    is_visium = args.visium_spatial_coords or args.visium_hd
+
     report = LabsReport(
         'Workflow Single Cell report', 'wf-single-cell',
         args.params, args.versions, args.wf_version,
@@ -604,7 +650,13 @@ def main(args):
     df_counts = pd.read_csv(
         args.knee_plot_counts, sep='\t',
         usecols=['barcode', 'count', 'sample'], index_col='barcode')
-    experiment_summary_section(report, wf_df, df_aln, df_counts)
+
+    # Subsample barcode counts if there are too many barcodes,
+    max_counts = 10000
+    if len(df_counts) > max_counts:
+        df_counts = df_counts[::len(df_counts) // max_counts]
+
+    experiment_summary_section(report, wf_df, df_aln, df_counts, is_visium)
 
     logger.info('Report writing finished')
 
@@ -650,10 +702,11 @@ def main(args):
                         data = data.drop(columns=['pct_of_input_reads', 'sample_id'])
                         data = data.set_index('Workflow stage', drop=True)
                         data['count'] = data['count'].apply(lambda x: f"{int(x):,}")
-                        data['pct_of_fl_reads'] =\
-                            data['pct_of_fl_reads'].apply(lambda x: f"{x:.2f}")
+                        data['pct_of_fl_reads'] = data[
+                            'pct_of_fl_reads'].apply(lambda x: f"{float(x):.2f}%")
+                        data = data.rename(columns={
+                            'pct_of_fl_reads': r"% full length reads"})
                         data = data.transpose()
-                        data.index = ['Reads', '% of_FL']
                         data.index.name = " "
                         data = data[order]
 
@@ -762,28 +815,32 @@ def main(args):
 
         saturation_plots(args.saturation_curves)
 
-    with report.add_section('UMAP projections', 'UMAP'):
-        p(
-            """This section presents various UMAP projections
-            of the data.
-            UMAP is an unsupervised algorithm that projects the
-            multidimensional single cell expression data into 2
-            dimensions. This could reveal structure in the data representing
-            different cell types or cells that share common regulatory
-            pathways, for example.
+    # A UMAP plot of x barcodes takes up x MB in the report. Skip this for now
+    # UMAPs make less sense for spatial data than for single cell data anyway
+    if not args.visium_hd:
+        with report.add_section('UMAP projections', 'UMAP'):
+            p(
+                """This section presents various UMAP projections
+                of the data.
+                UMAP is an unsupervised algorithm that projects the
+                multidimensional single cell expression data into 2
+                dimensions. This could reveal structure in the data representing
+                different cell types or cells that share common regulatory
+                pathways, for example.
 
-            The UMAP algorithm is stochastic; analysing the same data
-            multiple times with UMAP, using identical parameters, can lead to
-            visually different projections.
-            In order to have some confidence in the observed results,
-            it can be useful to run the projection multiple times and so a series of
-            UMAP projections can be viewed below.""")
-        umap_plots(args.expr_dirs, args.umap_genes)
+                The UMAP algorithm is stochastic; analysing the same data
+                multiple times with UMAP, using identical parameters, can lead to
+                visually different projections.
+                In order to have some confidence in the observed results,
+                it can be useful to run the projection multiple times and so a series of
+                UMAP projections can be viewed below.""")
+            umap_plots(args.expr_dirs, args.umap_genes)
 
     # Check if visium data were analysed
-    if args.visium_spatial_coords:
+    if args.visium_spatial_coords or args.visium_hd:
         with report.add_section('Visium spatial plots', 'Visium'):
-            visium_spatial_plots(args.visium_spatial_coords, args.expr_dirs)
+            visium_spatial_plots(
+                args.visium_spatial_coords, args.expr_dirs, args.visium_hd)
 
     report.write(args.report)
     logger.info('Report writing finished')
@@ -819,7 +876,10 @@ def argparser():
         help="version of the executed workflow")
     parser.add_argument(
         "--visium_spatial_coords", default=False, type=Path,
-        help='')
+        help='Non-HD barcode to coordinate map file.')
+    parser.add_argument(
+        "--visium_hd", action='store_true',
+        help='Visium HD coorrdinate to gene expression file.')
     parser.add_argument(
         "--q_filtered", action='store_true',
         help="True if the input reads were subject to min read quality filtering.")
