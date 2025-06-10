@@ -126,7 +126,9 @@ process combine_final_tag_files {
 process umi_gene_saturation {
     label "singlecell"
     cpus 4
-    memory "64 GB"
+    memory {32.GB * task.attempt}
+    maxRetries 1
+    errorStrategy { task.exitStatus in 137..140 ? 'retry' : 'terminate' }
     input:
         tuple val(meta),
               path("read_tags.tsv")
@@ -165,7 +167,10 @@ process pack_images {
 process tag_bam {
     label "singlecell"
     cpus 4
-    memory "64 GB"
+    memory {32.GB * task.attempt}
+    maxRetries 1
+    errorStrategy { task.exitStatus in 137..140 ? 'retry' : 'terminate' }
+
     publishDir "${params.out_dir}/${meta.alias}", mode: 'copy'
     input:
         tuple val(meta),

@@ -63,7 +63,6 @@ process get_10x_data {
 process makeReport {
     label "wf_common"
     cpus 1
-    cache false
     memory "31 GB"
     publishDir "${params.out_dir}", mode: 'copy', pattern: "wf-single-cell-report.html"
     input:
@@ -117,7 +116,6 @@ process makeReport {
 process parse_kit_metadata {
     label "singlecell"
     cpus 1
-    cache false
     memory "1 GB"
     input:
         path 'sample_ids'
@@ -156,8 +154,7 @@ process parse_kit_metadata {
 process prepare_report_data {
     label "singlecell"
     cpus 1
-   // cache false
-    memory "16 GB"
+    memory "8 GB"
     input:
         tuple val(meta),
               path('adapter_stats/stats*.json'),
@@ -191,7 +188,7 @@ process prepare_report_data {
         "${meta.alias}" bamstats expression_stats \
         white_list.txt survival.tsv bam_stats.tsv raw_gene_expression \
         matrix_stats.tsv genes_of_interest.tsv ${meta.n_seqs} \
-        adapter_stats 
+        adapter_stats
 
     if [ "$opt_umap" = "true" ]; then
         echo "Adding umap data to sample directory"
@@ -253,7 +250,7 @@ workflow pipeline {
             chr_tags = correct_10x_barcodes.out.chr_tags
         } else {
             // If --spaceranger_bam, we alread have a BAM spatial barcode and UMI
-            // tags. Currently deealing with single sample. 
+            // tags. Currently deealing with single sample.
             // THIS WILL CAUSE ENEXPECTED RESULTS if multiple samples are provided
             spaceranger(
                 chunks.map{meta, fastq, _stats -> [meta, fastq]},
@@ -329,7 +326,7 @@ workflow pipeline {
             whitelist = spaceranger.out.barcode_list
             // Note: for visium HD, these are all the barcodes called by spaceranger
             hq_barcode_counts = spaceranger.out.barcode_counts
-            visium_hd_spatial = process_bams.out.visium_hd       
+            visium_hd_spatial = process_bams.out.visium_hd
         }
 
         expression_stats = process_bams.out.expression_stats
