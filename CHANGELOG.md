@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Added missing join_tags.py script.
 - Fix issue causing incorrect merging of Space Ranger and longer BAM tags.
+- Reads with unexpected UMI lengths were not removed in a consistent manner. This could lead to unexpected behaviour in several edgecases. The read removal is now more systematically handled across the dataset.
 
 ## [v3.3.0]
 ### Added

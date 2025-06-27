@@ -114,7 +114,7 @@ def main(args):
                 f'{sc_sample_sheet_header}')
 
     # Validate kit + version combinations.
-    kit_df = pd.read_csv(args.kit_config)
+    kit_df = pd.read_csv(args.kit_config, keep_default_na=False)
 
     # Check if all supplied kits + version strings are supported
     kit_and_version_diff = set(user_df.kit).difference(kit_df.kit)

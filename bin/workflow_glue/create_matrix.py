@@ -28,6 +28,22 @@ def argparser():
     parser.add_argument(
         "features", type=Path,
         help="TSV read gene/transcript assignments file.")
+    parser.add_argument(
+        "--ref_interval", type=int, default=1000,
+        help="Size of genomic window (bp) to assign as gene name if no gene \
+            assigned.")
+    parser.add_argument(
+        "--chunk_size", type=int, default=200000,
+        help="Approximate size of chunks to read in from the input tags file.")
+    parser.add_argument(
+        "--umi_length", type=int, default=None,
+        help="Expected UMI length. Discard reads with corrected UMIs not of this size. \
+            If None, no UMI length filtering is done.")
+    parser.add_argument(
+        "--skip_umi_clustering", action='store_true',
+        help="Skip UMI clustering and use pre-corrected UMIs \
+             in the UB column of the barcode_tags file.")
+
     grp = parser.add_argument_group("Output")
     grp.add_argument(
         "--tsv_out", type=Path,
@@ -42,16 +58,6 @@ def argparser():
     grp.add_argument(
         "--stats", type=Path,
         help="Output filename for JSON statistics.")
-    parser.add_argument(
-        "--ref_interval", type=int, default=1000,
-        help="Size of genomic window (bp) to assign as gene name if no gene \
-            assigned by featureCounts.")
-    parser.add_argument(
-        "--chunk_size", type=int, default=200000,
-        help="Approximate size of chunks to read in from the input tags file.")
-    parser.add_argument(
-        "--umi_length", type=int,
-        help="Expected UMI length. Discard reads with corrected UMIs not this size.")
 
     return parser
 
@@ -105,7 +111,7 @@ UMIClusterer._get_adj_list_directional = get_adj_list_directional_lev
 UMIClusterer.__call__ = umi_clusterer_call
 
 
-def cluster(umis, expected_umi_length):
+def cluster(umis):
     """Cluster UMIs.
 
     Search for UMI clusters within subsets of reads sharing the same corrected barcode
@@ -117,34 +123,23 @@ def cluster(umis, expected_umi_length):
     https://umi-tools.readthedocs.io/en/latest/the_methods.html
 
     """
-    logger = get_named_logger('CrteMatrix')
-    if len(umis) == 1:  # early return
+    if len(umis) == 1:  # early return; only a single read for this barcode/gene.
         return umis
     clusterer = UMIClusterer(cluster_method="directional")
     umi_counts = collections.Counter(umis)
     clusters = clusterer(umi_counts, threshold=2)
 
-    if len(clusters) == len(umis):  # no corrections
+    if len(clusters) == len(umis):  # no corrections, all clusters are singletons
         return umis
 
-    # create list of corrections
-    umi_map = dict()
-    # Each cluster is a list of UMIs that are assumed to come from the same molecule.
+    # Create list of corrections
     # The first entry of the cluster is the representative/correct UMI.
-    for clust in clusters:
-        # If the corrected UMI is not the expected length,
-        # set all UMIs in the cluster to '-'
-        if len(clust[0]) != expected_umi_length:
-            # Single UMIs are not normally corrected,
-            # but in this case we want to set to '-'
-            if len(clust) == 1:
-                umi_map[clust[0]] = '-'
-                logger.warning
-                (f"UMI {clust[0]} is not the expected length of {expected_umi_length}")
-            clust[0] = '-'
-        if len(clust) > 1:
-            for umi in clust[1:]:
-                umi_map[umi] = clust[0]
+    umi_map = {}
+    for clust in (x for x in clusters if len(x) > 1):
+        correct = clust[0]
+        for umi in clust[1:]:
+            if umi != correct:
+                umi_map[umi] = correct
     if len(umi_map) > 0:  # pd.Series.replace is weird slow
         umis = umis.replace(umi_map)
     return umis
@@ -174,15 +169,16 @@ def cluster_dataframe(df, ref_interval, umi_length):
         df.loc[regions.index, 'gene'] = regions
         df.loc[df.index.isin(regions.index), 'no_gene'] = True
     # Create gene/cell index for subsetting reads prior to clustering.
-    df["gene_cell"] = df["gene"] + ":" + df["CB"]
+    df['gene_cell'] = df['gene'] + ':' + df['CB']
     df['read_id'] = df.index
     df.set_index('gene_cell', inplace=True, drop=True)
     # UB: corrected UMI tag
-    groups = df.groupby("gene_cell")["UR"]
-    df["UB"] = groups.transform(lambda x: cluster(x, expected_umi_length=umi_length))
+    groups = df.groupby('gene_cell')['UR']
+    df['UB'] = groups.transform(lambda x: cluster(x))
     df.set_index('read_id', drop=True, inplace=True)
-    # Remove unassigned UMIs
-    df.drop(df.loc[df.UB == '-'].index, inplace=True, errors='ignore')
+    if umi_length is not None:
+        valid = df['UB'].str.len() == umi_length
+        df.drop(index=df.index[~valid], inplace=True)
     # Reset unassigned genes to '-'
     df.loc[df.no_gene, 'gene'] = '-'
     df.drop(columns='no_gene', inplace=True)
@@ -218,18 +214,21 @@ class ExpressionSummary(StatsSummary):
         super().to_json(fname)
 
 
-def chunk_reader(file_path, chunk_size):
+def chunk_reader(file_path, chunk_size, ub_col=False):
     """
     Read TSV file in chunks, ensuring that no CB (cell barcode) is split between chunks.
 
     :param file_path str: Path to the TSV
     :param chunk_size int: Desired number of rows per chunk (approximate).
+    :param ub_col bool: If True, the 'UB' column is expected to be present.
     :yields: Pandas DataFrame chunk.
     """
+    usecols = ['read_id', 'CR', 'CY', 'UR', 'UY', 'chr', 'start', 'end', 'CB', 'SA']
+    if ub_col:
+        usecols.append('UB')
     reader = pd.read_csv(
         file_path, index_col='read_id', sep="\t", iterator=True,
-        usecols=[
-            'read_id', 'CR', 'CY', 'UR', 'UY', 'chr', 'start', 'end', 'CB', 'SA'])
+        usecols=usecols)
     buffer = []
     last_cb = None
     current_cb = None
@@ -287,8 +286,9 @@ def main(args):
     df_features = pd.read_csv(
         args.features, sep='\t', index_col=0)
 
+    input_has_ub_col = True if args.umi_length is None else False
     for chunk_num, df_tags in enumerate(
-            chunk_reader(args.barcode_tags, args.chunk_size)):
+            chunk_reader(args.barcode_tags, args.chunk_size, ub_col=input_has_ub_col)):
         logger.info(f'processing chunk: {chunk_num}')
 
         df_tags = df_tags.merge(
@@ -302,8 +302,11 @@ def main(args):
             logger.info("Writing JSON stats to {args.stats}")
             stats.pandas_update(df_tags)
 
-        logger.info("Clustering UMIs.")
-        df_tags = cluster_dataframe(df_tags, args.ref_interval, args.umi_length)
+        if args.skip_umi_clustering:
+            logger.info('Skipping UMI clustering.')
+        else:
+            logger.info("Clustering UMIs.")
+            df_tags = cluster_dataframe(df_tags, args.ref_interval, args.umi_length)
 
         df_tags.rename(
             columns={v: k for k, v in BAM_TAGS.items()}, copy=False, inplace=True)
@@ -331,3 +334,4 @@ def main(args):
                 matrix.to_hdf(fname)
     if args.stats:
         stats = stats.to_json(args.stats)
+    logger.info("Clustering complete.")
