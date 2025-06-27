@@ -50,7 +50,6 @@ process process_matrix {
         // mito per cell makes sense only for feature=gene for now.
         tuple val(meta), val(feature), path("${meta.alias}.gene_expression_mito_per_cell.tsv"), emit: mitocell, optional: true
         tuple val(meta), val(feature), path("${meta.alias}.${feature}_expression_umap*.tsv"), emit: umap
-        tuple val(meta), val(feature), path("visium_hd_gene_expression.tsv"), emit: visium_hd, optional: true
     script:
     def mito_prefixes = params.mito_prefix.replaceAll(',', ' ')
     """
@@ -279,8 +278,4 @@ workflow process_bams {
             .collectFile(keepHeader: true)
         // per chromosome expression statistics
         expression_stats = create_matrix.out.stats
-        // Optional visium HD -
-        visium_hd = process_matrix.out.visium_hd
-            .filter{it[1] == "gene"}
-            .map{it->[it[0], it[2]]}
 }

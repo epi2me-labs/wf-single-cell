@@ -15,6 +15,25 @@ process split_gtf_by_chroms {
     """
 }
 
+process get_bam_chrs {
+    label "singlecell"
+    cpus 1
+    memory "4 GB"
+    input:
+        tuple val(meta),
+            path("sr.bam"),
+            path("sr.bam.bai")
+    output:
+        tuple val (meta),
+              path("chr_list.txt")
+    script:
+    """
+    samtools view -H sr.bam | grep '^@SQ' | cut -f2 | sed 's/SN://' \
+        > chr_list.txt    
+    echo '*' >> chr_list.txt
+    """
+}
+
 
 process process_long_reads {
     label "singlecell"
@@ -109,10 +128,10 @@ process parse_sr_bam {
 process aggregate_barcode_counts {
     label "wf_common"
     cpus params.threads
-    memory "64 GB"
+    memory "32 GB"
     input:
         tuple val(meta),
-              path('barcode_counts/*.tsv')
+              path('barcode_counts/bc_counts_*.tsv')
     output:   
         path("agg_barcode_counts.tsv"),
               emit: barcode_counts
@@ -237,8 +256,8 @@ process combine_mapping_and_demux_tags {
     rm m.tsv
 
     workflow-glue join_tags \
-        demux.tsv \
         map.tsv \
+        demux.tsv \
         join_tags.tsv 
     
     csvtk split -j 8 -t --fields chr -o chr_tags join_tags.tsv
@@ -249,7 +268,8 @@ process combine_mapping_and_demux_tags {
 
 workflow spaceranger {
     take:
-        samples
+        long_reads
+        spaceranger_bam
         ref_genome_fa
         ref_genes_gtf
 
@@ -257,32 +277,27 @@ workflow spaceranger {
         ref_genome_mmi = build_minimap_index(ref_genome_fa)
         ref_genome_bed = call_paftools(ref_genes_gtf)
 
+        get_bam_chrs(spaceranger_bam)
+        spaceranger_chrs = get_bam_chrs.out
+            .splitCsv(header:false)
+
         chr_gtfs = split_gtf_by_chroms(ref_genes_gtf)
             .flatten()
             .map {fname -> tuple(fname.baseName, fname)} // [chr, gtf]
-        
-        // Get the shortread BAM form the meta
-        //This should be moved into main workflow
-        sr_bam = samples.groupTuple()
-            .map {meta, _fastqs -> 
-                [meta, 
-                file("${meta.spaceranger_bam}", checkIfExists: true),
-                file("${meta.spaceranger_bam}"+'.bai', checkIfExists: true)]
-            }
 
-        adapter_configs = samples.groupTuple()
-                .map {meta, _fastq -> [ meta, file("${meta.adapter_configs}", checkIfExists: true)]}
+        adapter_stats = long_reads.groupTuple()
+                .map {meta, _fastq -> [ meta, file("${meta.adapter_stats}", checkIfExists: true)]}
         
-        //Chunks
         process_long_reads(
-            samples, ref_genome_mmi, ref_genome_bed)
+            long_reads, ref_genome_mmi, ref_genome_bed)
         
         merged_long_read_bam = merge_bams(process_long_reads.out.bam_sort.groupTuple())
         
-        // Per chr
-        parse_sr_bam(sr_bam.combine(chr_gtfs.map {chr, gtf -> [chr]}))
+        parse_sr_bam(spaceranger_bam
+            .combine(
+                spaceranger_chrs.map { meta, chrs -> [meta, chrs[0]] }, by: 0))
         
-        // Combine BC counts to sample
+        // Combine BC counts by sample
         aggregate_barcode_counts(
             parse_sr_bam.out.barcode_counts.groupTuple())
 
@@ -290,6 +305,7 @@ workflow spaceranger {
         combine_mapping_and_demux_tags(
             parse_sr_bam.out.spaceranger_tags.groupTuple()
             .join(process_long_reads.out.mapping_tags.groupTuple()))
+
         
         chr_tags = combine_mapping_and_demux_tags.out.chr_tags
         .transpose()
@@ -298,9 +314,8 @@ workflow spaceranger {
                 [meta, chr, tags] // [meta, chr, tags.tsv]
             }
 
-
     emit:
-        adapter_summary = adapter_configs
+        adapter_summary = adapter_stats
         chr_tags = chr_tags
         merged_bam = merged_long_read_bam
         bam_stats = process_long_reads.out.bam_stats

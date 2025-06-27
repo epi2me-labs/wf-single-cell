@@ -65,7 +65,7 @@ def argparser():
         required=True
     )
     parser_cli.add_argument(
-        "--adapter_configs",
+        "--adapter_stats",
         help="premade demultiplex tags CSV",
         default=None
     )
@@ -89,12 +89,12 @@ def main(args):
         # individual CLI parameters to build a CSV and apply the same parameters to
         # each sample
         if args.spaceranger_bam:
-            sc_sample_sheet_header.extend(['spaceranger_bam', 'adapter_configs'])
+            sc_sample_sheet_header.extend(['spaceranger_bam', 'adapter_stats'])
         entries = []
         for sid in sample_ids:
             entry = [sid.strip(), args.kit, args.expected_cells]
             if args.spaceranger_bam:
-                entry.extend([args.spaceranger_bam, args.adapter_configs])
+                entry.extend([args.spaceranger_bam, args.adapter_stats])
             entries.append(entry)
         user_df = pd.DataFrame.from_records(
             entries, columns=sc_sample_sheet_header

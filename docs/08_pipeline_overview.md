@@ -302,5 +302,15 @@ The number of repeated projections can be set with `umap_n_repeats` (default 3)
 
 
 ### 13 Visium HD support
-Visium HD support is supported. ONT reads must first be processed by space ranger. 
+Visium HD is supported. ONT reads must first be processed by 10x Genomics Space Ranger. 
 Please see the instructions at https://epi2me.nanoporetech.com/epi2me-docs/tools/percula/. 
+
+ONT long read BAMs are processed by Percula to produce BAM files that are compatible with Space Ranger.
+
+wf-single-cell has the following relevant options:
+
+- `--bam`: the long read BAM output by Percula
+- `--spaceranger_bam`: the demultiplexed tagged BAM output by Space Ranger
+- `--adapter_stats`: the configs.json file output by Percula
+
+Note that the workflow expects a single sample for analysis of Visium HD data.

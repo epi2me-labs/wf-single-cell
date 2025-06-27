@@ -5,6 +5,7 @@ import nextflow.util.BlankSeparatedList;
 nextflow.enable.dsl = 2
 
 include { fastq_ingress; xam_ingress } from './lib/ingress'
+include { xam_ingress as spaceranger_ingress } from './lib/ingress'
 include { preprocess } from './subworkflows/preprocess'
 include { process_bams } from './subworkflows/process_bams'
 include { longshot as snv } from './subworkflows/snv'
@@ -143,7 +144,7 @@ process parse_kit_metadata {
             --kit "$params.kit" \
             --expected_cells $params.expected_cells \
             --spaceranger_bam $params.spaceranger_bam \
-            --adapter_configs $params.adapter_configs \
+            --adapter_stats $params.adapter_stats \
             --sample_ids $sample_ids \
             --output merged.csv
         """
@@ -249,16 +250,40 @@ workflow pipeline {
             merged_bam = preprocess.out.merged_bam
             chr_tags = correct_10x_barcodes.out.chr_tags
         } else {
-            // If --spaceranger_bam, we alread have a BAM spatial barcode and UMI
-            // tags. Currently deealing with single sample.
-            // THIS WILL CAUSE ENEXPECTED RESULTS if multiple samples are provided
+            // If --spaceranger_bam, we already have a BAM spatial barcode and UMI
+            // tags. Currently dealing with single sample.
+            spaceranger_bam = spaceranger_ingress([
+                "input": params.spaceranger_bam,
+                "sample": params.sample,
+                "keep_unaligned": true,
+                "return_fastq": false,
+                "stats": false,
+                "per_read_stats": false])
+
+            spaceranger_bam.count().map { n -> 
+                if ( n > 1 ){
+                    error "Multiple samples found. For spaceranger input," +
+                     "the workflow accepts only a single sample." } }
+            chunks.groupTuple().count().map { n -> 
+                if ( n > 1 ){
+                    error "Multiple samples found. For spaceranger input," +
+                     "the workflow accepts only a single sample." } }
+            
+            // Get the meta from the long read BAM for joining later.
+            // We only have a single sample, so don't need to worry about matching
+            // sample IDs
+            spaceranger_bam = spaceranger_bam.combine(chunks.groupTuple())
+                .map { _meta, bam, bai, _null, meta, _fastq, _stats -> [meta, bam, bai] }
+
             spaceranger(
-                chunks.map{meta, fastq, _stats -> [meta, fastq]},
+                chunks.map{ meta, fastq, _stats -> [meta, fastq] },
+                spaceranger_bam,
                 ref_genome_fasta,
                 ref_genes_gtf)
             chr_tags = spaceranger.out.chr_tags
             merged_bam = spaceranger.out.merged_bam
         }
+
 
         assign_features_with_stringtie(
             merged_bam,
@@ -319,14 +344,12 @@ workflow pipeline {
             bam_stats = preprocess.out.bam_stats.groupTuple()
             whitelist = correct_10x_barcodes.out.white_list
             hq_barcode_counts = correct_10x_barcodes.out.hq_bc_counts
-            visium_hd_spatial = OPTIONAL_FILE
         } else {
             adapter_summary = spaceranger.out.adapter_summary.groupTuple()
             bam_stats = spaceranger.out.bam_stats.groupTuple()
             whitelist = spaceranger.out.barcode_list
             // Note: for visium HD, these are all the barcodes called by spaceranger
             hq_barcode_counts = spaceranger.out.barcode_counts
-            visium_hd_spatial = process_bams.out.visium_hd
         }
 
         expression_stats = process_bams.out.expression_stats
@@ -454,7 +477,7 @@ workflow {
                 "fastcat_extra_args": fastcat_extra_args.join(" ")])
     } else {
         samples = xam_ingress([
-                "input": params.bam ? params.bam : params.spaceranger_bam,
+                "input": params.bam,
                 "sample": params.sample,
                 "sample_sheet":params.sample_sheet,
                 "fastq_chunk": params.fastq_chunk,
@@ -463,7 +486,6 @@ workflow {
                 "stats": true,
                 "per_read_stats": false,
                 "fastcat_extra_args": fastcat_extra_args.join(" ")])
-
     }
 
     if (!params.single_cell_sample_sheet) {
@@ -490,6 +512,7 @@ workflow {
             def new_meta = meta.clone()
             new_meta.remove('group_index')
             [new_meta, chunk, stats]}
+    
 
     pipeline(
         sample_and_kit_meta,

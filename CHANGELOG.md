@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Changed
 - Updated to wf-template v5.6.2 to maintain compliance with our latest wf-template standard.
+- Workflow enforces single sample processing for visium HD data.
+
+### Fixed
+- Added missing join_tags.py script.
+- Fix issue causing incorrect merging of Space Ranger and longer BAM tags.
 
 ## [v3.3.0]
 ### Added
