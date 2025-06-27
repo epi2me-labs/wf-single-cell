@@ -9,14 +9,24 @@ variables:
     # Only common file inputs and option values need to be given here
     # (not things such as -profile)
     CI_FLAVOUR: "new"
-    NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v2.2.0_test_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/test_data.tar.gz -C ${CI_PROJECT_NAME}/data/ "
+    NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v3.3.0_test_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/test_data.tar.gz -C ${CI_PROJECT_NAME}/data/ "
     NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 64GB --threads 4 --fastq ${CI_PROJECT_NAME}/data/test_data/fastq/ --fastq_chunk 2500 --single_cell_sample_sheet ${CI_PROJECT_NAME}/data/test_data/samples.test.csv --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"
 
-docker-run:
-    artifacts:
-        when: always
-        exclude: []
+.artifact_common: &artifact_common
+  artifacts:
+    when: always
+    paths:
+      - ${CI_PROJECT_NAME}
+      - .nextflow.log
+    exclude:
+      - ${CI_PROJECT_NAME}/**/*.bam
+      - ${CI_PROJECT_NAME}/**/*.fa
+      - ${CI_PROJECT_NAME}/**/*.fasta
+      - ${CI_PROJECT_NAME}/data/**/*
 
+
+docker-run:
+    <<: *artifact_common
     parallel:
       matrix:
         - MATRIX_NAME: [
@@ -27,6 +37,7 @@ docker-run:
           "integration-test",
           "bam-input",
           "visium",
+          "visium_hd",
           "SNV",
           "fusion",
           "fusion_cloud_resource",
@@ -57,33 +68,40 @@ docker-run:
             --matrix_min_cells 1
             --matrix_max_mito 100
           NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
+      # Run with fixed cell count, i.e. no cell count estimation.
       - if: $MATRIX_NAME == 'fixed_cell_count'
         variables:
           NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 64GB --threads 4 --wf.merge_threads=4 --fastq ${CI_PROJECT_NAME}/data/test_data/fastq/ --estimate_cell_count=false --fastq_chunk 2500 --single_cell_sample_sheet ${CI_PROJECT_NAME}/data/test_data/samples.test.csv --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"  
           NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
+      # Run without filtering of full-length reads.
       - if: $MATRIX_NAME == 'no_fl_filtering'
         variables:
           NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 64GB --threads 4 --wf.merge_threads=4 --fastq ${CI_PROJECT_NAME}/data/test_data/fastq/ --fastq_chunk 2500 --full_length_only=false --single_cell_sample_sheet ${CI_PROJECT_NAME}/data/test_data/samples.test.csv --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"
           NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
+      # Run integration test. Some basic checks of results is done.
       - if: $MATRIX_NAME == "integration-test"
         variables:
           NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/ci_data.tar.gz https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/ci_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/ci_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
           NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 64GB --threads 4 --wf.merge_threads=4 --fastq ${CI_PROJECT_NAME}/data/ci_data/sample1.fq --fastq_chunk 2500 --ref_genome_dir ${CI_PROJECT_NAME}/data/ci_data/10x_ref_chr21_22 --matrix_min_genes 1 --matrix_min_cells 1 --expected_cells 10 --kit 3prime:v3"
           NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
+      # Run with BAM input.
       - if: $MATRIX_NAME == "bam-input"
         variables:
           NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 64GB --threads 4 --wf.merge_threads=4 --bam ${CI_PROJECT_NAME}/data/test_data/bam/ --fastq_chunk 2500 --single_cell_sample_sheet ${CI_PROJECT_NAME}/data/test_data/samples.test.csv --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"
           NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
+      # Run with visium data (non-HD)
       - if: $MATRIX_NAME == "visium"
         variables:
           NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 64GB --threads 4 --wf.merge_threads=4 --fastq ${CI_PROJECT_NAME}/data/test_data/visium_fastq --fastq_chunk 2500 --kit visium:v1 --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCm39-2024-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100"
           NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
+      # Run with SNV calling.
       - if: $MATRIX_NAME == "SNV" 
         variables:
           NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ && wget -O ${CI_PROJECT_NAME}/data/test_data.tar.gz  https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/v2.5.0_test_data.tar.gz && tar -xzvf ${CI_PROJECT_NAME}/data/test_data.tar.gz -C ${CI_PROJECT_NAME}/data/"
           NF_WORKFLOW_OPTS: "-executor.\\$$local.memory 64GB --threads 4 --wf.merge_threads=2 --fastq ${CI_PROJECT_NAME}/data/test_data/variant_data/colo829_10_cells.fq.gz --call_variants=true --fastq_chunk 2500 --kit 3prime:v4 --ref_genome_dir ${CI_PROJECT_NAME}/data/test_data/refdata-gex-GRCh38-2020-A --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100 --expected_cells 10 --estimate_cell_count=false"
           NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
       - if: $MATRIX_NAME == "fusion"
+      # Fusion calling with local resources.
         variables:
           CTATLIB: ctat_resource_chr20-21_UyHq1cFI
           NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ &&
@@ -110,6 +128,7 @@ docker-run:
               --expected_cells 10
           NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
       - if: $MATRIX_NAME == "fusion_cloud_resource"
+      # Fusion calling with EPI2ME cloud resources.
         variables:
           NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ &&
            wget -O ${CI_PROJECT_NAME}/data/fusion_ci_reads.tar.gz \
@@ -130,6 +149,7 @@ docker-run:
               --expected_cells 10
           NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
       - if: $MATRIX_NAME == "fusion_multisample_with_negative"
+      # Fusion calling including fastq sample with no snv calls.
         variables:
           CTATLIB: ctat_resource_chr20-21_UyHq1cFI
           NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ &&
@@ -155,14 +175,29 @@ docker-run:
               --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100
               --expected_cells 10
           NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
+      - if: $MATRIX_NAME == "visium_hd"
+      # Visium HD workflow. Uses pre-deduplicated BAM from spaceranger.
+        variables:
+          NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ &&
+            wget https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-single-cell/visium_hd_wai5VuBb.tar.gz \
+                -O ${CI_PROJECT_NAME}/data/visium_hd_wai5VuBb.tar.gz &&
+              tar -xzvf ${CI_PROJECT_NAME}/data/visium_hd_wai5VuBb.tar.gz -C ${CI_PROJECT_NAME}/data/"
+          NF_WORKFLOW_OPTS: > 
+            -executor.\$$local.memory 64GB
+            --threads 4 
+            --wf.merge_threads=4 
+            --bam ${CI_PROJECT_NAME}/data/visium_hd_wai5VuBb/long_read_bams
+            --spaceranger_bam ${CI_PROJECT_NAME}/data/visium_hd_wai5VuBb/spaceranger_bams
+            --adapter_stats ${CI_PROJECT_NAME}/data/visium_hd_wai5VuBb/configs.json
+            --kit visium_hd:v1
+            --ref_genome_dir ${CI_PROJECT_NAME}/data/visium_hd_wai5VuBb/refdata-gex-GRCm39-2024-A_chr10
+            --matrix_min_genes 1 --matrix_min_cells 1 --matrix_max_mito 100
+            --genes_of_interest ${CI_PROJECT_NAME}/data/visium_hd_wai5VuBb/goi.tsv
+          NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
 
 aws-run:
     stage: test
-    artifacts:
-        when: always
-        paths:
-            - ${CI_PROJECT_NAME}
-            - .nextflow.log
+    <<: *artifact_common
     variables:
         CWG_AWS_ENV_NAME: "stack"
     parallel:
@@ -178,6 +213,7 @@ aws-run:
         - if: ($CI_COMMIT_BRANCH == null || $CI_COMMIT_BRANCH == "dev-template")
           when: never
         - if: $MATRIX_NAME == "fusion-aws-local-resource"
+        # Fusion calling with local resources in AWS.
           variables:
             CTATLIB: ctat_resource_chr20-21_UyHq1cFI
             NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ &&
@@ -204,6 +240,7 @@ aws-run:
                 --expected_cells 10
             NF_IGNORE_PROCESSES: "get_ctat_data,get_10x_data"
         - if: $MATRIX_NAME == "fusion-aws-cloud-resource"
+        # Fusion calling with EPI2ME cloud resources in AWS.
           variables:
             NF_BEFORE_SCRIPT: "mkdir -p ${CI_PROJECT_NAME}/data/ &&
               wget -O ${CI_PROJECT_NAME}/data/fusion_ci_reads.tar.gz \
@@ -233,6 +270,7 @@ macos-run:
     - x86
 
 integration_test:
+  <<: *artifact_common
   extends: .setup-alpine-nextflow
   dependencies: ["docker-run: [integration-test]"]
   stage: post-test

@@ -48,8 +48,6 @@ def main(args):
         else:
             iterator = bam_in.fetch(until_eof=True)
         for record in iterator:
-            if record.is_unmapped:
-                continue
             tag_values = []
 
             if not record.has_tag('CB'):
