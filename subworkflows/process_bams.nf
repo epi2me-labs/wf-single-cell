@@ -19,6 +19,8 @@ process create_matrix {
         tuple val(meta), val(chr), val("transcript"), path("hdfs/*transcript.hdf"), emit: transcript
         tuple val(meta), val(chr), path("stats.json"), emit: stats
     script:
+    def opt_umi_length = meta['umi_length'] == 'None' ? "" : "--umi_length ${meta['umi_length']}"
+    def opt_umi_clustering = meta['kit_name'] == 'visium_hd' ? "--skip_umi_clustering" : "" 
     """
     mkdir -p hdfs
 
@@ -28,7 +30,8 @@ process create_matrix {
         --sa_tags_out sa_summary.tsv \
         --hdf_out hdfs \
         --stats stats.json \
-        --umi_length ${meta['umi_length']}
+        ${opt_umi_length} \
+        ${opt_umi_clustering}
     """
 }
 
