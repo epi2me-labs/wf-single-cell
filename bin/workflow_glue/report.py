@@ -306,7 +306,7 @@ def umap_plots(umaps_dirs, genes_file):
                                             EZChart(plt, theme='epi2melabs')
 
 
-def saturation_plots(saturation_data):
+def saturation_plots(saturation_data, type_label):
     """Saturation plots."""
     tabs = Tabs()
 
@@ -314,27 +314,30 @@ def saturation_plots(saturation_data):
     with tabs.add_dropdown_menu('sample', change_header=True):
         for sample_id, df in df_sat.groupby('sample'):
             df.rename(columns={
-                'reads_pc': 'Median reads per cell',
-                'genes_pc': 'Genes per cell',
-                'umis_pc': 'UMIs per cell',
+                'reads_pc': f'Median reads per {type_label}',
+                'genes_pc': f'Genes per {type_label}',
+                'umis_pc': f'UMIs per {type_label}',
                 'umi_sat': 'Sequencing saturation'},
                 inplace=True)
             with tabs.add_dropdown_tab(sample_id):
                 with Grid(columns=3):
                     EZChart(
                         ezcharts.lineplot(
-                            data=df, x='Median reads per cell', y='Genes per cell',
+                            data=df, x=f'Median reads per {type_label}',
+                            y=f'Genes per {type_label}',
                             title='Gene saturation', theme='epi2melabs',
                             color='orange', marker=False),
                         height='350px')
                     EZChart(
                         ezcharts.lineplot(
-                            data=df, x='Median reads per cell', y='UMIs per cell',
+                            data=df, x=f'Median reads per {type_label}',
+                            y=f'UMIs per {type_label}',
                             title='UMI saturation', theme='epi2melabs',
                             color='purple', marker=False),
                         height='350px')
                     seq_sat_plt = ezcharts.lineplot(
-                        data=df, x='Median reads per cell', y='Sequencing saturation',
+                        data=df, x=f'Median reads per {type_label}',
+                        y='Sequencing saturation',
                         title='Sequencing saturation', theme='epi2melabs',
                         color='blue', marker=False)
                     seq_sat_plt._fig.y_range.end = 1.0
@@ -348,7 +351,8 @@ def saturation_plots(saturation_data):
 
 # once https://nanoporetech.atlassian.net/browse/CW-5808 is released,
 # We can add sortable=False and use_header=False to the DataTables in this section
-def experiment_summary_section(report, wf_df, aln_df, cell_counts_df, is_visium):
+def experiment_summary_section(
+        report, wf_df, aln_df, cell_counts_df, visium, type_label):
     """Three columns experiment summary section."""
     div_style = "padding: 20px;background-color: rgb(245, 245, 245)"
     with report.add_section('Summary', 'Summary'):
@@ -360,16 +364,18 @@ def experiment_summary_section(report, wf_df, aln_df, cell_counts_df, is_visium)
                         # Column 1 - Experiment summary
                         with div(style=div_style):
                             h6("Experiment summary")
+                            counts_label = f'{type_label.capitalize()}s with data' \
+                                if visium else 'Estimated cells'
                             df_col1 = pd.DataFrame.from_dict(
                                 {
                                     'Input reads': sample_df.loc['reads', 'count'],
-                                    'Estimated cells':
+                                    counts_label:
                                         sample_df.loc['cells', 'count'],
-                                    'Mean reads per cell':
+                                    f'Mean reads per {type_label}':
                                         sample_df.loc['mean_reads_per_cell', 'count'],
-                                    'Median UMI counts per cell':
+                                    f'Median UMI counts per {type_label}':
                                         sample_df.loc['median_umis_per_cell', 'count'],
-                                    'Median genes per cell':
+                                    f'Median genes per {type_label}':
                                         sample_df.loc['median_genes_per_cell', 'count']
                                 }, orient='index')
                             df_col1 = df_col1.apply(
@@ -388,14 +394,15 @@ def experiment_summary_section(report, wf_df, aln_df, cell_counts_df, is_visium)
                             n_cells = int(sample_df.at['cells', 'count'])
                             # Barcodes are ordered by ascending read count
                             # Get the rank of each barcode in descending order
-                            df_col2['Cell barcode rank'] \
+                            df_col2[f'{type_label.capitalize()} barcode rank'] \
                                 = np.arange(0, len(df_col2))[::-1]
                             df_col2.rename(
                                 {'count': 'Read count'}, axis=1, inplace=True)
 
                             rank_plt = ezcharts.lineplot(
                                 data=df_col2,
-                                x='Cell barcode rank', y='Read count',
+                                x=f'{type_label.capitalize()} barcode rank',
+                                y='Read count',
                                 theme='epi2melabs', line_width=0.5, marker=False,
                                 line_color='blue',
                                 bokeh_kwargs={
@@ -439,32 +446,39 @@ def experiment_summary_section(report, wf_df, aln_df, cell_counts_df, is_visium)
                                     "The total number of reads in the input data."
                                 )
                                 li(
-                                    b("Estimated cells: "),
-                                    """The estimated number of real cells identified by
-                                    the workflow."""
+                                    (
+                                        b(f"{type_label.capitalize()}s with data: "),
+                                        f"The number of {type_label}s identified by \
+                                            the workflow."
+                                    ) if visium else (
+                                        b("Estimated cells: "),
+                                        "The estimated number of real cells identified \
+                                            by the workflow."
+                                    )
                                 )
                                 li(
-                                    b("Mean reads per cell: "),
-                                    "The average number of reads per real cell."
+                                    b(f"Mean reads per {type_label}: "),
+                                    f"The average number of reads per \
+                                     {type_label if visium else 'real cell'}."
                                 )
                                 li(
-                                    b("Median UMI counts per cell: "),
-                                    """The median number of unique molecular
-                                    identifiers (UMIs) per real cell."""
+                                    b(f"Median UMI counts per {type_label}: "),
+                                    f"""The median number of unique molecular
+                                    identifiers (UMIs) per {type_label}."""
                                 )
                                 li(
-                                    b("Median genes per cell: "),
-                                    """The median number of unique genes identified per
-                                    real cell."""
+                                    b(f"Median genes per {type_label}: "),
+                                    f"""The median number of unique genes identified per
+                                     {'real cell' if not visium else type_label}."""
                                 )
                         with div(style=div_style):
                             # Text for rank plot
-                            if is_visium:
-                                raw("""Cells are ranked by read count
-                                    in descending order on the x-axis, and the read
-                                    count for each barcode is displayed on the y-axis.
-                                    Unlike with singele cell data, no filtering of the
-                                    barcodes is applied.
+                            if visium:
+                                raw(f"""{type_label.capitalize()}s are ranked by read
+                                    count in descending order on the x-axis, and the
+                                    read count for each barcode is displayed on the
+                                    y-axis. Unlike with single cell data, no filtering
+                                    of the barcodes is applied.
                                     <br><br>""")
                             else:
                                 raw("""
@@ -508,13 +522,18 @@ def experiment_summary_section(report, wf_df, aln_df, cell_counts_df, is_visium)
                                 )
                                 li(
                                     b("Unique genes/isoforms detected: "),
-                                    """The total number of features identified across
-                                    all cells."""
+                                    f"""The total number of features identified across
+                                    all {type_label}s."""
                                 )
 
 
-def fusion_section(report, fusion_results_dir):
+def fusion_section(report, fusion_results_dir, visium=False):
     """Make gene fusion report section."""
+    # Fusion detection is currently done on the final tagged BAM. So for visium HD
+    # data, barcodes will be the original non-binned spatial barcodes.
+
+    type_label = 'spatial barcode' if visium else 'cell'
+
     per_fusion_file = fusion_results_dir / 'fusion_summary.tsv'
     summary_file = fusion_results_dir / 'fusion_per_sample_summary.tsv'
 
@@ -532,8 +551,22 @@ def fusion_section(report, fusion_results_dir):
         pd.read_csv(summary_file, sep='\t', index_col=None)
         .rename(columns=lambda x:  x[0].upper() + x.replace('_', ' ')[1:])
     )
+
     digit_group_cols = ['Cells with fusions', 'Reads', 'Unique fusions']
-    round_cols = ['Mean unique fusions per cell', 'Mean fusion reads per cell']
+
+    # Rename columns to match data type
+    if visium:
+        fusion_sample_df.rename({
+            'Cells with fusions': 'Spatial barcodes with fusions',
+            'Mean unique fusions per cell': 'Mean unique fusions per spatial barcode',
+            'Mean fusion reads per cell': 'Mean fusion reads per spatial barcode'
+        }, inplace=True)
+        digit_group_cols = [
+            'Spatial barcodes with fusions', 'Reads',
+            'Mean unique fusions per spatial barcode']
+
+    round_cols = [
+        f'Mean unique fusions per {type_label}', f'Mean fusion reads per {type_label}']
     fusion_sample_df[digit_group_cols] = \
         fusion_sample_df[digit_group_cols].applymap(lambda x: f'{int(x):,}')
     fusion_sample_df[round_cols] = \
@@ -548,16 +581,16 @@ def fusion_section(report, fusion_results_dir):
 
         with ul():
             li(
-                b("Cells with fusions:"),
-                " Number of valid cells with at least one assigned fusion")
+                b(f"{type_label.capitalize()}s with fusions:"),
+                f" Number of valid {type_label}s with at least one assigned fusion")
             li(b("Unique fusions:"), " Total fusions detected")
             li(b("Reads:"), " The total number of fusion-supporting reads")
             li(
-                b("Mean fusion reads per cell:"),
-                " The mean number of fusion-supporting reads per cell")
+                b(f"Mean fusion reads per {type_label}:"),
+                f" The mean number of fusion-supporting reads per {type_label}")
             li(
-                b("Mean unique fusions per cell:"),
-                " The mean number of unique fusion transcripts per cell")
+                b(f"Mean unique fusions per {type_label}:"),
+                f" The mean number of unique fusion transcripts per {type_label}")
 
         DataTable.from_pandas(
             fusion_sample_df, use_index=False, paging=False, searchable=False)
@@ -606,8 +639,8 @@ def fusion_section(report, fusion_results_dir):
                                             "Breakpoint is not at an annotated junction"
                                         )
                                 li(
-                                    b("Cells: "),
-                                    "Numnber of cells containing this fusion"
+                                    b(f"{type_label}s: "),
+                                    f"Number of {type_label}s containing this fusion"
                                 )
                                 li(
                                     b("UMIs: "),
@@ -625,7 +658,13 @@ def main(args):
     logger = get_named_logger("Report")
     logger.info('Building report')
 
-    is_visium = args.visium_spatial_coords or args.visium_hd
+    if args.visium_hd:
+        type_label = '8 µm bin'
+    elif args.visium_spatial_coords:
+        type_label = 'spot'
+    else:
+        type_label = 'cell'
+    visium = args.visium_spatial_coords or args.visium_hd
 
     report = LabsReport(
         'Workflow Single Cell report', 'wf-single-cell',
@@ -656,7 +695,7 @@ def main(args):
     if len(df_counts) > max_counts:
         df_counts = df_counts[::len(df_counts) // max_counts]
 
-    experiment_summary_section(report, wf_df, df_aln, df_counts, is_visium)
+    experiment_summary_section(report, wf_df, df_aln, df_counts, visium, type_label)
 
     logger.info('Report writing finished')
 
@@ -724,8 +763,9 @@ def main(args):
                                 )
                                 li(
                                     b("Valid barcodes: "),
-                                    """ Proportion of reads that have been assigned
-                                    corrected cell barcodes and UMIs. All reads with
+                                    f""" Proportion of reads that have been assigned
+                                    corrected {'spatial' if visium else 'cell' }
+                                    barcodes and UMIs. All reads with
                                     valid barcodes are used in the subsequent stages
                                     of the workflow."""
                                 )
@@ -804,8 +844,14 @@ def main(args):
         The curve gradient indicates the rate at which new genes or UMIs are being
         recovered; as saturation increases the the curve flattens""")
         with ul():
-            li(b("Gene saturation:"), " Genes per cell as a function of read depth.")
-            li(b("UMI saturation:"), " UMIs per cell as a function of read depth.")
+            li(
+                b("Gene saturation:"),
+                f""" Genes per {type_label}
+                as a function of read depth.""")
+            li(
+                b("UMI saturation:"),
+                f""" UMIs per {type_label}
+                as a function of read depth.""")
             li(
                 b("Sequencing saturation:"),
                 """ This metric is a measure of the proportion of reads that come
@@ -813,17 +859,18 @@ def main(args):
                 following formula: 1 - (number of unique UMIs / number of reads)."""
             )
 
-        saturation_plots(args.saturation_curves)
+        saturation_plots(args.saturation_curves, type_label)
 
     # A UMAP plot of x barcodes takes up x MB in the report. Skip this for now
     # UMAPs make less sense for spatial data than for single cell data anyway
     if not args.visium_hd:
         with report.add_section('UMAP projections', 'UMAP'):
             p(
-                """This section presents various UMAP projections
+                f"""This section presents various UMAP projections
                 of the data.
                 UMAP is an unsupervised algorithm that projects the
-                multidimensional single cell expression data into 2
+                multidimensional {'spatial' if visium else 'single cell'}
+                expression data into two
                 dimensions. This could reveal structure in the data representing
                 different cell types or cells that share common regulatory
                 pathways, for example.
@@ -876,10 +923,10 @@ def argparser():
         help="version of the executed workflow")
     parser.add_argument(
         "--visium_spatial_coords", default=False, type=Path,
-        help='Non-HD barcode to coordinate map file.')
+        help='Non-HD barcode to coordinate map file. For non-HD Visium data.')
     parser.add_argument(
         "--visium_hd", action='store_true',
-        help='Visium HD coorrdinate to gene expression file.')
+        help='Data is visium.')
     parser.add_argument(
         "--q_filtered", action='store_true',
         help="True if the input reads were subject to min read quality filtering.")

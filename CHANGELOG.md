@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Changed
 - Updated to wf-template v5.6.2 to maintain compliance with our latest wf-template standard.
+- The workflow report has been updated to account for differences between single-cell and spatial data.
 - Workflow enforces single sample processing for visium HD data.
 - For 10x Genomics Visium HD data, 2 µm unbinned and 8 µm binned expression matrices are now output.
 
