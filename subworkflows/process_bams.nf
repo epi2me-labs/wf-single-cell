@@ -46,7 +46,9 @@ process process_matrix {
     input:
         tuple val(meta), val(feature), path('inputs/matrix*.hdf')
     output:
-        tuple val(meta), val(feature), path("${meta.alias}.${feature}_raw_feature_bc_matrix"), emit: raw
+        tuple val(meta), val(feature), path("${meta.alias}.${feature}_raw_feature_bc_matrix"), emit: raw, optional: true
+        tuple val(meta), val(feature), path("${meta.alias}.${feature}_raw_feature_bc_matrix_2um"), emit: matrix_2um , optional: true
+        tuple val(meta), val(feature), path("${meta.alias}.${feature}_raw_feature_bc_matrix_8um"), emit: matrix_8um , optional: true
         tuple val(meta), val(feature), path("${meta.alias}.${feature}_processed_feature_bc_matrix"), emit: processed
         tuple val(meta), val(feature), path("${meta.alias}.${feature}_expression_mean_per_cell.tsv"), emit: meancell
         tuple val(meta), val(feature), path("${meta.alias}.${feature}_matrix_stats.tsv"), emit: stats
@@ -265,6 +267,9 @@ workflow process_bams {
             .filter{it[1] == "gene"}
             .map{it->[it[0], it[2]]}
         raw_gene_expression = process_matrix.out.raw
+            .filter{it[1] == "gene"}
+            .map{it->[it[0], it[2]]}
+        gene_expression_8um = process_matrix.out.matrix_8um
             .filter{it[1] == "gene"}
             .map{it->[it[0], it[2]]}
         transcript_mean_expression = process_matrix.out.meancell

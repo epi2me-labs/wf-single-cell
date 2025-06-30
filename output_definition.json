@@ -21,7 +21,7 @@
       "title": "Gene expression counts",
       "description": "Gene x cell expression sparse matrix values (MEX format).",
       "mime-type": "application/gzip",
-      "optional": false,
+      "optional": true,
       "type": "per-sample"
     },
     "gene-expression-barcodes": {
@@ -29,7 +29,7 @@
       "title": "Gene expression barcodes",
       "description": "Barcode column names (MEX format).",
       "mime-type": "application/gzip",
-      "optional": false,
+      "optional": true,
       "type": "per-sample"
     },
     "gene-expression-features": {
@@ -37,7 +37,55 @@
       "title": "Gene expression features",
       "description": "Feature row names (MEX format).",
       "mime-type": "application/gzip",
-      "optional": false,
+      "optional": true,
+      "type": "per-sample"
+    },
+    "visum-hd-gene-expression-matrix_8um": {
+      "filepath": "{{ alias }}/{{ alias }}.gene_raw_feature_bc_matrix_8um/matrix.mtx.gz",
+      "title": "Visium HD gene expression counts (8um)",
+      "description": "Binned gene x cell expression sparse matrix values (MEX format).",
+      "mime-type": "application/gzip",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "visum-hd-gene-expression-barcodes_8um": {
+      "filepath": "{{ alias }}/{{ alias }}.gene_raw_feature_bc_matrix_8um/barcodes.tsv.gz",
+      "title": "Visium HD gene expression barcodes (8um)",
+      "description": "Binned barcode column names (MEX format).",
+      "mime-type": "application/gzip",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "visum-hd-gene-expression-features_8um": {
+      "filepath": "{{ alias }}/{{ alias }}.gene_raw_feature_bc_matrix_8um/features.tsv.gz",
+      "title": "Visium HD gene expression features (8um)",
+      "description": "Binned feature row names (MEX format).",
+      "mime-type": "application/gzip",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "visum-hd-gene-expression-matrix_2um": {
+      "filepath": "{{ alias }}/{{ alias }}.gene_raw_feature_bc_matrix_2um/matrix.mtx.gz",
+      "title": "Visium HD gene expression counts (2um)",
+      "description": "unbinned gene x cell expression sparse matrix values (MEX format).",
+      "mime-type": "application/gzip",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "visum-hd-gene-expression-barcodes_2um": {
+      "filepath": "{{ alias }}/{{ alias }}.gene_raw_feature_bc_matrix_2um/barcodes.tsv.gz",
+      "title": "Visium HD gene expression barcodes (2um)",
+      "description": "unbinned barcode column names (MEX format).",
+      "mime-type": "application/gzip",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "visum-hd-gene-expression-features_2um": {
+      "filepath": "{{ alias }}/{{ alias }}.gene_raw_feature_bc_matrix_2um/features.tsv.gz",
+      "title": "Visium HD gene expression features (2um)",
+      "description": "unbinned feature row names (MEX format).",
+      "mime-type": "application/gzip",
+      "optional": true,
       "type": "per-sample"
     },
     "transcript-expression-matrix": {

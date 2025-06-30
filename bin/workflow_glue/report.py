@@ -61,8 +61,8 @@ def visium_spatial_plots(non_hd_coords, sample_dirs, hd=False):
             return
         goi_df = goi_df.sort_index()  # Not needed
 
-        if hd:  # Merge xy for non-HD
-            # Get a mapping of barcodes to X and Y coordinates form the barcodes
+        if hd:
+            # Get a mapping of barcodes to X and Y coordinates from the barcode names
             goi_df[['X', 'Y']] = (
                 goi_df['barcode'].str.extract(r'(\d*)_(\d*)$').astype(int)
             )
