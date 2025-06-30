@@ -356,11 +356,19 @@ workflow pipeline {
             .groupTuple()
             .map{meta, _chrs, stats -> [meta, stats]}
 
+        
+        if (params.spaceranger_bam) {
+            expression_matrix = process_bams.out.gene_expression_8um
+        }
+        else {
+            expression_matrix = process_bams.out.raw_gene_expression
+        }
+
         prepare_report_data(
             adapter_summary
             .join(expression_stats)
             .join(whitelist)
-            .join(process_bams.out.raw_gene_expression)
+            .join(expression_matrix)
             .join(process_bams.out.gene_mean_expression)
             .join(process_bams.out.transcript_mean_expression)
             .join(process_bams.out.mitochondrial_expression)

@@ -115,11 +115,6 @@ def main(args):
             Incorrectly specified 10x kits/versions and reference data can also lead to
             to removal of all data at this point.""")
 
-    if matrix.is_visium_hd:
-        logger.info(
-            "Converting Visium HD matrix to 8um binning.")
-        matrix.bin_cells_by_coordinates(bin_size=4, inplace=True)
-
     # Generate statistics from the assembled matrix before any filtering.
     stats = {}
     stats['median_umis_per_cell'] = matrix.median_counts
@@ -131,12 +126,27 @@ def main(args):
 
     # Begin filtering
     matrix.remove_unknown()
-
     logger.info("Writing raw counts to file.")
-    if args.text:
-        matrix.to_tsv(args.raw, args.feature)
+
+    if matrix.is_visium_hd:
+        # Create a new outpath for the unbinned data
+        outpath_2um = Path(f"{args.raw}_2um")
+        matrix_outpath = Path(f"{args.raw}_8um")
+        logger.info("Writing raw 2um counts to file.")
+        if args.text:
+            matrix.to_tsv(str(outpath_2um), args.feature)
+        else:
+            matrix.to_mex(str(outpath_2um), dtype=int)
+        # Bin the data. Raw 2um data can have very low counts per spot, also
+        # it's a pain to visualise.
+        matrix.bin_cells_by_coordinates(bin_size=4, inplace=True)
     else:
-        matrix.to_mex(args.raw, dtype=int)
+        matrix_outpath = args.raw
+
+    if args.text:
+        matrix.to_tsv(matrix_outpath, args.feature)
+    else:
+        matrix.to_mex(matrix_outpath, dtype=int)
 
     if args.enable_filtering:
         logger.info("Filtering, normalizing and log-transforming matrix.")

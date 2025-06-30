@@ -7,6 +7,12 @@ Output files may be aggregated including information for all samples or provided
 | Gene expression counts | {{ alias }}/{{ alias }}.gene_raw_feature_bc_matrix/matrix.mtx.gz | Gene x cell expression sparse matrix values (MEX format). | per-sample |
 | Gene expression barcodes | {{ alias }}/{{ alias }}.gene_raw_feature_bc_matrix/barcodes.tsv.gz | Barcode column names (MEX format). | per-sample |
 | Gene expression features | {{ alias }}/{{ alias }}.gene_raw_feature_bc_matrix/features.tsv.gz | Feature row names (MEX format). | per-sample |
+| Visium HD gene expression counts (8um) | {{ alias }}/{{ alias }}.gene_raw_feature_bc_matrix_8um/matrix.mtx.gz | Binned gene x cell expression sparse matrix values (MEX format). | per-sample |
+| Visium HD gene expression barcodes (8um) | {{ alias }}/{{ alias }}.gene_raw_feature_bc_matrix_8um/barcodes.tsv.gz | Binned barcode column names (MEX format). | per-sample |
+| Visium HD gene expression features (8um) | {{ alias }}/{{ alias }}.gene_raw_feature_bc_matrix_8um/features.tsv.gz | Binned feature row names (MEX format). | per-sample |
+| Visium HD gene expression counts (2um) | {{ alias }}/{{ alias }}.gene_raw_feature_bc_matrix_2um/matrix.mtx.gz | unbinned gene x cell expression sparse matrix values (MEX format). | per-sample |
+| Visium HD gene expression barcodes (2um) | {{ alias }}/{{ alias }}.gene_raw_feature_bc_matrix_2um/barcodes.tsv.gz | unbinned barcode column names (MEX format). | per-sample |
+| Visium HD gene expression features (2um) | {{ alias }}/{{ alias }}.gene_raw_feature_bc_matrix_2um/features.tsv.gz | unbinned feature row names (MEX format). | per-sample |
 | Transcript expression counts | {{ alias }}/{{ alias }}.transcript_raw_feature_bc_matrix/matrix.mtx.gz | Transcript x cell expression sparse matrix values (MEX format). | per-sample |
 | Transcript expression MEX barcodes | {{ alias }}/{{ alias }}.transcript_raw_feature_bc_matrix/barcodes.tsv.gz | Barcode column names (MEX format). | per-sample |
 | Transcript expression MEX features | {{ alias }}/{{ alias }}.transcript_raw_feature_bc_matrix/features.tsv.gz | Feature row names (MEX format). | per-sample |
