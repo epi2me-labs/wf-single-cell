@@ -9,8 +9,8 @@ import numpy as np
 import pandas as pd
 import pytest
 import scipy.sparse
-from workflow_glue.expression_matrix import ExpressionMatrix
-from workflow_glue.process_matrix import main
+from workflow_glue import process_matrix
+from workflow_glue.expression_matrix import ExpressionMatrix, Saturation
 
 
 @pytest.fixture(params=[False, True], ids=["dense", "sparse"])
@@ -195,12 +195,22 @@ def test_remove_unknown_becomes_empty():
 def test_aggregate_hdfs(matrix_mode):
     """Test the creation of an ExpressionMatrix from multiple HDF inputs."""
     hdf1 = tempfile.NamedTemporaryFile(suffix='.hdf5', mode='w')
+
+    # mock up some saturation data, this doesn't match the below matrices,
+    # but that's not important for this test
+    sat = Saturation.zero()._data
+    n_umis = np.ones(len(sat), dtype=int)
+    n_reads = 2 * n_umis  # two reads per UMI I guess \:D/
+    sat["n_reads"][:] = n_reads
+    sat["n_umis"][:] = n_umis
+
     with h5py.File(hdf1.name, 'w') as fh1:
         fh1['cells'] = ['cell1', 'cell2']
         fh1['features'] = ['f1', 'f2']
         fh1['matrix'] = np.array([
             [1, 2], [3, 4]
         ]).reshape((2, 2))
+        fh1['saturation'] = sat
 
     hdf2 = tempfile.NamedTemporaryFile(suffix='.hdf5', mode='w')
     with h5py.File(hdf2.name, 'w') as fh2:
@@ -209,12 +219,14 @@ def test_aggregate_hdfs(matrix_mode):
         fh2['matrix'] = np.array([
             [1, 2], [2, 4]
         ]).reshape((2, 2))
+        fh2['saturation'] = sat
 
     hdf3 = tempfile.NamedTemporaryFile(suffix='.hdf5', mode='w')
     with h5py.File(hdf3.name, 'w') as fh3:
         fh3['cells'] = []
         fh3['features'] = []
         fh3['matrix'] = np.ndarray(shape=(0, 0))
+        fh3['saturation'] = Saturation.zero()._data
 
     em = ExpressionMatrix.aggregate_hdfs(
         (hdf1.name, hdf2.name, hdf3.name), sparse=matrix_mode)
@@ -225,8 +237,12 @@ def test_aggregate_hdfs(matrix_mode):
     np.testing.assert_array_equal(
         em.tfeatures, np.array(['f1', 'f2']))
     np.testing.assert_array_equal(
-        mat,  np.array([[5, 2, 2], [5, 4, 1]])
-    )
+        mat,  np.array([[5, 2, 2], [5, 4, 1]]))
+    # we added two copies of the saturation data, and some zeros
+    np.testing.assert_array_equal(
+        em.saturation._data['n_reads'], n_reads * 2)
+    np.testing.assert_array_equal(
+        em.saturation._data['n_umis'], n_umis * 2)
 
 
 def test_remove_cells_and_features(matrix_mode):
@@ -373,7 +389,7 @@ def test_cell_sort(matrix_mode):
     assert np.array_equal(em._s_features, [1, 0])
 
 
-def test_main(tags_df):
+def test_process_matrix(tags_df):
     """Test the main function of the expression matrix module."""
     tags_df, expected_raw_result, expected_processed_result = tags_df
     with tempfile.TemporaryDirectory() as fh:
@@ -399,8 +415,10 @@ def test_main(tags_df):
         args.text = True
         args.enable_umap = False
         args.pcn = None
+        args.seq_saturation = False
+        args.gene_saturation = False
 
-        main(args)
+        process_matrix.main(args)
 
         counts_result_df = pd.read_csv(args.raw, sep='\t', index_col=None)
         pd.testing.assert_frame_equal(
@@ -521,3 +539,47 @@ def test_bin_cells_by_coordinates_complex(permution_order, matrix_mode):
     if matrix_mode:
         binned._matrix = binned.matrix.toarray()
     np.testing.assert_array_equal(binned.matrix, exp_mat)
+
+
+@pytest.mark.parametrize("copies", [1, 2])
+def test_saturation_summary(tmp_path, copies):
+    """Test processing multiple tags filed that have a known saturation profile."""
+    df = pd.DataFrame({
+        "corrected_barcode": ["cell_1"] * 10 + ["cell_2"] * 10 + ["cell_3"] * 10,
+        "gene": (["gene_1"] * 5 + ["gene_2"] * 5) * 3,
+        "corrected_umi": [
+            f"umi_{x:02d}" for x in range(20)] + ["umi_g1"] * 5 + ["umi_g2"] * 5
+    })
+    n_umis = len(df['corrected_umi'].unique())
+    n_reads = len(df)
+
+    em = ExpressionMatrix.from_tags(df)
+    for c in range(1, copies):
+        em += ExpressionMatrix.from_tags(df)
+
+    # note that sampling the expression matrix (sampling UMIs) is distinct
+    # from sampling the original tags (sampling reads) so we cannot assert
+    # any correlation between the two
+    # note: UMIs across shards are inherently assumed unique, so there's some
+    #       copies * x in the below
+
+    # umi saturation - how many UMIs do we get as reads increases
+    umi_saturation = em.saturation.saturation_results
+    full = umi_saturation.iloc[0]
+    assert copies * len(df) == full['n_reads']
+    assert copies * n_umis == full['n_umis']
+    assert 1 - n_umis / n_reads == pytest.approx(full['saturation'], rel=0.001)
+    # we're sampling reads, and counting UMIs, note its not true that saturation
+    # must necessarily be monotonic (certainly for small datasets)
+    assert (umi_saturation["n_reads"].diff().dropna() <= 0).all()
+    assert (umi_saturation["n_umis"].diff().dropna() <= 0).all()
+
+    # gene saturation - how many genes do we get as UMIs increases
+    gene_saturation = em.saturation_statistics
+    full = gene_saturation.iloc[0]
+    assert 2.0 == em.median_features_per_cell
+    assert em.median_features_per_cell == full['median_feats']
+    assert copies * n_umis == full['n_umis']
+    # now we're sampling UMIs, and counting genes
+    assert (gene_saturation["n_umis"].diff().dropna() <= 0).all()
+    assert (gene_saturation["median_feats"].diff().dropna() <= 0).all()

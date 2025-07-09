@@ -287,6 +287,7 @@ def main(args):
         args.features, sep='\t', index_col=0)
 
     input_has_ub_col = True if args.umi_length is None else False
+
     for chunk_num, df_tags in enumerate(
             chunk_reader(args.barcode_tags, args.chunk_size, ub_col=input_has_ub_col)):
         logger.info(f'processing chunk: {chunk_num}')
@@ -332,6 +333,7 @@ def main(args):
                 matrix = ExpressionMatrix.from_tags(df_tags, feature)
                 fname = args.hdf_out / f"{chunk_num}.{feature}.hdf"
                 matrix.to_hdf(fname)
+
     if args.stats:
-        stats = stats.to_json(args.stats)
+        stats.to_json(args.stats)
     logger.info("Clustering complete.")

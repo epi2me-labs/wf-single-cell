@@ -44,7 +44,7 @@ def test_main_parametrized(tmp_path, child_content, expected_reads):
     args = Mock()
     args.parent_file = parent
     args.child_file = child
-    args.output = output
+    args.output_file = output
 
     main(args)
     merged = pd.read_csv(output, sep='\t')

@@ -75,7 +75,8 @@ process makeReport {
         path expression_dirs
         path umap_genes
         val wf_version
-        path 'saturation_curves.tsv'
+        path 'seq_saturation.tsv'
+        path 'gene_saturation.tsv'
         path 'knee_plot_counts.tsv'
         path 'bam_stats.tsv'
         path 'fusion_results_dir/*'
@@ -104,7 +105,8 @@ process makeReport {
         --wf_version $wf_version \
         --metadata metadata.json \
         --bam_stats bam_stats.tsv \
-        --saturation_curves saturation_curves.tsv \
+        --seq_saturation seq_saturation.tsv \
+        --gene_saturation gene_saturation.tsv \
         --knee_plot_counts knee_plot_counts.tsv \
         $fusion_opt \
         $q_filtered \
@@ -378,8 +380,6 @@ workflow pipeline {
             .join(top_snvs),
             genes_of_interest)
 
-
-
         // Get the metadata and stats for the report
         chunks
             .groupTuple()
@@ -402,7 +402,8 @@ workflow pipeline {
             prepare_report_data.out.expression_dir.collect(),
             genes_of_interest,
             workflow.manifest.version,
-            process_bams.out.saturation_curves,
+            process_bams.out.seq_saturation,
+            process_bams.out.gene_saturation,
             hq_barcode_counts,
             prepare_report_data.out.bam_stats
                 .collectFile(keepHeader:true),
