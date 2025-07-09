@@ -1,5 +1,6 @@
 """Expression counts matrix construction."""
 from collections import defaultdict
+import copy
 import gc
 import gzip
 import os
@@ -14,7 +15,6 @@ import scipy.sparse
 
 from .util import get_named_logger  # noqa: ABS101
 
-
 VISIUM_HD_REGEX = re.compile(rb"^s_002um_\d{5}_\d{5}-1$")
 
 
@@ -23,19 +23,21 @@ class ExpressionMatrix:
 
     def __init__(
             self, matrix=None, features=None, cells=None,
-            fname=None, dtype=int, sparse=False):
+            fname=None, dtype=int, sparse=False, saturation=None):
         """Create a matrix.
 
         Do not use the constructor directly.
         """
         self.logger = get_named_logger("ExpressionMatrix")
         self._matrix = matrix
+        self._fh = None
         self._features = features
         self._cells = cells
         self._dtype = dtype
         self._sparse = sparse
         self._s_features = None
         self._s_cells = None
+        self._saturation = saturation
 
         if fname is not None:
             self._fh = h5py.File(fname, 'r')
@@ -60,6 +62,7 @@ class ExpressionMatrix:
             self._cells = cells
             self._s_features = np.argsort(features)
             self._s_cells = np.argsort(cells)
+            self._saturation = saturation
             if self._matrix.shape[0] != len(features):
                 raise ValueError("Matrix row count does not match number of features.")
             if self._matrix.shape[1] != len(cells):
@@ -71,7 +74,7 @@ class ExpressionMatrix:
             self._fh.close()
 
     @classmethod
-    def from_hdf(cls, name, cache=True, dtype=int, sparse=False):
+    def from_hdf(cls, name, dtype=int, sparse=False):
         """Load a matrix from HDF file."""
         ma = cls(fname=name, dtype=dtype, sparse=sparse)
         return ma
@@ -86,6 +89,10 @@ class ExpressionMatrix:
                 usecols=['corrected_barcode', 'corrected_umi', feature],
                 sep='\t',
                 dtype='category')
+
+        # calculation saturation before dropping unassigned
+        saturation = Saturation.from_tags(df)
+
         df.drop(df.index[df[feature] == '-'], inplace=True)
         df = (
             df.groupby([feature, 'corrected_barcode'], observed=True)
@@ -94,16 +101,23 @@ class ExpressionMatrix:
             .pivot(index=feature, columns='corrected_barcode', values='corrected_umi')
         )
         df.fillna(0, inplace=True)
-        return cls(
+
+        em = cls(
             df.to_numpy(dtype=int),
             df.index.to_numpy(dtype=bytes),
             df.columns.to_numpy(dtype=bytes),
-            dtype=int)
+            dtype=int,
+            saturation=saturation
+        )
+        return em
 
     @classmethod
     def aggregate_hdfs(cls, fnames, dtype=int, sparse=None):
         """Aggregate a set of matrices stored in HDF."""
         logger = get_named_logger("ExpressionMatrix")
+
+        # bootstrap saturation, and get union of all barcodes and features
+        saturation = Saturation.zero()
         features = set()
         cells = set()
         for fname in fnames:
@@ -126,10 +140,13 @@ class ExpressionMatrix:
         full_matrix = cls(
             features=np.array(sorted(features), dtype=bytes),
             cells=np.array(sorted(cells), dtype=bytes),
-            dtype=dtype, sparse=use_sparse)
-        for fname in fnames:
-            ma = cls.from_hdf(fname, dtype=dtype, sparse=use_sparse)
+            dtype=dtype, sparse=use_sparse, saturation=saturation)
+
+        for i, fname in enumerate(fnames):
+            ma = cls.from_hdf(
+                fname, dtype=dtype, sparse=use_sparse)
             full_matrix += ma
+
         if use_sparse:
             full_matrix._matrix = full_matrix.matrix.tocsr()
         return full_matrix
@@ -151,6 +168,7 @@ class ExpressionMatrix:
             fh['cells'] = self.cells
             fh['features'] = self.features
             fh['matrix'] = self.matrix
+            fh["saturation"] = self.saturation._data
 
     def to_mex(
             self, fname, feature_type="Gene Expression", feature_ids=None, dtype=None):
@@ -210,6 +228,18 @@ class ExpressionMatrix:
         return self._cells
 
     @property
+    def saturation(self):
+        """Get saturation data."""
+        if self._saturation is not None:
+            return self._saturation
+        if self._fh is not None:
+            self._saturation = Saturation.from_arr(
+                self._fh['saturation'][()])
+        else:
+            raise RuntimeError("saturation not initialized")
+        return self._saturation
+
+    @property
     def matrix(self):
         """Expression matrix array."""
         if self._matrix is not None:
@@ -252,7 +282,11 @@ class ExpressionMatrix:
 
     @property
     def mean_expression(self):
-        """The mean expression of features per cell."""
+        """The mean expression per cell.
+
+        This is a vector of the mean count for each cell,
+        averaged across all features.
+        """
         if self.sparse:
             sums = np.asarray(self.matrix.sum(axis=0)).flatten()
             mean = sums / self.matrix.shape[0]
@@ -262,7 +296,11 @@ class ExpressionMatrix:
 
     @property
     def median_counts(self):
-        """Median counts per cell."""
+        """Median total UMI counts per cell.
+
+        This is the median of the total expression per cell,
+        i.e. the sum across features.
+        """
         if self.sparse:
             counts = np.asarray(self.matrix.sum(axis=0)).flatten()
         else:
@@ -271,12 +309,40 @@ class ExpressionMatrix:
 
     @property
     def median_features_per_cell(self):
-        """Median features per cell."""
+        """Median features detected per cell.
+
+        This is the median of the num. of unique (non-zero) features per cell.
+        """
         if self.sparse:
-            nonzero = np.diff(self.matrix.tocsc().indptr)
+            # see scipy.sparse.csr_matrix.count_nonzero.html
+            # matrix should be csr already, so tocsr() is no-op but included
+            # here for safety
+            nonzero = np.bincount(
+                self.matrix.tocsr().indices, minlength=self.matrix.shape[1])
         else:
             nonzero = np.count_nonzero(self.matrix, axis=0)
         return np.median(nonzero)
+
+    @property
+    def saturation_statistics(self):
+        """Get feature and UMI statistics at varying sampling fractions."""
+        mat = copy.copy(self)  # maybe will need to do in place for memory?
+        mat._matrix = mat.matrix.astype(int)
+        arr = np.zeros(
+            len(Saturation.FRACTIONS),
+            dtype=[
+                ("frac", float), ("n_umis", int),
+                ("median_feats", int), ("median_umis", int)])
+        last_frac = None
+        for i, frac in enumerate(Saturation.FRACTIONS):
+            p = frac if last_frac is None else frac / last_frac
+            mat.downsample(p)
+            arr["frac"][i] = frac
+            arr["n_umis"][i] = np.sum(mat.matrix)
+            arr["median_feats"][i] = mat.median_features_per_cell
+            arr["median_umis"][i] = mat.median_counts
+            last_frac = frac
+        return pd.DataFrame(arr)
 
     def normalize(self, norm_count):
         """Normalize total cell weight to fixed cell count."""
@@ -388,6 +454,15 @@ class ExpressionMatrix:
         m /= np.log(10)
         return self
 
+    def downsample(self, p):
+        """Binomial down sampling of the counts matrix."""
+        if self.sparse:
+            self.matrix.data = np.random.binomial(n=self.matrix.data, p=p)
+            self.matrix.eliminate_zeros()
+        else:
+            self._matrix = np.random.binomial(n=self.matrix, p=p)
+        return self
+
     @staticmethod
     def write_matrix(fname, matrix, index, col_names, index_name="feature"):
         """Write a matrix (or vector) to TSV."""
@@ -412,7 +487,7 @@ class ExpressionMatrix:
         del df
         gc.collect()
 
-    def __add__(self, other):
+    def __iadd__(self, other):
         """Add a second matrix to this matrix."""
         # note: we don't check that the cells and features match,
         #       the other matrix must have a subset of self for this to be safe.
@@ -426,7 +501,6 @@ class ExpressionMatrix:
         if self.sparse:
             # convert other.matrix to COO if not already
             sub = other.matrix.tocoo()
-
             # remap row and col indices to self index space
             global_row = feature_rows[sub.row]
             global_col = cell_cols[sub.col]
@@ -440,6 +514,7 @@ class ExpressionMatrix:
                 np.repeat(feature_rows, len(cell_cols)),
                 np.tile(cell_cols, len(feature_rows))] += other.matrix.flatten()
 
+        self._saturation += other.saturation
         return self
 
     def _remove_elements(self, feat_mask=None, cell_mask=None):
@@ -591,7 +666,6 @@ class ExpressionMatrix:
         if binned_matrix.shape[1] != len(new_cell_names):
             raise ValueError(
                 f"Column mismatch: {binned_matrix.shape[1]} vs {len(new_cell_names)}")
-
         rtn = None
         if inplace:
             rtn = self
@@ -610,3 +684,66 @@ class ExpressionMatrix:
                 dtype=self._dtype
             )
         return rtn
+
+
+class Saturation:
+    """Saturation calculator."""
+
+    DTYPE = [("frac", float), ("n_reads", int), ("n_umis", int)]
+    FRACTIONS = [
+        1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1,
+        0.05, 0.04, 0.03, 0.02, 0.01]
+
+    def __init__(self, data):
+        """Initialise saturation class."""
+        if data.dtype != self.DTYPE:
+            raise ValueError(
+                f"Data must be a structured array with dtype {self.DTYPE}, "
+                f"got {data.dtype}.")
+        self._data = data
+
+    @classmethod
+    def from_tags(cls, df, random_state=42):
+        """Sample per-read tags to derive no. UMIs vs no. reads."""
+        arr = np.zeros(len(cls.FRACTIONS), dtype=cls.DTYPE)
+        last_frac = None
+        for i, frac in enumerate(cls.FRACTIONS):
+            p = frac if last_frac is None else frac / last_frac
+            df = df.sample(frac=p, random_state=random_state)
+            arr["frac"][i] = frac
+            arr["n_reads"][i] = len(df)
+            # It's possible to have collisions of UMIs in a chunk that come from
+            # the different genes and barcodes. This will be rare, but we should
+            # still group to be correct.
+            arr["n_umis"][i] = len(
+                df.groupby(['corrected_umi', 'corrected_barcode', 'gene']))
+            last_frac = frac
+        return cls(arr)
+
+    @classmethod
+    def from_arr(cls, arr):
+        """Initialize from structured array of pre-calculated data."""
+        return cls(arr)
+
+    @classmethod
+    def zero(cls):
+        """Create a zeroed saturation object."""
+        sat = cls(np.zeros(len(cls.FRACTIONS), dtype=cls.DTYPE))
+        sat._data['frac'] = cls.FRACTIONS
+        return sat
+
+    @property
+    def saturation_results(self):
+        """Get the saturation summary."""
+        df = pd.DataFrame(self._data)
+        df['saturation'] = 1 - (df['n_umis'] / df['n_reads'])
+        df["saturation"].fillna(0, inplace=True)
+        return df[['frac', 'n_umis', 'saturation', 'n_reads']]
+
+    def __iadd__(self, other):
+        """Add a second Saturation object."""
+        if not np.allclose(self._data["frac"], other._data["frac"]):
+            raise ValueError("Saturation fractions do not match.")
+        self._data["n_reads"] += other._data["n_reads"]
+        self._data["n_umis"] += other._data["n_umis"]
+        return self

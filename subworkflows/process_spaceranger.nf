@@ -190,35 +190,11 @@ process merge_bams {
 }
 
 
-process cat_tags_by_chrom {
-    // Merge per-chunk tags to create per-chromosome tags
-    label "wf_common"
-    cpus params.threads
-    memory "4 GB"
-    input:
-        tuple val(meta),
-              path('tags/*tags.tsv')
-    output:
-         tuple val(meta),
-               path("chr_tags/*"),
-               emit: merged_tags
-    script:
-    """
-    # Concatenate all tags files, add sample name, and split by chromosome
-    mkdir -p chr_tags
-
-    csvtk concat -t tags/*.tsv \
-        | csvtk -t split --fields chr -o chr_tags/
-    """
-}
-
 process combine_mapping_and_demux_tags {
     // Join the demux and mapping tags and split by chromosome
     label "wf_common"
-    cpus 1
-    // The memory usage of this process has not been checked, but I assume it is high
-    // Check with 300M reads and come up with another approach if too high
-    memory "32 GB" 
+    cpus 6
+    memory "30 GB" 
     input:
         tuple val(meta),
               path('demux_tags/demux_??.tsv'),
@@ -228,40 +204,76 @@ process combine_mapping_and_demux_tags {
               path("chr_tags/*"),
               emit: chr_tags
     script:
+    def mem_mb = task.memory.toMega().toDouble()
+    def buffer_mb = (Math.max(4096.0, mem_mb - 4096.0) / 2).toInteger()
+    def buffer_size = "${buffer_mb}M"
+    def threads_per_sort = Math.max(1, (int)(task.cpus / 2))
+    def tmpdir = "tmpdir"
     """
-    mkdir tmpdir
-    export TMPDIR=tmpdir
-    # In order for the outputs to be compatible with the reset of the workflow,
-    # we need to  combine the mapping and demux tags and split by chromosome 
-
-    head -n 1 mapping_tags/mapping_01.tsv  > map.tsv
-    head -n 1 demux_tags/demux_01.tsv  > demux.tsv
-
-    find -L demux_tags -type f -name "*.tsv" | while read -r file; do
-    line_count=\$(awk 'END {print NR}' "\$file")
-    if [ "\$line_count" -gt 1 ]; then
-        tail -n +2 "\$file"
-    fi
-    done > d.tsv
-    sort --buffer-size=25G -T tmpdir d.tsv -k1,1 >> demux.tsv
-    rm d.tsv
-
-    find -L mapping_tags -type f -name "*.tsv" | while read -r file; do
-    line_count=\$(awk 'END {print NR}' "\$file")
-    if [ "\$line_count" -gt 1 ]; then
-        tail -n +2 "\$file"
-    fi
-    done > m.tsv
-    sort --buffer-size=25G -T tmpdir m.tsv -k1,1 >> map.tsv
-    rm m.tsv
-
-    workflow-glue join_tags \
-        map.tsv \
-        demux.tsv \
-        join_tags.tsv 
+    mkdir ${tmpdir}
+    export TMPDIR=${tmpdir}
     
-    csvtk split -j 8 -t --fields chr -o chr_tags join_tags.tsv
-    # TODO: cleanup files
+    # Function to concatenate + sort multiple TSVs by first column
+    function concat_and_sort() {
+        local input_dir="\$1"
+        local output_file="\$2"
+    
+        # Get header from the first file
+        head -n 1 "\$(find -L \"\$input_dir\" -type f -name '*.tsv' | head -n 1)" > "\$output_file"
+    
+        # Concatenate bodies and pipe directly to sort
+        find -L "\$input_dir" -type f -name '*.tsv' | while read -r file; do
+            tail -n +2 "\$file"
+        done | sort \\
+            --buffer-size=${buffer_size} \\
+            --temporary-directory=${tmpdir} \\
+            --parallel=${threads_per_sort} \\
+            --field-separator=\$'\\t' \\
+            --key=1,1 \\
+            >> "\$output_file"
+    }
+    
+    # Combine mapping and demux tags
+    concat_and_sort demux_tags demux.tsv &
+    concat_and_sort mapping_tags map.tsv &
+    wait
+    rm -rf ${tmpdir}/*
+    
+    # Join tags and split by chromosome
+    # TODO: just do the splitting in the Python script?
+    mkdir -p chr_tags
+    workflow-glue join_tags map.tsv demux.tsv | \\
+        csvtk split \\
+            --num-cpus ${task.cpus} \\
+            --tabs \\
+            --fields chr \\
+            --out-file chr_tags
+    rm -f map.tsv demux.tsv
+
+    # Clean up filenames: remove 'stdin-' prefix from each output
+    shopt -s nullglob
+    for f in chr_tags/stdin-*.tsv; do
+        mv "\$f" "chr_tags/\${f##*/stdin-}"
+    done
+    
+    # Find the column number for 'CB'
+    A_FILE=\$(find chr_tags -type f -name '*.tsv' | head -n 1)
+    CB_COL=\$(head -n 1 \${A_FILE} | awk -F'\\t' '{for (i=1; i<=NF; i++) if (\$i=="CB") print i; exit}')
+    
+    # Sort each per-chromosome file by CB
+    for file in chr_tags/*.tsv; do
+      head -n 1 "\$file" > "\${file}.sorted"
+      tail -n +2 "\$file" | sort \\
+        --buffer-size=${buffer_size} \\
+        --temporary-directory=${tmpdir} \\
+        --parallel=${task.cpus} \\
+        --field-separator=\$'\\t' \\
+        --key=\${CB_COL},\${CB_COL} \\
+        >> "\${file}.sorted"
+      mv "\${file}.sorted" "\$file"
+    done
+    
+    rm -rf ${tmpdir}
     """
 }
 
@@ -306,12 +318,12 @@ workflow spaceranger {
             parse_sr_bam.out.spaceranger_tags.groupTuple()
             .join(process_long_reads.out.mapping_tags.groupTuple()))
 
-        
+        // Extract chromosome name from the tags filenames, vom
         chr_tags = combine_mapping_and_demux_tags.out.chr_tags
         .transpose()
             .map {meta, tags -> 
-                def chr = tags.baseName.replaceAll('join_tags-', '')
-                [meta, chr, tags] // [meta, chr, tags.tsv]
+                def chr = tags.baseName
+                [meta, chr, tags]
             }
 
     emit:

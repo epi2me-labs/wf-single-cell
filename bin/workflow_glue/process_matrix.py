@@ -36,6 +36,15 @@ def argparser():
     parser.add_argument(
         "--stats", type=Path, help="Output path for stats TSV.")
     parser.add_argument(
+        "--seq_saturation", type=Path, default=None,
+        help="Output path for saturation summary TSV.")
+    parser.add_argument(
+        "--gene_saturation", type=Path, default=None,
+        help="Output path for saturation summary TSV.")
+    parser.add_argument(
+        "--sample",
+        help="Sample ID of the data.")
+    parser.add_argument(
         "--text", action="store_true", help=argparse.SUPPRESS)
 
     grp = parser.add_argument_group("Filtering")
@@ -107,6 +116,18 @@ def main(args):
         matrix = ExpressionMatrix.aggregate_tags(args.input, args.feature, dtype=float)
     except UnicodeDecodeError:
         matrix = ExpressionMatrix.aggregate_hdfs(args.input, dtype=float)
+
+    if args.seq_saturation:
+        sat_results = matrix.saturation.saturation_results
+        sat_results.assign(sample=args.sample).to_csv(
+            args.seq_saturation, sep='\t', index=False)
+    if args.gene_saturation:
+        df_genes_per_cell = matrix.saturation_statistics
+        (
+            df_genes_per_cell
+            .assign(sample=args.sample)
+            .to_csv(args.gene_saturation, sep='\t', index=False)
+        )
 
     logger.info("Removing unknown features.")
     if len(matrix.cells) == 0:

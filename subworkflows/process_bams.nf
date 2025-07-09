@@ -50,6 +50,8 @@ process process_matrix {
         tuple val(meta), val(feature), path("${meta.alias}.${feature}_raw_feature_bc_matrix_2um"), emit: matrix_2um , optional: true
         tuple val(meta), val(feature), path("${meta.alias}.${feature}_raw_feature_bc_matrix_8um"), emit: matrix_8um , optional: true
         tuple val(meta), val(feature), path("${meta.alias}.${feature}_processed_feature_bc_matrix"), emit: processed
+        tuple val(meta), val(feature), path("seq_saturation.tsv"), emit: seq_saturation, optional: true
+        tuple val(meta), val(feature), path("gene_saturation.tsv"), emit: gene_saturation, optional: true
         tuple val(meta), val(feature), path("${meta.alias}.${feature}_expression_mean_per_cell.tsv"), emit: meancell
         tuple val(meta), val(feature), path("${meta.alias}.${feature}_matrix_stats.tsv"), emit: stats
         // mito per cell makes sense only for feature=gene for now.
@@ -57,6 +59,7 @@ process process_matrix {
         tuple val(meta), val(feature), path("${meta.alias}.${feature}_expression_umap*.tsv"), emit: umap
     script:
     def mito_prefixes = params.mito_prefix.replaceAll(',', ' ')
+    def opt_seq_sat = feature == 'gene' ?  "--seq_saturation seq_saturation.tsv --gene_saturation gene_saturation.tsv" : ""
     """
     export NUMBA_NUM_THREADS=${task.cpus}
     workflow-glue process_matrix \
@@ -75,7 +78,9 @@ process process_matrix {
         --mito_prefixes $mito_prefixes \
         --norm_count $params.matrix_norm_count \
         --enable_umap \
-        --replicates 3
+        --replicates 3 \
+        --sample "${meta.alias}" \
+        $opt_seq_sat
     """
 }
 
@@ -123,30 +128,6 @@ process combine_final_tag_files {
     script:
     """
     awk 'FNR>1 || NR==1' *.tsv > "${meta.alias}.read_summary.tsv"
-    """
-}
-
-
-process umi_gene_saturation {
-    label "singlecell"
-    cpus 4
-    memory {32.GB * task.attempt}
-    maxRetries 1
-    errorStrategy { task.exitStatus in 137..140 ? 'retry' : 'terminate' }
-    input:
-        tuple val(meta),
-              path("read_tags.tsv")
-    output:
-        path("saturation_curves.tsv"),
-              emit: saturation_curve
-    script:
-    """
-    export POLARS_MAX_THREADS=$task.cpus
-
-    workflow-glue calc_saturation \
-        --output "saturation_curves.tsv" \
-        --read_tags read_tags.tsv \
-        --sample "${meta.alias}"
     """
 }
 
@@ -246,10 +227,6 @@ workflow process_bams {
             merged_bam.join(tags_by_sample)
             .join(create_matrix.out.sa_summary.groupTuple()
             .map{meta, _chrs, files -> [meta, files]}))
-        // UMI saturation curves
-        // TODO: this save figures with matplotlib -- just output
-        //       data and plot in report with bokeh
-        umi_gene_saturation(final_read_tags)
 
     emit:
         // Emit sperately for use in the report
@@ -282,7 +259,13 @@ workflow process_bams {
             .map{it->[it[0], it[2]]}
             .groupTuple(size:2)
             .map{key, files -> [key, files.flatten()]}
-        saturation_curves = umi_gene_saturation.out.saturation_curve
+        seq_saturation = process_matrix.out.seq_saturation
+            .filter{it[1] == "gene"}
+            .map{_meta, _feature, files -> files}
+            .collectFile(keepHeader: true)
+        gene_saturation = process_matrix.out.gene_saturation
+            .filter{it[1] == "gene"}
+            .map{_meta, _feature, files -> files}
             .collectFile(keepHeader: true)
         // per chromosome expression statistics
         expression_stats = create_matrix.out.stats

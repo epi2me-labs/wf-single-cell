@@ -4,25 +4,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v3.3.1]
+### Added
+- Support for 10x Visium HD 3′ data, including the generation of 2 µm unbinned
+  and 8 µm binned expression matrices. For details on how to preprocess this
+  data, see [percula](https://epi2me.nanoporetech.com/epi2me-docs/tools/percula/).
+  Currently the workflow supports only a single sample when processing such data.
+
 ### Changed
-- Updated to wf-template v5.6.2 to maintain compliance with our latest wf-template standard.
-- The workflow report has been updated to account for differences between single-cell and spatial data.
-- Workflow enforces single sample processing for visium HD data.
-- For 10x Genomics Visium HD data, 2 µm unbinned and 8 µm binned expression matrices are now output.
+- Calculation of sequencing saturation metrics has been overhauled in order to
+  allow scaling to large datasets. The new method is more memory efficient. The
+  gene and UMI saturation graphs are now presented in terms of numbers of UMIs
+  rather than number of reads.
+- Metrics in report have been renamed for clarity with their descriptions
+  updated to better reflect their meaning.
+- Two workflow steps (`process_matrix` and `assign_features`) have been amended
+  to be more memory and time efficient, allowing for processing of larger
+  datasets.
+- Updated to align software with wf-template v5.6.2. This change does not have
+  any functional impact on the workflow, but it ensures that the workflow
+  remains compatible with the latest standards and practices.
 
 ### Fixed
-- Added missing join_tags.py script.
-- Fix issue causing incorrect merging of Space Ranger and longer BAM tags.
-- Reads with unexpected UMI lengths were not removed in a consistent manner. This could lead to unexpected behaviour in several edgecases. The read removal is now more systematically handled across the dataset.
+- Reads with unexpected UMI lengths were not removed in a consistent manner.
+  This could lead to unexpected behaviour in several edgecases. The read
+  removal is now more systematically handled across the dataset.
 
 ## [v3.3.0]
-### Added
-- Support for 10x visium HD v1. For details on how to preprocess this data, see https://git.oxfordnanolabs.local/epi2melabs/percula.
-
-### Changed
-- `process_matrix` process to be more memory efficient.
-- `assign_features` process is now more time-efficient. 
+This release was pulled as it contained several critical issues.
 
 ## [v3.2.0]
 ### Added 
@@ -41,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Sequence summary read length N50 incorrectly displayed minimum read length, it now correctly shows the N50.
     - Sequence summary component alignment and coverage plots failed to plot under some conditions.
 
+
 ## [v3.1.0]
 ### Changed
 - Reconciled workflow with wf-template v5.5.0.
@@ -52,9 +62,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rare cases of UMIs with incorrect length breaking SNV workflow by excluding the reads from downstream analysis. 
 - "RuntimeError: cannot cache function" by setting NUMBA_CACHE_DIR to the task directory.
 
+
 ## [v3.0.1]
 ### Fixed
 Missing output files (SNV matrix and SNV VCF).
+
 
 ## [v3.0.0]
 This major version release adds an experimental SNV calling workflow, enabled with --call_variants.
@@ -64,6 +76,7 @@ This major version release adds an experimental SNV calling workflow, enabled wi
 - Single nucleotide variant (SNV) calling workflow, which uses [longshot](https://github.com/pjedge/longshot).
 - `estimate_cell_count` can be set to false to force the workflow to use the number of cells set by the `expected_cells` option.
 - Minor decrease to some memory directives to avoid “Process requirement exceeds available memory” errors when running in WSL.
+
 
 ## [v2.4.1]
 ### Fixed

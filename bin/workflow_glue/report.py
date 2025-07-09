@@ -6,7 +6,7 @@ from pathlib import Path
 from bokeh.models import ColorBar, Span
 from bokeh.models.tickers import BasicTicker
 from bokeh.transform import linear_cmap
-from dominate.tags import a, b, div, h6, li, p, ul
+from dominate.tags import a, b, div, h4, h6, li, p, ul
 from dominate.util import raw, text
 import ezcharts
 from ezcharts.components import fastcat
@@ -306,47 +306,56 @@ def umap_plots(umaps_dirs, genes_file):
                                             EZChart(plt, theme='epi2melabs')
 
 
-def saturation_plots(saturation_data, type_label):
+def saturation_plots(seq_data, gene_data, type_label):
     """Saturation plots."""
     tabs = Tabs()
 
-    df_sat = pd.read_csv(saturation_data, sep='\t', index_col=0)
+    df_seq = pd.read_csv(seq_data, sep='\t', index_col=None)
+    df_gene = pd.read_csv(gene_data, sep='\t', index_col=None)
     with tabs.add_dropdown_menu('sample', change_header=True):
-        for sample_id, df in df_sat.groupby('sample'):
-            df.rename(columns={
-                'reads_pc': f'Median reads per {type_label}',
-                'genes_pc': f'Genes per {type_label}',
-                'umis_pc': f'UMIs per {type_label}',
-                'umi_sat': 'Sequencing saturation'},
-                inplace=True)
+        for sample_id, df_seq_sample in df_seq.groupby('sample'):
+
+            df_seq_sample.rename(columns={
+                'n_reads': 'Num. reads',
+                'saturation': 'Saturation',
+            }, inplace=True)
+            df_gene_sample = df_gene.query("`sample` == @sample_id")
+            df_gene_sample.rename(columns={
+                'n_umis': 'Num. UMIs',
+                'median_feats': f'Num. genes / {type_label}',
+                'median_umis': f'Num. UMIs / {type_label}'
+            }, inplace=True)
             with tabs.add_dropdown_tab(sample_id):
                 with Grid(columns=3):
-                    EZChart(
-                        ezcharts.lineplot(
-                            data=df, x=f'Median reads per {type_label}',
-                            y=f'Genes per {type_label}',
-                            title='Gene saturation', theme='epi2melabs',
-                            color='orange', marker=False),
-                        height='350px')
-                    EZChart(
-                        ezcharts.lineplot(
-                            data=df, x=f'Median reads per {type_label}',
-                            y=f'UMIs per {type_label}',
-                            title='UMI saturation', theme='epi2melabs',
-                            color='purple', marker=False),
-                        height='350px')
                     seq_sat_plt = ezcharts.lineplot(
-                        data=df, x=f'Median reads per {type_label}',
-                        y='Sequencing saturation',
+                        data=df_seq_sample, x='Num. reads',
+                        y='Saturation',
                         title='Sequencing saturation', theme='epi2melabs',
                         color='blue', marker=False)
                     seq_sat_plt._fig.y_range.end = 1.0
                     hline = Span(
-                        location=df['Sequencing saturation'].max(), dimension='width',
+                        location=df_seq_sample[
+                            'Saturation'].max(), dimension='width',
                         line_color='black',
                         line_width=1, line_dash='dashed')
                     seq_sat_plt._fig.renderers.extend([hline])
                     EZChart(seq_sat_plt, height='350px')
+
+                    EZChart(
+                        ezcharts.lineplot(
+                            data=df_gene_sample, x='Num. UMIs',
+                            y=f'Num. genes / {type_label}',
+                            title='Gene saturation', theme='epi2melabs',
+                            color='orange', marker=False),
+                        height='350px')
+
+                    EZChart(
+                        ezcharts.lineplot(
+                            data=df_gene_sample, x='Num. UMIs',
+                            y=f'Num. UMIs / {type_label}',
+                            title='UMI saturation', theme='epi2melabs',
+                            color='green', marker=False),
+                        height='350px')
 
 
 # once https://nanoporetech.atlassian.net/browse/CW-5808 is released,
@@ -363,7 +372,7 @@ def experiment_summary_section(
                     with Grid(columns=3):
                         # Column 1 - Experiment summary
                         with div(style=div_style):
-                            h6("Experiment summary")
+                            h4("Experiment summary")
                             counts_label = f'{type_label.capitalize()}s with data' \
                                 if visium else 'Estimated cells'
                             df_col1 = pd.DataFrame.from_dict(
@@ -371,11 +380,11 @@ def experiment_summary_section(
                                     'Input reads': sample_df.loc['reads', 'count'],
                                     counts_label:
                                         sample_df.loc['cells', 'count'],
-                                    f'Mean reads per {type_label}':
+                                    f'Reads per {type_label} (mean)':
                                         sample_df.loc['mean_reads_per_cell', 'count'],
-                                    f'Median UMI counts per {type_label}':
+                                    f'UMIs per {type_label} (median)':
                                         sample_df.loc['median_umis_per_cell', 'count'],
-                                    f'Median genes per {type_label}':
+                                    f'Genes per {type_label} (median)':
                                         sample_df.loc['median_genes_per_cell', 'count']
                                 }, orient='index')
                             df_col1 = df_col1.apply(
@@ -388,7 +397,7 @@ def experiment_summary_section(
                                 searchable=False, sortable=False, use_headers=False)
                         # column 2 - rank plot
                         with div(style=div_style):  # barcode rankplot
-                            h6('Barcode rank plot')
+                            h4('Barcode rank plot')
                             df_col2 = cell_counts_df[
                                 cell_counts_df['sample'] == sample]
                             n_cells = int(sample_df.at['cells', 'count'])
@@ -417,17 +426,17 @@ def experiment_summary_section(
 
                         # Column 3 - Alignment summary
                         with div(style=div_style):
-                            h6('Alignment / feature summary')
+                            h4('Alignment / feature summary')
                             aln_sample = aln_df.loc[sample]
                             df_col3 = pd.DataFrame.from_dict(
                                 {
-                                    "Reads aligned": aln_sample['reads_aligned'],
-                                    "Reads mapping to genome": aln_sample['primary'],
-                                    "Supplementary": aln_sample['supplementary'],
+                                    "Pass reads": aln_sample['reads_aligned'],
+                                    "Mapped": aln_sample['primary'],
                                     "Unmapped": aln_sample['unmapped'],
-                                    'Unique genes detected':
+                                    "Supplementary": aln_sample['supplementary'],
+                                    'Unique genes':
                                         sample_df.loc['genes', 'count'],
-                                    'Unique isoforms detected':
+                                    'Unique isoforms':
                                         sample_df.loc['transcripts', 'count']
                                 }, orient='index')
                             df_col3 = df_col3.apply(
@@ -501,19 +510,15 @@ def experiment_summary_section(
                             # Text for alignment summary
                             with ul():
                                 li(
-                                    b("Reads aligned: "),
-                                    """The total number of reads that were aligned to
-                                    the reference genome sequence. This number excludes
-                                    reads where the expected adapters were not found."""
+                                    b("Pass reads: "),
+                                    """The total number of reads that passed the input
+                                    filtering stages of the analysis. This number
+                                    excludes reads where the expected adapters were not
+                                    found."""
                                 )
                                 li(
-                                    b("Reads mapping to genome: "),
+                                    b("Mapped: "),
                                     "The number of primary alignments."
-                                )
-                                li(
-                                    b("Supplementary: "),
-                                    """The number of supplementary alignments. These can
-                                    be indicative of fusion genes or chimeric reads."""
                                 )
                                 li(
                                     b("Unmapped: "),
@@ -521,7 +526,12 @@ def experiment_summary_section(
                                     reference genome."""
                                 )
                                 li(
-                                    b("Unique genes/isoforms detected: "),
+                                    b("Supplementary: "),
+                                    """The number of supplementary alignments. These can
+                                    be indicative of fusion genes or chimeric reads."""
+                                )
+                                li(
+                                    b("Unique genes/isoforms: "),
                                     f"""The total number of features identified across
                                     all {type_label}s."""
                                 )
@@ -842,24 +852,25 @@ def main(args):
         the number of detected genes and unique molecular identifiers (UMIs) will also
         increase at a rate that depends on the complexity of the input library.
         The curve gradient indicates the rate at which new genes or UMIs are being
-        recovered; as saturation increases the the curve flattens""")
+        recovered; as saturation increases the the curve flattens. All metrics are
+        calculated through random sampling of the complete dataset.""")
         with ul():
             li(
+                b("Sequencing saturation:"),
+                """ The total number of unique cDNA molecules observed having sampled
+                sequencing reads. Calculated as
+                1 - (number of unique UMIs / number of reads)."""
+            )
+            li(
                 b("Gene saturation:"),
-                f""" Genes per {type_label}
-                as a function of read depth.""")
+                f""" Unique genes observed per {type_label}. Calculated as a median
+                across {type_label}s, after sampling the expression matrix.""")
             li(
                 b("UMI saturation:"),
-                f""" UMIs per {type_label}
-                as a function of read depth.""")
-            li(
-                b("Sequencing saturation:"),
-                """ This metric is a measure of the proportion of reads that come
-                from a previously observed UMI, and is calculated with the
-                following formula: 1 - (number of unique UMIs / number of reads)."""
-            )
+                f""" Unique UMIs observed per {type_label}. Calculated as a median
+                across {type_label}s, after sampling the expression matrix.""")
 
-        saturation_plots(args.saturation_curves, type_label)
+        saturation_plots(args.seq_saturation, args.gene_saturation, type_label)
 
     # A UMAP plot of x barcodes takes up x MB in the report. Skip this for now
     # UMAPs make less sense for spatial data than for single cell data anyway
@@ -931,7 +942,9 @@ def argparser():
         "--q_filtered", action='store_true',
         help="True if the input reads were subject to min read quality filtering.")
     parser.add_argument(
-        "--saturation_curves", type=Path)
+        "--seq_saturation", type=Path)
+    parser.add_argument(
+        "--gene_saturation", type=Path)
     parser.add_argument(
         "--knee_plot_counts", type=Path)
     parser.add_argument(
