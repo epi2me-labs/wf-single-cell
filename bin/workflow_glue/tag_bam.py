@@ -33,7 +33,9 @@ BAM_TAGS = {
     "uncorrected_umi": "UR",
     "quality_umi": "UY",
     "gene": "GN",
-    "transcript": "TR"
+    "transcript": "TR",
+    "gene_id": "GX",
+    "transcript_name": "TN"
 }
 
 

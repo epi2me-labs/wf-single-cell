@@ -23,7 +23,8 @@ class ExpressionMatrix:
 
     def __init__(
             self, matrix=None, features=None, cells=None,
-            fname=None, dtype=int, sparse=False, saturation=None):
+            fname=None, dtype=int, sparse=False, saturation=None, feature_ids=None,
+            feature_mode=None):
         """Create a matrix.
 
         Do not use the constructor directly.
@@ -38,6 +39,8 @@ class ExpressionMatrix:
         self._s_features = None
         self._s_cells = None
         self._saturation = saturation
+        self._feature_ids = feature_ids
+        self._feature_mode = feature_mode
 
         if fname is not None:
             self._fh = h5py.File(fname, 'r')
@@ -93,12 +96,30 @@ class ExpressionMatrix:
         # calculation saturation before dropping unassigned
         saturation = Saturation.from_tags(df)
 
+        feature_ids = {}
+        feature_col = feature
+        if feature == 'gene' and 'gene_id' in df.columns:
+            # dropna, drop_duplicates
+            df['composite_feature'] = df[feature].astype(str) + '|' + df['gene_id'].astype(str)
+            feature_col = 'composite_feature'
+            temp = df[[feature_col, 'gene_id']].dropna().drop_duplicates()
+            feature_ids = dict(zip(
+                temp[feature_col].astype(str).str.encode('utf-8'),
+                temp['gene_id'].astype(str).str.encode('utf-8')))
+        elif feature == 'transcript' and 'transcript_name' in df.columns:
+            df['composite_feature'] = df[feature].astype(str) + '|' + df['transcript_name'].astype(str)
+            feature_col = 'composite_feature'
+            temp = df[[feature_col, 'transcript_name']].dropna().drop_duplicates()
+            feature_ids = dict(zip(
+                temp[feature_col].astype(str).str.encode('utf-8'),
+                temp['transcript_name'].astype(str).str.encode('utf-8')))
+
         df.drop(df.index[df[feature] == '-'], inplace=True)
         df = (
-            df.groupby([feature, 'corrected_barcode'], observed=True)
+            df.groupby([feature_col, 'corrected_barcode'], observed=True)
             .nunique()['corrected_umi']
             .reset_index()  # Get feature back to a column
-            .pivot(index=feature, columns='corrected_barcode', values='corrected_umi')
+            .pivot(index=feature_col, columns='corrected_barcode', values='corrected_umi')
         )
         df.fillna(0, inplace=True)
 
@@ -107,7 +128,9 @@ class ExpressionMatrix:
             df.index.to_numpy(dtype=bytes),
             df.columns.to_numpy(dtype=bytes),
             dtype=int,
-            saturation=saturation
+            saturation=saturation,
+            feature_ids=feature_ids,
+            feature_mode=feature
         )
         return em
 
@@ -120,10 +143,13 @@ class ExpressionMatrix:
         saturation = Saturation.zero()
         features = set()
         cells = set()
+        feature_mode = None
         for fname in fnames:
             ma = cls.from_hdf(fname, dtype=dtype)
             features.update(ma.features)
             cells.update(ma.cells)
+            if feature_mode is None:
+                feature_mode = ma.feature_mode
 
         # use sparse if specified, otherwise force use if matrix >8 Gb
         estimated_bytes = len(features) * len(cells) * np.dtype(dtype).itemsize
@@ -136,17 +162,30 @@ class ExpressionMatrix:
             f"estimated size: {estimated_bytes / (1024 ** 3):.2f} Gb, "
             f"sparse: {use_sparse}.")
 
+        feature_id_map = {}
+        for fname in fnames:
+            # Load just feature ids map to avoid loading full matrix multiple times?
+            # But we need to load matrix later.
+            # Actually loop below loads matrix again.
+            # We can load header info.
+            # cls.from_hdf(fname) is lazy if we don't access matrix.
+            ma = cls.from_hdf(fname, dtype=dtype)
+            feature_id_map.update(ma.feature_id_map)
+            ma._fh.close() # close file handle
+
         # sort by names, just to be nice, doesn't guarantee matrices can be compared
         full_matrix = cls(
             features=np.array(sorted(features), dtype=bytes),
             cells=np.array(sorted(cells), dtype=bytes),
-            dtype=dtype, sparse=use_sparse, saturation=saturation)
+            dtype=dtype, sparse=use_sparse, saturation=saturation,
+            feature_ids=feature_id_map,
+            feature_mode=feature_mode)
 
         for i, fname in enumerate(fnames):
             ma = cls.from_hdf(
                 fname, dtype=dtype, sparse=use_sparse)
             full_matrix += ma
-
+        
         if use_sparse:
             full_matrix._matrix = full_matrix.matrix.tocsr()
         return full_matrix
@@ -169,6 +208,13 @@ class ExpressionMatrix:
             fh['features'] = self.features
             fh['matrix'] = self.matrix
             fh["saturation"] = self.saturation._data
+            if self._feature_ids:
+                keys = np.array(list(self._feature_ids.keys()), dtype='S')
+                values = np.array(list(self._feature_ids.values()), dtype='S')
+                fh['feature_id_keys'] = keys
+                fh['feature_id_values'] = values
+            if self._feature_mode:
+                fh['feature_mode'] = self._feature_mode.encode('utf-8')
 
     def to_mex(
             self, fname, feature_type="Gene Expression", feature_ids=None, dtype=None):
@@ -182,10 +228,54 @@ class ExpressionMatrix:
         # features, convert to str, write as text
         features = self.tfeatures
         if feature_ids is None:
-            feature_ids = {x: f"unknown_{i:05d}" for i, x in enumerate(features)}
+            # Use internal map if available
+            internal_map = self.feature_id_map
+            feature_ids = {}
+            for i, x in enumerate(features):
+                # keys in internal_map are bytes
+                xb = x.encode('utf-8')
+                if xb in internal_map:
+                    feature_ids[x] = internal_map[xb].decode('utf-8')
+                else:
+                    feature_ids[x] = f"unknown_{i:05d}"
+
         with gzip.open(os.path.join(fname, "features.tsv.gz"), 'wt') as fh:
             for feat in features:
-                fh.write(f"{feature_ids[feat]}\t{feat}\t{feature_type}\n")
+                # feat is now likely a composite key "Name|ID" or "ID|Name"
+                # We need to split it to get the original components if it is composite.
+                # But we also have feature_ids mapping.
+                
+                if '|' in feat and (self._feature_mode in ['gene', 'transcript']):
+                    parts = feat.split('|', 1)
+                    # gene mode: feat is "Name|ID", feature_ids[feat] is ID
+                    # transcript mode: feat is "ID|Name", feature_ids[feat] is Name
+                    
+                    if self._feature_mode == 'transcript':
+                         # feat: ID|Name
+                         # feature_ids[feat]: Name
+                         # parts[0]: ID, parts[1]: Name
+                         
+                         # User wants: ID \t Name \t Type
+                         real_id = parts[0]
+                         real_name = parts[1]
+                         fh.write(f"{real_id}\t{real_name}\t{feature_type}\n")
+                    else:
+                         # gene mode
+                         # feat: Name|ID
+                         # feature_ids[feat]: ID
+                         # parts[0]: Name, parts[1]: ID
+                         
+                         # Standard 10x: ID \t Name \t Type
+                         real_name = parts[0]
+                         real_id = parts[1]
+                         fh.write(f"{real_id}\t{real_name}\t{feature_type}\n")
+                         
+                else:
+                    # Fallback for legacy or non-composite keys
+                    if self._feature_mode == 'transcript':
+                        fh.write(f"{feat}\t{feature_ids.get(feat, feat)}\t{feature_type}\n")
+                    else:
+                        fh.write(f"{feature_ids.get(feat, feat)}\t{feat}\t{feature_type}\n")
         # matrix as bytes
         with gzip.open(os.path.join(fname, "matrix.mtx.gz"), 'wb') as fh:
             coo = scipy.sparse.coo_matrix(self.matrix, dtype=dtype)
@@ -201,6 +291,38 @@ class ExpressionMatrix:
         """Write matrix to tab-delimiter file."""
         self.write_matrix(
             fname, self.matrix, self.tfeatures, self.tcells, index_name=index_name)
+
+    @property
+    def feature_mode(self):
+        """Return feature mode."""
+        if self._feature_mode is not None:
+            return self._feature_mode
+        
+        if self._fh is not None:
+            if 'feature_mode' in self._fh:
+                self._feature_mode = self._fh['feature_mode'][()].decode('utf-8')
+            else:
+                self._feature_mode = None
+        else:
+            self._feature_mode = None
+        return self._feature_mode
+
+    @property
+    def feature_id_map(self):
+        """Return feature ID mapping."""
+        if self._feature_ids is not None:
+            return self._feature_ids
+        
+        if self._fh is not None:
+            if 'feature_id_keys' in self._fh:
+                keys = self._fh['feature_id_keys'][()].astype(bytes)
+                values = self._fh['feature_id_values'][()].astype(bytes)
+                self._feature_ids = dict(zip(keys, values))
+            else:
+                self._feature_ids = {}
+        else:
+            self._feature_ids = {}
+        return self._feature_ids
 
     @property
     def features(self):

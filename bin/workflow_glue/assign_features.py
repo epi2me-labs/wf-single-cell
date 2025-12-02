@@ -50,6 +50,8 @@ def parse_gtf(annotation_file):
 
         gene_regex = re.compile(r'(gene_name|genename) "(.+?)"')
         tr_regex = re.compile(r'transcript_id "(.+?)"')
+        gid_regex = re.compile(r'gene_id "(.+?)"')
+        tn_regex = re.compile(r'transcript_name "(.+?)"')
         records = []
         for line in fh:
             if line.startswith('#'):
@@ -66,9 +68,30 @@ def parse_gtf(annotation_file):
                 transcript_id = t.group(1)
             else:
                 transcript_id = None
+            
+            gid = gid_regex.search(line, re.IGNORECASE)
+            if gid:
+                gene_id = gid.group(1)
+            else:
+                gene_id = None
+            
+            tn = tn_regex.search(line, re.IGNORECASE)
+            if tn:
+                transcript_name = tn.group(1)
+            else:
+                transcript_name = None
 
-            records.append([transcript_id, gene_name])
-        df = pd.DataFrame.from_records(records, columns=['ref_id', 'gene_name'])
+            # Backfill missing information
+            if gene_name is None and gene_id is not None:
+                gene_name = gene_id
+            if gene_id is None and gene_name is not None:
+                gene_id = gene_name
+            
+            if transcript_name is None and transcript_id is not None:
+                transcript_name = transcript_id
+
+            records.append([transcript_id, gene_name, gene_id, transcript_name])
+        df = pd.DataFrame.from_records(records, columns=['ref_id', 'gene_name', 'gene_id', 'transcript_name'])
         return df
 
 
@@ -151,7 +174,7 @@ def main(args):
 
     # Write dataframe header to file
     pd.DataFrame(
-        columns=['gene', 'transcript']).to_csv(
+        columns=['gene', 'transcript', 'gene_id', 'transcript_name']).to_csv(
         args.output, sep='\t', header=True)
 
     logger.info(f"Processing BAM with chunks size {args.chunksize}.")
@@ -174,6 +197,8 @@ def main(args):
         # These would have been discarded at earlier parts of the workflow.
         df_tr = df_tr.merge(df_ann, how='inner', left_on='ref_id', right_on='ref_id')
         df_tr.gene_name = df_tr.gene_name.fillna('-')
+        df_tr.gene_id = df_tr.gene_id.fillna('-')
+        df_tr.transcript_name = df_tr.transcript_name.fillna('-')
         df_tr.rename(
             columns={
                 'ref_id': 'transcript',
@@ -203,8 +228,9 @@ def main(args):
 
         # Process the uniquely-mapping isoforms
         df_uniqmap.loc[df_uniqmap.genome_mapq < args.min_mapq, 'gene'] = '-'
+        df_uniqmap.loc[df_uniqmap.genome_mapq < args.min_mapq, 'gene_id'] = '-'
         df_uniqmap = df_uniqmap.loc[
-            df_uniqmap.tr_mapq > 0][['read_id', 'gene', 'transcript']]
+            df_uniqmap.tr_mapq > 0][['read_id', 'gene', 'transcript', 'gene_id', 'transcript_name']]
 
         # Proces the multi-mapping reads
         # find the best transcript per read.
@@ -232,7 +258,8 @@ def main(args):
         idx = read_groups['genome_mapq'].idxmax()
         best_gene = df_multimap.loc[idx].set_index('read_id')
         best_gene.loc[best_gene['genome_mapq'] < args.min_mapq, "gene"] = "-"
-        best_gene = best_gene[["gene"]]
+        best_gene.loc[best_gene['genome_mapq'] < args.min_mapq, "gene_id"] = "-"
+        best_gene = best_gene[["gene", "gene_id"]]
 
         # calculate diffs between consecutive rows, we only care about the
         # first difference
@@ -259,8 +286,10 @@ def main(args):
         # combine the if-elif conditions
         keep = (stats["cond1"] & stats["cond2"]) | (~stats["cond1"] & stats["cond3"])
         stats["transcript"] = read_groups.nth(0).set_index('read_id')["transcript"]
+        stats["transcript_name"] = read_groups.nth(0).set_index('read_id')["transcript_name"]
         stats.loc[~keep, "transcript"] = "-"
-        stats = stats[["transcript"]]
+        stats.loc[~keep, "transcript_name"] = "-"
+        stats = stats[["transcript", "transcript_name"]]
 
         # create a final table with the best gene and transcript
         df_demultimapped = stats.join(best_gene).reset_index(drop=False)
@@ -270,7 +299,12 @@ def main(args):
         df_assigned = df_assigned.loc[
             (df_assigned.gene != '-') | (df_assigned.transcript != '-')]
         df_assigned.set_index('read_id', drop=True, inplace=True)
-        df_assigned = df_assigned.fillna('-')[['gene', 'transcript']]
+        df_assigned = df_assigned.fillna('-')[['gene', 'transcript', 'gene_id', 'transcript_name']]
+        
+        # Enforce consistency: if gene/transcript is '-', their corresponding ID/name should be '-'
+        df_assigned.loc[df_assigned['gene'] == '-', 'gene_id'] = '-'
+        df_assigned.loc[df_assigned['transcript'] == '-', 'transcript_name'] = '-'
+        
         df_assigned.to_csv(args.output, mode='a', sep='\t', header=False)
 
         logger.info(f"Processed {total_alignments} alignments.")

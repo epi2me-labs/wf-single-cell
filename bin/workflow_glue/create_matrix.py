@@ -270,7 +270,7 @@ def main(args):
 
     tsv_out_cols = [
         'read_id', 'CR', 'CB', 'CY', 'UR', 'UB',
-        'UY', 'gene', 'transcript', 'start', 'end', 'chr']
+        'UY', 'gene', 'transcript', 'gene_id', 'transcript_name', 'start', 'end', 'chr']
     tag_to_desc_map = {v: k for k, v in BAM_TAGS.items()}
     tsv_out_cols = [tag_to_desc_map.get(t, t) for t in tsv_out_cols]
 
