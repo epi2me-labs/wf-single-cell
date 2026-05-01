@@ -74,9 +74,23 @@ def main(args):
     if len(df_bc_counts) > 0:
         # Bin barcode counts to 8um coordinates
 
-        # Extract coordinate part from barcode
-        df_bc_counts[["x_2um", "y_2um"]] = \
-            df_bc_counts['barcode'].str.extract(r'_(\d{5})_(\d{5})-').astype(int)
+        # Extract coordinate part from barcode. SpaceRanger BAMs can carry CB
+        # tags that don't follow the Visium HD coordinate pattern
+        # `_NNNNN_NNNNN-` (e.g. on decoy/unplaced contigs). Drop those rows
+        # rather than crashing on NaN -> int conversion. They cannot be placed
+        # spatially by definition, so excluding them from the binning summary
+        # has no effect on per-read or per-gene downstream output.
+        coords = df_bc_counts['barcode'].str.extract(r'_(\d{5})_(\d{5})-')
+        valid = coords.notna().all(axis=1)
+        n_dropped = int((~valid).sum())
+        if n_dropped:
+            logger.warning(
+                f"Dropped {n_dropped} barcode(s) from spatial binning that "
+                f"don't match the Visium HD coordinate pattern "
+                f"_NNNNN_NNNNN- (only affects barcode_counts.tsv; per-read "
+                f"tags TSV is unaffected).")
+        df_bc_counts = df_bc_counts.loc[valid].copy()
+        df_bc_counts[["x_2um", "y_2um"]] = coords.loc[valid].astype(int)
 
         # Convert to 8um coordinates by integer division (bin size = 4)
         df_bc_counts["x_8um"] = df_bc_counts["x_2um"] // 4
