@@ -58,6 +58,17 @@ def main(args):
                     val = record.get_tag(tag)
                     if tag == 'CB':
                         barcode_counter[val] += 1
+                    # Sanitize string tag values so the TSV is parseable by
+                    # pandas (default quotechar='"'). Quality strings (CY/UY)
+                    # routinely contain ASCII 0x22 ('"' = Phred Q1) which
+                    # otherwise causes "EOF inside string" errors in
+                    # downstream pd.read_csv. Also strip tab/CR/LF which
+                    # would corrupt TSV row/column structure.
+                    if isinstance(val, str):
+                        val = (val.replace('"', "'")
+                                  .replace('\t', ' ')
+                                  .replace('\r', ' ')
+                                  .replace('\n', ' '))
                 else:
                     val = '-'
                 tag_values.append(val)
