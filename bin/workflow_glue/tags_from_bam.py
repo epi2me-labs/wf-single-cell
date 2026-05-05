@@ -57,6 +57,17 @@ def main(args):
                 if record.has_tag(tag):
                     val = record.get_tag(tag)
                     if tag == 'CB':
+                        # SpaceRanger 4.x Visium HD writes the raw 28-mer
+                        # sequence barcode in CB and the spatial-form barcode
+                        # (s_002um_NNNNN_NNNNN-1) in the `sb` tag. The
+                        # wf-single-cell HD codepath (is_visium_hd check,
+                        # 2um->8um binning, spatial plots in the report) keys
+                        # off the spatial form, so substitute `sb` for `CB`
+                        # when present. Without this the HD branch is
+                        # silently bypassed and `makeReport` is skipped
+                        # because gene_expression_8um is empty.
+                        if record.has_tag('sb'):
+                            val = record.get_tag('sb')
                         barcode_counter[val] += 1
                     # Sanitize string tag values so the TSV is parseable by
                     # pandas (default quotechar='"'). Quality strings (CY/UY)
